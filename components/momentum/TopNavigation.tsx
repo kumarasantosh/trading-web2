@@ -11,7 +11,11 @@ interface MarketIndex {
   changePercent: number
 }
 
-export default function TopNavigation() {
+interface TopNavigationProps {
+  hideTopMovers?: boolean
+}
+
+export default function TopNavigation({ hideTopMovers = false }: TopNavigationProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState('F&O')
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -397,56 +401,60 @@ export default function TopNavigation() {
       </div>
 
       {/* Top Gainers Accordion - First */}
-      <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200/50">
-        <button
-          onClick={() => handleGainersToggle(!isGainersOpen)}
-          className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <div className="w-1 h-6 bg-green-500 rounded-full"></div>
-            <span className="text-sm font-semibold text-gray-700">Top Gainers</span>
-          </div>
-          <svg
-            className={`w-5 h-5 text-gray-600 transition-transform duration-300 ${isGainersOpen ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+      {!hideTopMovers && (
+        <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200/50">
+          <button
+            onClick={() => handleGainersToggle(!isGainersOpen)}
+            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isGainersOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-          <div className="px-2 sm:px-4 pb-4">
-            <TopGainersList />
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-6 bg-green-500 rounded-full"></div>
+              <span className="text-sm font-semibold text-gray-700">Top Gainers</span>
+            </div>
+            <svg
+              className={`w-5 h-5 text-gray-600 transition-transform duration-300 ${isGainersOpen ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isGainersOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+            <div className="px-2 sm:px-4 pb-4">
+              <TopGainersList />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Top Losers Accordion - Below Gainers */}
-      <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200/50">
-        <button
-          onClick={() => handleLosersToggle(!isLosersOpen)}
-          className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <div className="w-1 h-6 bg-red-500 rounded-full"></div>
-            <span className="text-sm font-semibold text-gray-700">Top Losers</span>
-          </div>
-          <svg
-            className={`w-5 h-5 text-gray-600 transition-transform duration-300 ${isLosersOpen ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+      {!hideTopMovers && (
+        <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200/50">
+          <button
+            onClick={() => handleLosersToggle(!isLosersOpen)}
+            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isLosersOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-          <div className="px-2 sm:px-4 pb-4">
-            <TopLosersList />
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-6 bg-red-500 rounded-full"></div>
+              <span className="text-sm font-semibold text-gray-700">Top Losers</span>
+            </div>
+            <svg
+              className={`w-5 h-5 text-gray-600 transition-transform duration-300 ${isLosersOpen ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isLosersOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+            <div className="px-2 sm:px-4 pb-4">
+              <TopLosersList />
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
