@@ -16,6 +16,7 @@ interface BreakoutStock {
   prevDayHigh: number
   prevDayLow: number
   prevDayClose: number
+  prevDayOpen: number
   is52WeekHigh?: boolean
   isBreakout?: boolean
 }
@@ -36,10 +37,10 @@ export default function BreakoutStocksPage() {
 
   useEffect(() => {
     const mappedStocksSet = getAllMappedStocks()
-    
+
     const processStocks = async (stocks: any[]): Promise<BreakoutStock[]> => {
       const stocksWithData: BreakoutStock[] = []
-      
+
       for (const stock of stocks) {
         // Only process stocks that belong to mapped sectors
         if (!mappedStocksSet.has(stock.symbol)) {
@@ -49,11 +50,11 @@ export default function BreakoutStocksPage() {
         try {
           // Fetch previous day data from Yahoo Finance
           const yahooData = await fetchYahooStockData(stock.symbol)
-          
+
           if (yahooData) {
             const currentPrice = stock.ltp || stock.dayChange + (stock.prevDayClose || 0)
             const isBreakingHigh = currentPrice > (yahooData.high || 0)
-            
+
             stocksWithData.push({
               symbol: stock.symbol,
               name: stock.name || stock.symbol,
@@ -64,6 +65,7 @@ export default function BreakoutStocksPage() {
               prevDayHigh: yahooData.high || 0,
               prevDayLow: yahooData.low || 0,
               prevDayClose: yahooData.close || 0,
+              prevDayOpen: yahooData.open || 0,
               is52WeekHigh: isBreakingHigh,
               isBreakout: isBreakingHigh && (stock.volume || 0) > 500000,
             })
@@ -79,6 +81,7 @@ export default function BreakoutStocksPage() {
               prevDayHigh: stock.prevDayHigh || 0,
               prevDayLow: stock.prevDayLow || 0,
               prevDayClose: stock.prevDayClose || 0,
+              prevDayOpen: stock.prevDayOpen || 0,
               isBreakout: false,
             })
           }
@@ -144,7 +147,9 @@ export default function BreakoutStocksPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       {/* Top Navigation with Market Indices */}
-      <TopNavigation />
+      <div className="relative z-50">
+        <TopNavigation />
+      </div>
 
       <div className="w-full py-8 min-h-[calc(100vh-200px)]">
         <div className="px-4 lg:px-6">
@@ -159,7 +164,7 @@ export default function BreakoutStocksPage() {
                   Stocks breaking previous day high/low from mapped sectors
                 </p>
               </div>
-              
+
             </div>
 
           </div>
@@ -222,6 +227,18 @@ export default function BreakoutStocksPage() {
                                       {stock.name}
                                     </div>
                                   </div>
+                                  {stock.prevDayClose > stock.prevDayOpen && (
+                                    <div
+                                      className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
+                                      title={`Yesterday close w(₹${stock.prevDayClose.toFixed(2)}) > open (₹${stock.prevDayOpen.toFixed(2)})`}
+                                    />
+                                  )}
+                                  {stock.prevDayClose < stock.prevDayOpen && (
+                                    <div
+                                      className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500"
+                                      title={`Yesterday close (₹${stock.prevDayClose.toFixed(2)}) < open (₹${stock.prevDayOpen.toFixed(2)})`}
+                                    />
+                                  )}
                                   {stock.is52WeekHigh && (
                                     <span className="px-2 py-0.5 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded">
                                       52W
@@ -310,6 +327,18 @@ export default function BreakoutStocksPage() {
                                       {stock.name}
                                     </div>
                                   </div>
+                                  {stock.prevDayClose > stock.prevDayOpen && (
+                                    <div
+                                      className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
+                                      title={`Yesterday close (₹${stock.prevDayClose.toFixed(2)}) > open (₹${stock.prevDayOpen.toFixed(2)})`}
+                                    />
+                                  )}
+                                  {stock.prevDayClose < stock.prevDayOpen && (
+                                    <div
+                                      className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500"
+                                      title={`Yesterday close (₹${stock.prevDayClose.toFixed(2)}) < open (₹${stock.prevDayOpen.toFixed(2)})`}
+                                    />
+                                  )}
                                 </div>
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap">

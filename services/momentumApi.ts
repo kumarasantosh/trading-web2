@@ -242,13 +242,12 @@ export async function fetchMarketData(): Promise<any[]> {
       'NIFTY BANK': 'NIFTY BANK',
       'NIFTY FIN SERVICE': 'FINNIFTY',
       'NIFTY MIDCAP 100': 'NIFTY MIDCAP',
-      'NIFTY SMLCAP 100': 'NIFTY SMALLCAP',
       'INDIA VIX': 'INDIA_VIX',
     }
 
     // For BSE SENSEX, we still need to use Groww API as NSE doesn't have it
     const bseIndices: string[] = ['BSE_SENSEX']
-    
+
     // Fetch NSE indices from NSE API
     const nseUrl = new URL('/api/nse/indices', window.location.origin)
     nseUrl.searchParams.append('_t', Date.now().toString()) // Cache busting
@@ -260,17 +259,17 @@ export async function fetchMarketData(): Promise<any[]> {
     })
 
     const nseIndices: any[] = []
-    
+
     if (nseResponse.ok) {
       const nseData = await nseResponse.json()
-      
+
       // Handle different NSE API response structures
       let allIndices: any[] = []
-      
+
       // Check if data is directly an array
       if (Array.isArray(nseData.data)) {
         allIndices = nseData.data
-      } 
+      }
       // Check if data has nested structure (e.g., "INDICES ELIGIBLE IN DERIVATIVES")
       else if (nseData.data && typeof nseData.data === 'object') {
         // Try to find arrays in the data object
@@ -280,44 +279,43 @@ export async function fetchMarketData(): Promise<any[]> {
           }
         })
       }
-      
+
       // Target indices to find (NSE indices)
       const targetIndices = [
         { searchName: 'NIFTY 50', displayName: 'NIFTY 50' },
         { searchName: 'NIFTY BANK', displayName: 'NIFTY BANK' },
         { searchName: 'NIFTY FIN SERVICE', displayName: 'FINNIFTY' },
         { searchName: 'NIFTY MIDCAP 100', displayName: 'NIFTY MIDCAP' },
-        { searchName: 'NIFTY SMLCAP 100', displayName: 'NIFTY SMALLCAP' },
         { searchName: 'INDIA VIX', displayName: 'INDIA_VIX' },
         // Check if NSE API includes SENSEX (unlikely but let's check)
         { searchName: 'SENSEX', displayName: 'SENSEX' },
         { searchName: 'BSE SENSEX', displayName: 'SENSEX' },
         { searchName: 'S&P BSE SENSEX', displayName: 'SENSEX' },
       ]
-      
+
       // Process all target indices
       targetIndices.forEach(({ searchName, displayName }) => {
-        const indexData = allIndices.find((item: any) => 
-          item.index === searchName || 
+        const indexData = allIndices.find((item: any) =>
+          item.index === searchName ||
           item.indexSymbol === searchName ||
           item.index?.toUpperCase().includes(searchName.toUpperCase()) ||
           item.indexSymbol?.toUpperCase().includes(searchName.toUpperCase())
         )
-        
+
         if (indexData) {
           // Skip duplicate SENSEX entries (only add once)
           if (displayName === 'SENSEX' && nseIndices.find(idx => idx.name === 'SENSEX')) {
             return
           }
-          
+
           nseIndices.push({
             name: displayName,
             value: indexData.last || indexData.lastPrice || indexData.currentValue || 0,
-            change: indexData.variation || indexData.change || (indexData.last && indexData.previousClose ? 
-                   (indexData.last - indexData.previousClose) : 0) || 0,
-            changePercent: indexData.percentChange !== undefined ? indexData.percentChange : 
-                          (indexData.previousClose && indexData.last ? 
-                           ((indexData.last - indexData.previousClose) / indexData.previousClose) * 100 : 0),
+            change: indexData.variation || indexData.change || (indexData.last && indexData.previousClose ?
+              (indexData.last - indexData.previousClose) : 0) || 0,
+            changePercent: indexData.percentChange !== undefined ? indexData.percentChange :
+              (indexData.previousClose && indexData.last ?
+                ((indexData.last - indexData.previousClose) / indexData.previousClose) * 100 : 0),
           })
         }
       })
@@ -325,7 +323,7 @@ export async function fetchMarketData(): Promise<any[]> {
 
     // Check if SENSEX was already found in NSE API response
     const sensexAlreadyFound = nseIndices.find(idx => idx.name === 'SENSEX')
-    
+
     // If SENSEX not found in NSE API, try BSE API
     if (!sensexAlreadyFound) {
       try {
@@ -341,10 +339,10 @@ export async function fetchMarketData(): Promise<any[]> {
         if (bseResponse.ok) {
           const bseData = await bseResponse.json()
           console.log('[fetchMarketData] BSE API response:', bseData)
-          
+
           // Handle different BSE API response structures
           let allBseIndices: any[] = []
-          
+
           if (Array.isArray(bseData.data)) {
             allBseIndices = bseData.data
           } else if (bseData.data && typeof bseData.data === 'object') {
@@ -354,26 +352,26 @@ export async function fetchMarketData(): Promise<any[]> {
               }
             })
           }
-          
+
           // Look for SENSEX in the BSE data
           // SENSEX might be named as 'SENSEX', 'BSE SENSEX', 'S&P BSE SENSEX', etc.
-          const sensexData = allBseIndices.find((item: any) => 
+          const sensexData = allBseIndices.find((item: any) =>
             item.IndexName?.toUpperCase().includes('SENSEX') ||
             item.indexName?.toUpperCase().includes('SENSEX') ||
             item.name?.toUpperCase().includes('SENSEX') ||
             item.index?.toUpperCase().includes('SENSEX')
           )
-          
+
           if (sensexData) {
             // Extract data based on BSE API structure
             const value = sensexData.currentValue || sensexData.CurrentValue || sensexData.last || sensexData.Last || sensexData.value || sensexData.Value || 0
             const previousClose = sensexData.previousClose || sensexData.PreviousClose || sensexData.prevClose || sensexData.PrevClose || 0
             const change = sensexData.change || sensexData.Change || sensexData.variation || sensexData.Variation || (value && previousClose ? value - previousClose : 0)
-            const changePercent = sensexData.changePercent || sensexData.ChangePercent || sensexData.percentChange || sensexData.PercentChange || 
-                                 (previousClose && previousClose > 0 ? (change / previousClose) * 100 : 0)
-            
+            const changePercent = sensexData.changePercent || sensexData.ChangePercent || sensexData.percentChange || sensexData.PercentChange ||
+              (previousClose && previousClose > 0 ? (change / previousClose) * 100 : 0)
+
             console.log(`[fetchMarketData] SENSEX from BSE API: value=${value}, previousClose=${previousClose}, change=${change}, changePercent=${changePercent}`)
-            
+
             if (value > 0) {
               nseIndices.push({
                 name: 'SENSEX',
@@ -403,8 +401,8 @@ export async function fetchMarketData(): Promise<any[]> {
     }
 
     // Return indices in preferred order
-    const order = ['NIFTY 50', 'SENSEX', 'NIFTY BANK', 'FINNIFTY', 'NIFTY MIDCAP', 'NIFTY SMALLCAP', 'INDIA_VIX']
-    const sorted = order.map(name => 
+    const order = ['NIFTY 50', 'NIFTY BANK', 'FINNIFTY', 'NIFTY MIDCAP', 'SENSEX', 'INDIA_VIX']
+    const sorted = order.map(name =>
       nseIndices.find(idx => idx.name === name)
     ).filter(Boolean) as any[]
 
@@ -439,7 +437,6 @@ async function fetchMarketDataFromGroww(): Promise<any[]> {
       'NSE_NIFTY BANK',
       'NSE_NIFTY FIN SERVICE',
       'NSE_NIFTY MIDCAP 100',
-      'NSE_NIFTY SMLCAP 100',
       'NSE_INDIA VIX',
     ]
 
@@ -482,7 +479,6 @@ async function fetchMarketDataFromGroww(): Promise<any[]> {
       'NSE_NIFTY BANK': 'NIFTY BANK',
       'NSE_NIFTY FIN SERVICE': 'FINNIFTY',
       'NSE_NIFTY MIDCAP 100': 'NIFTY MIDCAP',
-      'NSE_NIFTY SMLCAP 100': 'NIFTY SMALLCAP',
       'NSE_INDIA VIX': 'INDIA_VIX',
     }
 
@@ -490,7 +486,7 @@ async function fetchMarketDataFromGroww(): Promise<any[]> {
     const indices = marketSymbols.map((symbol) => {
       const ltpResponse = ltpData[symbol]
       const ohlc = ohlcData[symbol]
-      
+
       // Handle LTP - indices return numbers, stocks return objects
       let ltp: number = 0
       if (typeof ltpResponse === 'number' && ltpResponse > 0) {
@@ -501,10 +497,10 @@ async function fetchMarketDataFromGroww(): Promise<any[]> {
         // Fallback to OHLC close if LTP is not available
         ltp = ohlc.close
       }
-      
+
       // Get previous close from OHLC data (use close as previous close)
       const previousClose = ohlc?.close || (ltp > 0 ? ltp : 0)
-      
+
       // Calculate change only if we have valid data
       const change = previousClose > 0 && ltp > 0 ? ltp - previousClose : 0
       const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0
@@ -518,8 +514,8 @@ async function fetchMarketDataFromGroww(): Promise<any[]> {
     }).filter(idx => idx.value > 0) // Only return indices with valid data
 
     // Return in preferred order
-    const order = ['NIFTY 50', 'SENSEX', 'NIFTY BANK', 'FINNIFTY', 'NIFTY MIDCAP', 'NIFTY SMALLCAP', 'INDIA_VIX']
-    const sorted = order.map(name => 
+    const order = ['NIFTY 50', 'NIFTY BANK', 'FINNIFTY', 'NIFTY MIDCAP', 'SENSEX', 'INDIA_VIX']
+    const sorted = order.map(name =>
       indices.find(idx => idx.name === name)
     ).filter(Boolean) as any[]
 

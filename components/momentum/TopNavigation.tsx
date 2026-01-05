@@ -19,7 +19,7 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState('F&O')
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  
+
   // Load accordion states from localStorage or use defaults
   // Initialize with false to prevent flash, then load from localStorage in useEffect
   const [isMarketIndicesOpen, setIsMarketIndicesOpen] = useState(false)
@@ -113,7 +113,11 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
                 const hasValidData = result.indices.some((idx: any) => idx.value && idx.value > 0)
                 if (hasValidData) {
                   console.log(`[TopNavigation] ✅ Loaded ${result.indices.length} indices from database`)
-                  setMarketIndices(result.indices)
+                  // Filter out SMALLCAP indices
+                  const filteredIndices = result.indices.filter((idx: any) =>
+                    !idx.name.toUpperCase().includes('SMALLCAP')
+                  )
+                  setMarketIndices(filteredIndices)
                   setDataSource('database')
                   return
                 } else {
@@ -136,7 +140,11 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
         console.log('[TopNavigation] Market hours - fetching live market data from NSE/Groww APIs')
         const { fetchMarketData } = await import('@/services/momentumApi')
         const data = await fetchMarketData()
-        setMarketIndices(data)
+        // Filter out SMALLCAP indices
+        const filteredData = data.filter((idx: any) =>
+          !idx.name.toUpperCase().includes('SMALLCAP')
+        )
+        setMarketIndices(filteredData)
         setDataSource('live')
       } catch (error) {
         console.error('Error loading market data:', error)
@@ -150,7 +158,7 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
     }
 
     loadMarketData()
-    
+
     // Determine refresh interval based on market hours
     const checkMarketHours = () => {
       const now = new Date()
@@ -160,7 +168,7 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
       const isBeforeMarketOpen = utcHour < 3 || (utcHour === 3 && utcMinutes < 45)
       return isAfter330PM || isBeforeMarketOpen
     }
-    
+
     // Use longer interval when market is closed (using DB) - 60 seconds
     // Use shorter interval during market hours (live data) - 10 seconds
     const refreshInterval = checkMarketHours() ? 60000 : 10000
@@ -252,8 +260,8 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
               <button
                 onClick={() => setActiveTab('F&O')}
                 className={`px-3 sm:px-4 lg:px-5 py-2 sm:py-2.5 rounded-xl font-semibold text-xs sm:text-sm transition-all duration-300 transform ${activeTab === 'F&O'
-                    ? 'bg-green-500 text-white shadow-md scale-105'
-                    : 'bg-white border-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:scale-105'
+                  ? 'bg-green-500 text-white shadow-md scale-105'
+                  : 'bg-white border-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:scale-105'
                   }`}
               >
                 F&O
@@ -261,8 +269,8 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
               <button
                 onClick={() => setActiveTab('CASH')}
                 className={`px-3 sm:px-4 lg:px-5 py-2 sm:py-2.5 rounded-xl font-semibold text-xs sm:text-sm transition-all duration-300 transform ${activeTab === 'CASH'
-                    ? 'bg-green-500 text-white shadow-md scale-105'
-                    : 'bg-white border-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:scale-105'
+                  ? 'bg-green-500 text-white shadow-md scale-105'
+                  : 'bg-white border-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:scale-105'
                   }`}
               >
                 CASH
@@ -306,8 +314,8 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
                     setIsMobileMenuOpen(false)
                   }}
                   className={`flex-1 px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 ${activeTab === 'F&O'
-                      ? 'bg-green-500 text-white shadow-md'
-                      : 'bg-white border-2 border-gray-200 text-gray-700 hover:bg-gray-50'
+                    ? 'bg-green-500 text-white shadow-md'
+                    : 'bg-white border-2 border-gray-200 text-gray-700 hover:bg-gray-50'
                     }`}
                 >
                   F&O
@@ -318,8 +326,8 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
                     setIsMobileMenuOpen(false)
                   }}
                   className={`flex-1 px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 ${activeTab === 'CASH'
-                      ? 'bg-green-500 text-white shadow-md'
-                      : 'bg-white border-2 border-gray-200 text-gray-700 hover:bg-gray-50'
+                    ? 'bg-green-500 text-white shadow-md'
+                    : 'bg-white border-2 border-gray-200 text-gray-700 hover:bg-gray-50'
                     }`}
                 >
                   CASH
@@ -394,7 +402,7 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isTopMoversOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+          <div className={`transition-all duration-300 ease-in-out ${isTopMoversOpen ? 'max-h-[2000px] opacity-100 overflow-visible' : 'max-h-0 opacity-0 overflow-hidden'}`}>
             <div className="px-2 sm:px-4 pb-4">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Top Gainers */}

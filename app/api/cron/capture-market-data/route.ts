@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
         if (isEndOfDay) {
             console.log('[CRON] End of trading day detected - capturing market indices')
             marketIndicesResults = await captureMarketIndices()
-            
+
             // Clean up previous day's records (keep only today's data)
             await cleanupPreviousDayData()
         }
@@ -290,14 +290,14 @@ async function captureMarketIndices() {
 
             if (nseResponse.ok) {
                 const nseData = await nseResponse.json()
-                
+
                 // Handle different NSE API response structures
                 let allIndices: any[] = []
-                
+
                 // Check if data is directly an array
                 if (Array.isArray(nseData.data)) {
                     allIndices = nseData.data
-                } 
+                }
                 // Check if data has nested structure (e.g., "INDICES ELIGIBLE IN DERIVATIVES")
                 else if (nseData.data && typeof nseData.data === 'object') {
                     // Try to find arrays in the data object
@@ -307,36 +307,35 @@ async function captureMarketIndices() {
                         }
                     })
                 }
-                
+
                 // Target indices to capture
                 const targetIndices = [
                     { searchName: 'NIFTY 50', displayName: 'NIFTY 50' },
                     { searchName: 'NIFTY BANK', displayName: 'NIFTY BANK' },
                     { searchName: 'NIFTY FIN SERVICE', displayName: 'FINNIFTY' },
                     { searchName: 'NIFTY MIDCAP 100', displayName: 'NIFTY MIDCAP' },
-                    { searchName: 'NIFTY SMLCAP 100', displayName: 'NIFTY SMALLCAP' },
                     { searchName: 'INDIA VIX', displayName: 'INDIA_VIX' },
                 ]
-                
+
                 // Process all target indices
                 targetIndices.forEach(({ searchName, displayName }) => {
-                    const indexData = allIndices.find((item: any) => 
-                        item.index === searchName || 
+                    const indexData = allIndices.find((item: any) =>
+                        item.index === searchName ||
                         item.indexSymbol === searchName ||
                         item.index?.includes(searchName) ||
                         item.indexSymbol?.includes(searchName)
                     )
-                    
+
                     if (indexData) {
                         snapshots.push({
                             captured_at: todayDate,
                             index_name: displayName,
                             value: indexData.last || indexData.lastPrice || 0,
-                            change: indexData.variation || (indexData.last && indexData.previousClose ? 
-                                   (indexData.last - indexData.previousClose) : 0) || 0,
-                            change_percent: indexData.percentChange !== undefined ? indexData.percentChange : 
-                                          (indexData.previousClose && indexData.last ? 
-                                           ((indexData.last - indexData.previousClose) / indexData.previousClose) * 100 : 0),
+                            change: indexData.variation || (indexData.last && indexData.previousClose ?
+                                (indexData.last - indexData.previousClose) : 0) || 0,
+                            change_percent: indexData.percentChange !== undefined ? indexData.percentChange :
+                                (indexData.previousClose && indexData.last ?
+                                    ((indexData.last - indexData.previousClose) / indexData.previousClose) * 100 : 0),
                         })
                     }
                 })
@@ -351,7 +350,7 @@ async function captureMarketIndices() {
 
         // Check if SENSEX was already found in NSE API response
         const sensexInNse = snapshots.find(s => s.index_name === 'SENSEX')
-        
+
         // Fetch BSE SENSEX from BSE API if not found in NSE
         if (!sensexInNse) {
             try {
@@ -366,10 +365,10 @@ async function captureMarketIndices() {
                 if (bseResponse.ok) {
                     const bseData = await bseResponse.json()
                     console.log('[CRON] BSE API response:', bseData)
-                    
+
                     // Handle different BSE API response structures
                     let allBseIndices: any[] = []
-                    
+
                     if (Array.isArray(bseData.data)) {
                         allBseIndices = bseData.data
                     } else if (bseData.data && typeof bseData.data === 'object') {
@@ -379,21 +378,21 @@ async function captureMarketIndices() {
                             }
                         })
                     }
-                    
+
                     // Look for SENSEX in the BSE data
-                    const sensexData = allBseIndices.find((item: any) => 
+                    const sensexData = allBseIndices.find((item: any) =>
                         item.IndexName?.toUpperCase().includes('SENSEX') ||
                         item.indexName?.toUpperCase().includes('SENSEX') ||
                         item.name?.toUpperCase().includes('SENSEX') ||
                         item.index?.toUpperCase().includes('SENSEX')
                     )
-                    
+
                     if (sensexData) {
                         const value = sensexData.currentValue || sensexData.CurrentValue || sensexData.last || sensexData.Last || sensexData.value || sensexData.Value || 0
                         const previousClose = sensexData.previousClose || sensexData.PreviousClose || sensexData.prevClose || sensexData.PrevClose || 0
                         const change = sensexData.change || sensexData.Change || sensexData.variation || sensexData.Variation || (value && previousClose ? value - previousClose : 0)
-                        const changePercent = sensexData.changePercent || sensexData.ChangePercent || sensexData.percentChange || sensexData.PercentChange || 
-                                            (previousClose && previousClose > 0 ? (change / previousClose) * 100 : 0)
+                        const changePercent = sensexData.changePercent || sensexData.ChangePercent || sensexData.percentChange || sensexData.PercentChange ||
+                            (previousClose && previousClose > 0 ? (change / previousClose) * 100 : 0)
 
                         console.log(`[CRON] SENSEX from BSE API: value=${value}, previousClose=${previousClose}, change=${change}, changePercent=${changePercent}`)
 

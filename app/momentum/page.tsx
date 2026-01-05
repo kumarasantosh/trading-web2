@@ -44,7 +44,9 @@ export default function MomentumPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       {/* Top Navigation with Market Indices */}
-      <TopNavigation />
+      <div className="relative z-50">
+        <TopNavigation />
+      </div>
 
       {/* Main Content Area - Scrollable */}
       <div className="w-full py-4 sm:py-6 lg:py-8">

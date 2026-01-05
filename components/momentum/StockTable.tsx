@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { getStocksForSector } from '@/constants/sector-stocks-mapping'
+import { fetchYahooStockData } from '@/services/yahooFinance'
 
 interface Stock {
   symbol: string
@@ -23,6 +24,7 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
   const [stocks, setStocks] = useState<Stock[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [prevDayData, setPrevDayData] = useState<Record<string, { close: number; open: number }>>({})
 
   useEffect(() => {
     let isMounted = true
@@ -155,6 +157,49 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
     }
   }, [selectedSector, isReplayMode, replayTime?.getTime()])
 
+  useEffect(() => {
+    const fetchPrevDayData = async () => {
+      if (stocks.length === 0) return
+
+      const symbolsToFetch = stocks
+        .filter(s => !prevDayData[s.symbol])
+        .map(s => s.symbol)
+
+      if (symbolsToFetch.length === 0) return
+
+      // Process in batches to avoid rate limiting
+      const BATCH_SIZE = 5
+      for (let i = 0; i < symbolsToFetch.length; i += BATCH_SIZE) {
+        const batch = symbolsToFetch.slice(i, i + BATCH_SIZE)
+        const promises = batch.map(symbol => fetchYahooStockData(symbol))
+
+        const results = await Promise.all(promises)
+
+        setPrevDayData(prev => {
+          const newData = { ...prev }
+          results.forEach((result, index) => {
+            if (result) {
+              newData[batch[index]] = {
+                close: result.close,
+                open: result.open,
+              }
+            }
+          })
+          return newData
+        })
+
+        // Small delay between batches
+        if (i + BATCH_SIZE < symbolsToFetch.length) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
+      }
+    }
+
+    if (!isReplayMode) {
+      fetchPrevDayData()
+    }
+  }, [stocks, isReplayMode])
+
   const getInitials = (symbol: string) => {
     if (symbol.length <= 2) return symbol
     return symbol.substring(0, 2).toUpperCase()
@@ -254,7 +299,25 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
                       className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-white transition-all duration-200 group cursor-pointer"
                     >
                       <td className="px-3 sm:px-4 py-2">
-                        <span className="font-bold text-gray-900 group-hover:text-black transition-colors">{stock.symbol}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-gray-900 group-hover:text-black transition-colors">{stock.symbol}</span>
+                          {prevDayData[stock.symbol] && (
+                            <>
+                              {prevDayData[stock.symbol].close > prevDayData[stock.symbol].open && (
+                                <div
+                                  className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
+                                  title={`Yesterday close (₹${prevDayData[stock.symbol].close.toFixed(2)}) > open (₹${prevDayData[stock.symbol].open.toFixed(2)})`}
+                                />
+                              )}
+                              {prevDayData[stock.symbol].close < prevDayData[stock.symbol].open && (
+                                <div
+                                  className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500"
+                                  title={`Yesterday close (₹${prevDayData[stock.symbol].close.toFixed(2)}) < open (₹${prevDayData[stock.symbol].open.toFixed(2)})`}
+                                />
+                              )}
+                            </>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 sm:px-4 py-2 text-right">
                         <div className={`inline-flex items-center justify-end gap-1.5 font-bold px-2 sm:px-3 py-1.5 rounded-lg transition-all duration-200 ${isPositive
@@ -302,7 +365,25 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
                     className="bg-gray-50 rounded-lg p-3 border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-gray-900 text-sm">{stock.symbol}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-gray-900 text-sm">{stock.symbol}</span>
+                        {prevDayData[stock.symbol] && (
+                          <>
+                            {prevDayData[stock.symbol].close > prevDayData[stock.symbol].open && (
+                              <div
+                                className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
+                                title={`Yesterday close (₹${prevDayData[stock.symbol].close.toFixed(2)}) > open (₹${prevDayData[stock.symbol].open.toFixed(2)})`}
+                              />
+                            )}
+                            {prevDayData[stock.symbol].close < prevDayData[stock.symbol].open && (
+                              <div
+                                className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500"
+                                title={`Yesterday close (₹${prevDayData[stock.symbol].close.toFixed(2)}) < open (₹${prevDayData[stock.symbol].open.toFixed(2)})`}
+                              />
+                            )}
+                          </>
+                        )}
+                      </div>
                       <div className={`inline-flex items-center gap-1.5 font-bold px-2 py-1 rounded-lg ${isPositive
                         ? 'text-green-700 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200/50'
                         : 'text-red-700 bg-gradient-to-r from-red-50 to-rose-50 border border-red-200/50'

@@ -118,7 +118,7 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
             >
                 {/* Hover Tooltip */}
                 {prevDay && (
-                    <div className="absolute left-0 top-full mt-2 z-50 bg-gray-900 text-white text-xs rounded-lg shadow-xl p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap min-w-[150px]">
+                    <div className="absolute left-0 top-full mt-2 z-[100] bg-gray-900 text-white text-xs rounded-lg shadow-xl p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap min-w-[150px]">
                         <div className="font-bold mb-2 text-sm border-b border-gray-700 pb-1">Previous Day</div>
                         <div className="space-y-1">
                             <div className="flex justify-between gap-4">
@@ -151,12 +151,12 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
                     <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                         <span className="text-xs font-bold text-gray-400 w-5 sm:w-6 flex-shrink-0">{index + 1}</span>
                         {prevDayCloseVsOpen === 'green' && (
-                            <div className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500" 
-                                 title={`Yesterday close (₹${prevDay.close.toFixed(2)}) > open (₹${prevDay.open.toFixed(2)})`}></div>
+                            <div className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
+                                title={`Yesterday close (₹${prevDay.close.toFixed(2)}) > open (₹${prevDay.open.toFixed(2)})`}></div>
                         )}
                         {prevDayCloseVsOpen === 'red' && (
-                            <div className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500" 
-                                 title={`Yesterday close (₹${prevDay.close.toFixed(2)}) < open (₹${prevDay.open.toFixed(2)})`}></div>
+                            <div className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500"
+                                title={`Yesterday close (₹${prevDay.close.toFixed(2)}) < open (₹${prevDay.open.toFixed(2)})`}></div>
                         )}
                         <div className="font-semibold text-xs sm:text-sm text-gray-900 flex items-center gap-1">
                             {stock.symbol}
