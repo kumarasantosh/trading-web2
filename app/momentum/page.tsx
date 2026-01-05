@@ -5,6 +5,7 @@ import TopNavigation from '@/components/momentum/TopNavigation'
 import SectorPerformance from '@/components/momentum/SectorPerformance'
 import StockTable from '@/components/momentum/StockTable'
 import DisclaimerModal from '@/components/momentum/DisclaimerModal'
+import Footer from '@/components/Footer'
 
 export default function MomentumPage() {
   const [showDisclaimer, setShowDisclaimer] = useState(false)
@@ -79,6 +80,7 @@ export default function MomentumPage() {
         isOpen={showDisclaimer}
         onAccept={handleDisclaimerAccept}
       />
+      <Footer />
     </div>
   )
 }

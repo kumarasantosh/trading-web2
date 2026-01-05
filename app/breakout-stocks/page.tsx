@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import TopNavigation from '@/components/momentum/TopNavigation'
+import Footer from '@/components/Footer'
 import { fetchYahooStockData } from '@/services/yahooFinance'
 import { SECTOR_STOCKS } from '@/constants/sector-stocks-mapping'
 
@@ -345,6 +346,7 @@ export default function BreakoutStocksPage() {
           )}
         </div>
       </div>
+      <Footer />
     </div>
   )
 }

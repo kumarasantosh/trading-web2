@@ -18,19 +18,19 @@ export default function TimelineSlider({
     const [sliderValue, setSliderValue] = useState(0)
     const [isUserDragging, setIsUserDragging] = useState(false)
 
-    // Market hours: 9:15 AM to 3:30 PM (375 minutes = 75 intervals of 5 minutes)
-    const intervals = 75 // Every 5 minutes
+    // Market hours: 9:15 AM to 3:30 PM (375 minutes = 125 intervals of 3 minutes)
+    const intervals = 125 // Every 3 minutes
 
     // Get current time interval
     const getCurrentInterval = () => {
         const now = new Date()
         const minutes = (now.getHours() - 9) * 60 + now.getMinutes() - 15
-        return Math.max(0, Math.min(Math.floor(minutes / 5), intervals))
+        return Math.max(0, Math.min(Math.floor(minutes / 3), intervals))
     }
 
     // Convert slider value to time
     const sliderToTime = (value: number) => {
-        const minutes = value * 5 + 9 * 60 + 15
+        const minutes = value * 3 + 9 * 60 + 15
         const hours = Math.floor(minutes / 60)
         const mins = minutes % 60
 
@@ -44,7 +44,7 @@ export default function TimelineSlider({
         const hours = time.getHours()
         const minutes = time.getMinutes()
         const totalMinutes = (hours - 9) * 60 + minutes - 15
-        return Math.max(0, Math.min(Math.floor(totalMinutes / 5), intervals))
+        return Math.max(0, Math.min(Math.floor(totalMinutes / 3), intervals))
     }
 
     // Initialize to current time

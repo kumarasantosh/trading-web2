@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 
 /**
- * Cron job API route that captures option chain data every 5 minutes
+ * Cron job API route that captures option chain data every 3 minutes
  * Runs during market hours (9:15 AM - 3:30 PM IST, Mon-Fri)
  * 
  * Security: Validates CRON_SECRET to prevent unauthorized access
@@ -21,12 +21,36 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Round DOWN to nearest 5-minute interval for consistent querying
-        // This ensures all data captured within the same 5-minute window (e.g., 12:40-12:44)
-        // gets saved with the same timestamp (12:40:00), making it easy to query with the slider
+        // Check if within market hours (9:15 AM - 3:30 PM IST)
+        // IST is UTC+5:30
         const now = new Date();
+        const utcHours = now.getUTCHours();
+        const utcMinutes = now.getUTCMinutes();
+        
+        // Convert to IST (UTC + 5:30)
+        // Create a new date object to handle day overflow properly
+        const istDate = new Date(now.getTime() + (5.5 * 60 * 60 * 1000)); // Add 5:30 hours
+        let istHours = istDate.getUTCHours();
+        let istMinutes = istDate.getUTCMinutes();
+        
+        // Check if within market hours: 9:15 AM to 3:30 PM IST
+        const isWithinMarketHours = 
+            (istHours > 9 || (istHours === 9 && istMinutes >= 15)) &&
+            (istHours < 15 || (istHours === 15 && istMinutes <= 30));
+        
+        if (!isWithinMarketHours) {
+            console.log(`[CRON] Outside market hours (current IST: ${istHours}:${istMinutes.toString().padStart(2, '0')}), skipping capture`);
+            return NextResponse.json({
+                success: false,
+                message: 'Outside market hours',
+                current_ist_time: `${istHours}:${istMinutes.toString().padStart(2, '0')}`,
+            });
+        }
+
+        // Round DOWN to nearest 3-minute interval for consistent querying
+        // This ensures all data captured within the same 3-minute window gets saved with the same timestamp
         const minutes = now.getMinutes();
-        const roundedMinutes = Math.floor(minutes / 5) * 5;
+        const roundedMinutes = Math.floor(minutes / 3) * 3;
         const roundedTime = new Date(now);
         roundedTime.setMinutes(roundedMinutes, 0, 0); // Set seconds and milliseconds to 0
         const capturedAt = roundedTime.toISOString();
@@ -174,9 +198,34 @@ export async function GET(request: NextRequest) {
         // Extract NIFTY spot price from the data
         const niftySpot = data?.underlyingValue || data?.records?.underlyingValue || null;
 
-        // Check how many strikes are in the data
-        const strikesCount = data?.data?.length || data?.records?.data?.length || 0;
+        // Extract data array from different possible structures
+        const dataArray = data?.data || data?.records?.data || [];
+        const strikesCount = dataArray.length || 0;
         console.log(`[CRON] Option chain data contains ${strikesCount} strikes for expiry ${expiryDate}`);
+
+        // Calculate total put OI and call OI
+        let totalPutOI = 0;
+        let totalCallOI = 0;
+
+        if (Array.isArray(dataArray) && dataArray.length > 0) {
+            dataArray.forEach((item: any) => {
+                if (!item) return;
+                
+                const ceData = item.CE || {};
+                const peData = item.PE || {};
+                
+                const callOI = Number(ceData.openInterest || 0);
+                const putOI = Number(peData.openInterest || 0);
+
+                totalCallOI += callOI;
+                totalPutOI += putOI;
+            });
+        }
+
+        // Calculate PCR (Put Call Ratio)
+        const pcr = totalCallOI > 0 ? totalPutOI / totalCallOI : 0;
+
+        console.log(`[CRON] Calculated OI totals: Put OI=${totalPutOI}, Call OI=${totalCallOI}, PCR=${pcr.toFixed(4)}`);
 
         // Convert expiry date from DD-MMM-YYYY to DD-MM-YYYY for storage
         const monthMap: { [key: string]: string } = {
@@ -197,23 +246,63 @@ export async function GET(request: NextRequest) {
 
         console.log(`[CRON] Saving snapshot: symbol=${symbol}, expiry=${expiryDateForStorage}, strikes=${strikesCount}, nifty_spot=${niftySpot}`);
 
-        // Save to database
-        const { error } = await supabaseAdmin
+        // Save option chain snapshot to database (use upsert to handle duplicates)
+        const { error: snapshotError } = await supabaseAdmin
             .from('option_chain_snapshots')
-            .insert({
+            .upsert({
                 symbol,
                 expiry_date: expiryDateForStorage,
                 captured_at: capturedAt,
                 nifty_spot: niftySpot,
                 option_chain_data: data,
+            }, {
+                onConflict: 'symbol,expiry_date,captured_at',
+                ignoreDuplicates: false, // Update if exists
             });
 
-        if (error) {
-            console.error('[CRON] Database error:', error);
-            return NextResponse.json(
-                { error: 'Failed to save snapshot', details: error.message },
-                { status: 500 }
-            );
+        if (snapshotError) {
+            console.error('[CRON] Database error saving snapshot:', snapshotError);
+            // Check if it's a constraint violation (duplicate) - this is acceptable
+            const isDuplicate = snapshotError.code === '23505' || snapshotError.message?.includes('duplicate') || snapshotError.message?.includes('unique');
+            if (isDuplicate) {
+                console.log('[CRON] Snapshot already exists for this timestamp, continuing...');
+            } else {
+                return NextResponse.json(
+                    { error: 'Failed to save snapshot', details: snapshotError.message, code: snapshotError.code },
+                    { status: 500 }
+                );
+            }
+        } else {
+            console.log('[CRON] Option chain snapshot saved successfully');
+        }
+
+        // Save OI trendline data to database (use upsert to handle duplicates)
+        const { error: trendlineError } = await supabaseAdmin
+            .from('oi_trendline')
+            .upsert({
+                symbol,
+                expiry_date: expiryDateForStorage,
+                captured_at: capturedAt,
+                total_put_oi: totalPutOI,
+                total_call_oi: totalCallOI,
+                pcr: pcr,
+                nifty_spot: niftySpot,
+            }, {
+                onConflict: 'symbol,expiry_date,captured_at',
+                ignoreDuplicates: false, // Update if exists
+            });
+
+        if (trendlineError) {
+            console.error('[CRON] Database error saving trendline:', trendlineError);
+            // Check if it's a constraint violation (duplicate) - this is acceptable
+            const isDuplicate = trendlineError.code === '23505' || trendlineError.message?.includes('duplicate') || trendlineError.message?.includes('unique');
+            if (isDuplicate) {
+                console.log('[CRON] Trendline data already exists for this timestamp, continuing...');
+            } else {
+                console.error('[CRON] Non-duplicate error saving trendline, but continuing...');
+            }
+        } else {
+            console.log(`[CRON] OI trendline data saved: Put OI=${totalPutOI}, Call OI=${totalCallOI}`);
         }
 
         console.log(`[CRON] Option chain capture complete at ${capturedAt}`);
@@ -224,6 +313,9 @@ export async function GET(request: NextRequest) {
             symbol,
             expiry_date: expiryDateForStorage,
             nifty_spot: niftySpot,
+            total_put_oi: totalPutOI,
+            total_call_oi: totalCallOI,
+            pcr: pcr,
         });
 
     } catch (error) {

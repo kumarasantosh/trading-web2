@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, Legend, LineChart, Line } from 'recharts'
 import TimelineSlider from '@/components/momentum/TimelineSlider'
 import TopNavigation from '@/components/momentum/TopNavigation'
+import Footer from '@/components/Footer'
 
 interface OptionChainData {
     strikePrice: number
@@ -553,17 +554,17 @@ export default function OptionChainPage() {
             setData([]) // Clear data immediately
             setDataCaptureTime(null)
             
-            // Calculate time range around the selected time (±3 minutes)
+            // Calculate time range around the selected time (±3 minutes for 3-minute capture interval)
             // Similar to sectors - only return data if it's close to the target
             const start = new Date(time)
-            start.setMinutes(start.getMinutes() - 3)
+            start.setMinutes(start.getMinutes() - 2) // Reduced to ±2 minutes for 3-minute interval
             const end = new Date(time)
-            end.setMinutes(end.getMinutes() + 3)
+            end.setMinutes(end.getMinutes() + 2)
             
             const startISO = start.toISOString()
             const endISO = end.toISOString()
             const targetTimestamp = time.getTime()
-            const MAX_TIME_DIFF_MS = 2.5 * 60 * 1000 // 2.5 minutes
+            const MAX_TIME_DIFF_MS = 1.5 * 60 * 1000 // 1.5 minutes (half of 3-minute interval)
             
             console.log('[OptionChain] Fetching historical data for time:', time.toISOString())
             console.log('[OptionChain] Query range:', startISO, 'to', endISO)
@@ -1444,6 +1445,7 @@ export default function OptionChainPage() {
                 </div>
                 </div>
             </div>
+            <Footer />
         </div>
     )
 }

@@ -12,7 +12,8 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Configuration
-INTERVAL=300  # 5 minutes in seconds
+MARKET_INTERVAL=300  # 5 minutes in seconds (for market data)
+OI_INTERVAL=180  # 3 minutes in seconds (for option chain OI data)
 CRON_SECRET="${CRON_SECRET:-9f3c1a7e4b2d8f0a6e9c3d1b5f7a2e4c8a6d0b9e3f2c1a4d7e8b5c6f0}"
 MARKET_DATA_API_URL="http://localhost:3000/api/cron/capture-market-data"
 OPTION_CHAIN_API_URL="http://localhost:3000/api/option-chain/cron"
@@ -27,11 +28,14 @@ else
     echo -e "${BLUE}🕐 Auto-capture will run indefinitely (Ctrl+C to stop)${NC}"
 fi
 
-echo -e "${BLUE}📊 Capturing sectors, stocks, and option chain data every 5 minutes...${NC}"
+echo -e "${BLUE}📊 Capturing data:${NC}"
+echo -e "${BLUE}   - Market data (sectors & stocks): every 5 minutes${NC}"
+echo -e "${BLUE}   - Option chain OI data: every 3 minutes (9:15 AM - 3:30 PM IST)${NC}"
 echo -e "${YELLOW}Press Ctrl+C to stop${NC}\n"
 
 # Counter for successful captures
-CAPTURE_COUNT=0
+MARKET_CAPTURE_COUNT=0
+OI_CAPTURE_COUNT=0
 
 # Function to call API endpoint with retry logic
 call_api() {
@@ -70,32 +74,62 @@ call_api() {
     done
 }
 
-# Function to capture both sectors and option chain data
-capture_data() {
-    echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')] Capturing market data (sectors & option chain)...${NC}"
+# Function to capture market data (sectors & stocks)
+capture_market_data() {
+    echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')] Capturing market data (sectors & stocks)...${NC}"
     
-    local market_success=0
-    local oi_success=0
-    
-    # Capture sector and stock data
     market_response=$(call_api "$MARKET_DATA_API_URL" "Market Data")
     if [ $? -eq 0 ] && [ -n "$market_response" ]; then
-        market_success=1
+        MARKET_CAPTURE_COUNT=$((MARKET_CAPTURE_COUNT + 1))
         sectors=$(echo "$market_response" | grep -o '"sectors_captured":[0-9]*' | cut -d':' -f2)
         stocks=$(echo "$market_response" | grep -o '"stocks_captured":[0-9]*' | cut -d':' -f2)
-        echo -e "${GREEN}✅ Market Data: ${sectors} sectors, ${stocks} stocks${NC}"
+        echo -e "${GREEN}✅ Market Data: ${sectors} sectors, ${stocks} stocks (total: ${MARKET_CAPTURE_COUNT})${NC}"
+        return 0
     else
         echo -e "${RED}❌ Market Data capture failed${NC}"
+        return 1
     fi
+}
+
+# Function to capture option chain OI data
+capture_oi_data() {
+    echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')] Capturing option chain OI data...${NC}"
     
-    # Capture option chain (OI) data
     oi_response=$(call_api "$OPTION_CHAIN_API_URL" "Option Chain")
     oi_exit_code=$?
     if [ $oi_exit_code -eq 0 ] && [ -n "$oi_response" ]; then
-        oi_success=1
-        symbol=$(echo "$oi_response" | grep -o '"symbol":"[^"]*"' | cut -d'"' -f4)
-        expiry=$(echo "$oi_response" | grep -o '"expiry_date":"[^"]*"' | cut -d'"' -f4)
-        echo -e "${GREEN}✅ Option Chain: ${symbol} (${expiry})${NC}"
+        # Check if it was skipped due to market hours
+        skipped=$(echo "$oi_response" | grep -o '"message":"[^"]*"' | cut -d'"' -f4)
+        if [ "$skipped" = "Outside market hours" ]; then
+            echo -e "${YELLOW}⏭️  Option Chain: Skipped (outside market hours)${NC}"
+            return 0
+        fi
+        
+        # Check if it was successful
+        success=$(echo "$oi_response" | grep -o '"success":[^,}]*' | cut -d':' -f2 | tr -d ' ')
+        if [ "$success" = "true" ]; then
+            OI_CAPTURE_COUNT=$((OI_CAPTURE_COUNT + 1))
+            symbol=$(echo "$oi_response" | grep -o '"symbol":"[^"]*"' | cut -d'"' -f4)
+            expiry=$(echo "$oi_response" | grep -o '"expiry_date":"[^"]*"' | cut -d'"' -f4)
+            putOI=$(echo "$oi_response" | grep -o '"total_put_oi":[0-9]*' | cut -d':' -f2)
+            callOI=$(echo "$oi_response" | grep -o '"total_call_oi":[0-9]*' | cut -d':' -f2)
+            echo -e "${GREEN}✅ Option Chain: ${symbol} (${expiry}) - Put OI: ${putOI}, Call OI: ${callOI} (total: ${OI_CAPTURE_COUNT})${NC}"
+            return 0
+        else
+            # Check for error message
+            error_msg=$(echo "$oi_response" | grep -o '"error":"[^"]*"' | cut -d'"' -f4 | head -1)
+            error_details=$(echo "$oi_response" | grep -o '"details":"[^"]*"' | cut -d'"' -f4 | head -1)
+            echo -e "${RED}❌ Option Chain capture failed${NC}"
+            if [ -n "$error_msg" ]; then
+                echo -e "${YELLOW}   Error: ${error_msg}${NC}"
+            fi
+            if [ -n "$error_details" ]; then
+                echo -e "${YELLOW}   Details: ${error_details}${NC}"
+            fi
+            # Also show full response for debugging (first 200 chars)
+            echo -e "${YELLOW}   Response: ${oi_response:0:200}...${NC}"
+            return 1
+        fi
     else
         echo -e "${RED}❌ Option Chain capture failed${NC}"
         if [ -n "$oi_response" ]; then
@@ -103,38 +137,51 @@ capture_data() {
             if [ -n "$error_msg" ]; then
                 echo -e "${YELLOW}   Error: ${error_msg}${NC}"
             fi
+            # Show full response for debugging (first 200 chars)
+            echo -e "${YELLOW}   Response: ${oi_response:0:200}...${NC}"
         fi
-    fi
-    
-    if [ $market_success -eq 1 ] || [ $oi_success -eq 1 ]; then
-        CAPTURE_COUNT=$((CAPTURE_COUNT + 1))
-        echo -e "${GREEN}   Total captures: ${CAPTURE_COUNT}${NC}\n"
-        return 0
-    else
-        echo -e "${RED}   All captures failed${NC}\n"
         return 1
     fi
 }
 
 # Trap Ctrl+C to show summary
-trap 'echo -e "\n${YELLOW}Stopping auto-capture...${NC}"; echo -e "${GREEN}Total successful captures: ${CAPTURE_COUNT}${NC}"; exit 0' INT
+trap 'echo -e "\n${YELLOW}Stopping auto-capture...${NC}"; echo -e "${GREEN}Market data captures: ${MARKET_CAPTURE_COUNT}${NC}"; echo -e "${GREEN}OI data captures: ${OI_CAPTURE_COUNT}${NC}"; exit 0' INT
 
-# Initial capture
-capture_data
+# Track last market data capture time
+LAST_MARKET_CAPTURE=0
+LAST_OI_CAPTURE=0
+
+# Initial captures
+capture_market_data
+LAST_MARKET_CAPTURE=$(date +%s)
+
+capture_oi_data
+LAST_OI_CAPTURE=$(date +%s)
 
 # Main loop
 while true; do
     # Check if we've reached the end time
     if [ "$END_TIME" -gt 0 ] && [ "$(date +%s)" -ge "$END_TIME" ]; then
         echo -e "${YELLOW}Duration completed!${NC}"
-        echo -e "${GREEN}Total successful captures: ${CAPTURE_COUNT}${NC}"
+        echo -e "${GREEN}Market data captures: ${MARKET_CAPTURE_COUNT}${NC}"
+        echo -e "${GREEN}OI data captures: ${OI_CAPTURE_COUNT}${NC}"
         break
     fi
     
-    # Wait for 5 minutes
-    echo -e "${YELLOW}⏳ Waiting 5 minutes until next capture...${NC}"
-    sleep $INTERVAL
+    CURRENT_TIME=$(date +%s)
     
-    # Capture data
-    capture_data
+    # Check if it's time to capture market data (every 5 minutes)
+    if [ $((CURRENT_TIME - LAST_MARKET_CAPTURE)) -ge $MARKET_INTERVAL ]; then
+        capture_market_data
+        LAST_MARKET_CAPTURE=$(date +%s)
+    fi
+    
+    # Check if it's time to capture OI data (every 3 minutes)
+    if [ $((CURRENT_TIME - LAST_OI_CAPTURE)) -ge $OI_INTERVAL ]; then
+        capture_oi_data
+        LAST_OI_CAPTURE=$(date +%s)
+    fi
+    
+    # Wait 30 seconds before checking again (faster check for more precise timing)
+    sleep 30
 done

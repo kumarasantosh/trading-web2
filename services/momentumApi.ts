@@ -232,9 +232,179 @@ export async function fetchWidgetData(
 }
 
 /**
- * Fetches market carousel data from Groww API
+ * Fetches market carousel data from NSE API (more accurate percentChange)
  */
 export async function fetchMarketData(): Promise<any[]> {
+  try {
+    // Map NSE index names to display names
+    const indexMap: Record<string, string> = {
+      'NIFTY 50': 'NIFTY 50',
+      'NIFTY BANK': 'NIFTY BANK',
+      'NIFTY FIN SERVICE': 'FINNIFTY',
+      'NIFTY MIDCAP 100': 'NIFTY MIDCAP',
+      'NIFTY SMLCAP 100': 'NIFTY SMALLCAP',
+      'INDIA VIX': 'INDIA_VIX',
+    }
+
+    // For BSE SENSEX, we still need to use Groww API as NSE doesn't have it
+    const bseIndices: string[] = ['BSE_SENSEX']
+    
+    // Fetch NSE indices from NSE API
+    const nseUrl = new URL('/api/nse/indices', window.location.origin)
+    nseUrl.searchParams.append('_t', Date.now().toString()) // Cache busting
+
+    const nseResponse = await fetch(nseUrl.toString(), {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+      cache: 'no-store',
+    })
+
+    const nseIndices: any[] = []
+    
+    if (nseResponse.ok) {
+      const nseData = await nseResponse.json()
+      
+      // Handle different NSE API response structures
+      let allIndices: any[] = []
+      
+      // Check if data is directly an array
+      if (Array.isArray(nseData.data)) {
+        allIndices = nseData.data
+      } 
+      // Check if data has nested structure (e.g., "INDICES ELIGIBLE IN DERIVATIVES")
+      else if (nseData.data && typeof nseData.data === 'object') {
+        // Try to find arrays in the data object
+        Object.values(nseData.data).forEach((value: any) => {
+          if (Array.isArray(value)) {
+            allIndices = [...allIndices, ...value]
+          }
+        })
+      }
+      
+      // Target indices to find
+      const targetIndices = [
+        { searchName: 'NIFTY 50', displayName: 'NIFTY 50' },
+        { searchName: 'NIFTY BANK', displayName: 'NIFTY BANK' },
+        { searchName: 'NIFTY FIN SERVICE', displayName: 'FINNIFTY' },
+        { searchName: 'NIFTY MIDCAP 100', displayName: 'NIFTY MIDCAP' },
+        { searchName: 'NIFTY SMLCAP 100', displayName: 'NIFTY SMALLCAP' },
+        { searchName: 'INDIA VIX', displayName: 'INDIA_VIX' },
+      ]
+      
+      // Process all target indices
+      targetIndices.forEach(({ searchName, displayName }) => {
+        const indexData = allIndices.find((item: any) => 
+          item.index === searchName || 
+          item.indexSymbol === searchName ||
+          item.index?.includes(searchName) ||
+          item.indexSymbol?.includes(searchName)
+        )
+        
+        if (indexData) {
+          nseIndices.push({
+            name: displayName,
+            value: indexData.last || indexData.lastPrice || 0,
+            change: indexData.variation || (indexData.last - indexData.previousClose) || 0,
+            changePercent: indexData.percentChange !== undefined ? indexData.percentChange : 
+                          (indexData.previousClose && indexData.last ? 
+                           ((indexData.last - indexData.previousClose) / indexData.previousClose) * 100 : 0),
+          })
+        }
+      })
+    }
+
+    // Fetch BSE SENSEX from Groww API (NSE doesn't have BSE data)
+    try {
+      const growwUrl = new URL('/api/groww/ltp', window.location.origin)
+      growwUrl.searchParams.append('segment', 'CASH')
+      growwUrl.searchParams.append('exchange_symbols', bseIndices.join(','))
+      growwUrl.searchParams.append('_t', Date.now().toString())
+
+      const growwLtpResponse = await fetch(growwUrl.toString(), {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        cache: 'no-store',
+      })
+
+      if (growwLtpResponse.ok) {
+        const ltpData: GrowwLTP = await growwLtpResponse.json()
+        
+        // Fetch OHLC for change calculation
+        const ohlcUrl = new URL('/api/groww/ohlc', window.location.origin)
+        ohlcUrl.searchParams.append('segment', 'CASH')
+        ohlcUrl.searchParams.append('exchange_symbols', bseIndices.join(','))
+        ohlcUrl.searchParams.append('_t', Date.now().toString())
+
+        const ohlcResponse = await fetch(ohlcUrl.toString(), {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+          cache: 'no-store',
+        })
+
+        const ohlcData: GrowwOHLC = ohlcResponse.ok ? await ohlcResponse.json() : {}
+
+        bseIndices.forEach(symbol => {
+          const ltpResponse = ltpData[symbol]
+          const ohlc = ohlcData[symbol]
+          
+          let ltp: number = 0
+          if (typeof ltpResponse === 'number' && ltpResponse > 0) {
+            ltp = ltpResponse
+          } else if (typeof ltpResponse === 'object' && ltpResponse !== null && ltpResponse.ltp) {
+            ltp = ltpResponse.ltp
+          }
+          
+          const previousClose = ohlc?.close || ltp
+          const change = previousClose > 0 && ltp > 0 ? ltp - previousClose : 0
+          const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0
+
+          nseIndices.push({
+            name: 'SENSEX',
+            value: ltp,
+            change: change,
+            changePercent: changePercent,
+          })
+        })
+      }
+    } catch (growwError) {
+      console.error('Error fetching BSE SENSEX from Groww:', growwError)
+    }
+
+    // If no indices found from NSE API, try Groww API as fallback
+    if (nseIndices.length === 0) {
+      console.warn('[fetchMarketData] No indices found from NSE API, falling back to Groww API')
+      return await fetchMarketDataFromGroww()
+    }
+
+    // Return indices in preferred order
+    const order = ['NIFTY 50', 'SENSEX', 'NIFTY BANK', 'FINNIFTY', 'NIFTY MIDCAP', 'NIFTY SMALLCAP', 'INDIA_VIX']
+    const sorted = order.map(name => 
+      nseIndices.find(idx => idx.name === name)
+    ).filter(Boolean) as any[]
+
+    return sorted.length > 0 ? sorted : nseIndices
+  } catch (error) {
+    console.error('Error fetching market data from NSE:', error)
+    // Fallback to Groww API on error
+    try {
+      return await fetchMarketDataFromGroww()
+    } catch (growwError) {
+      console.error('Error fetching market data from Groww fallback:', growwError)
+      // Return fallback data on error
+      return [
+        { name: 'NIFTY 50', value: 0, change: 0, changePercent: 0 },
+        { name: 'SENSEX', value: 0, change: 0, changePercent: 0 },
+        { name: 'NIFTY BANK', value: 0, change: 0, changePercent: 0 },
+      ]
+    }
+  }
+}
+
+/**
+ * Fallback function to fetch market data from Groww API
+ * Used when NSE API fails or returns no data
+ */
+async function fetchMarketDataFromGroww(): Promise<any[]> {
   try {
     // Market indices symbols
     const marketSymbols = [
@@ -247,11 +417,11 @@ export async function fetchMarketData(): Promise<any[]> {
       'NSE_INDIA VIX',
     ]
 
-    // Fetch LTP andas
+    // Fetch LTP
     const url = new URL('/api/groww/ltp', window.location.origin)
     url.searchParams.append('segment', 'CASH')
     url.searchParams.append('exchange_symbols', marketSymbols.join(','))
-    url.searchParams.append('_t', Date.now().toString()) // Cache busting
+    url.searchParams.append('_t', Date.now().toString())
 
     const ltpResponse = await fetch(url.toString(), {
       method: 'GET',
@@ -269,7 +439,7 @@ export async function fetchMarketData(): Promise<any[]> {
     const ohlcUrl = new URL('/api/groww/ohlc', window.location.origin)
     ohlcUrl.searchParams.append('segment', 'CASH')
     ohlcUrl.searchParams.append('exchange_symbols', marketSymbols.join(','))
-    ohlcUrl.searchParams.append('_t', Date.now().toString()) // Cache busting
+    ohlcUrl.searchParams.append('_t', Date.now().toString())
 
     const ohlcResponse = await fetch(ohlcUrl.toString(), {
       method: 'GET',
@@ -282,16 +452,16 @@ export async function fetchMarketData(): Promise<any[]> {
     // Map symbols to display names
     const symbolMap: Record<string, string> = {
       'NSE_NIFTY 50': 'NIFTY 50',
-
-      'BSE_SENSEX': 'SENSEX', 'NSE_NIFTY BANK': 'NIFTY BANK', 'NSE_NIFTY FIN SERVICE': 'FINNIFTY',
+      'BSE_SENSEX': 'SENSEX',
+      'NSE_NIFTY BANK': 'NIFTY BANK',
+      'NSE_NIFTY FIN SERVICE': 'FINNIFTY',
       'NSE_NIFTY MIDCAP 100': 'NIFTY MIDCAP',
       'NSE_NIFTY SMLCAP 100': 'NIFTY SMALLCAP',
-
       'NSE_INDIA VIX': 'INDIA_VIX',
     }
 
     // Process data
-    return marketSymbols.map((symbol) => {
+    const indices = marketSymbols.map((symbol) => {
       const ltpResponse = ltpData[symbol]
       const ohlc = ohlcData[symbol]
       
@@ -319,15 +489,18 @@ export async function fetchMarketData(): Promise<any[]> {
         change: change,
         changePercent: changePercent,
       }
-    })
+    }).filter(idx => idx.value > 0) // Only return indices with valid data
+
+    // Return in preferred order
+    const order = ['NIFTY 50', 'SENSEX', 'NIFTY BANK', 'FINNIFTY', 'NIFTY MIDCAP', 'NIFTY SMALLCAP', 'INDIA_VIX']
+    const sorted = order.map(name => 
+      indices.find(idx => idx.name === name)
+    ).filter(Boolean) as any[]
+
+    return sorted.length > 0 ? sorted : indices
   } catch (error) {
-    console.error('Error fetching market data:', error)
-    // Return fallback data on error
-    return [
-      { name: 'NIFTY 50', value: 0, change: 0, changePercent: 0 },
-      { name: 'SENSEX', value: 0, change: 0, changePercent: 0 },
-      { name: 'NIFTY BANK', value: 0, change: 0, changePercent: 0 },
-    ]
+    console.error('Error in fetchMarketDataFromGroww:', error)
+    throw error
   }
 }
 

@@ -275,83 +275,128 @@ async function captureMarketIndices() {
         const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000))
         const todayDate = istTime.toISOString().split('T')[0] // YYYY-MM-DD format
 
-        // Fetch market indices from internal API (uses Groww API)
-        const marketSymbols = [
-            'NSE_NIFTY 50',
-            'BSE_SENSEX',
-            'NSE_NIFTY BANK',
-            'NSE_NIFTY FIN SERVICE',
-            'NSE_NIFTY MIDCAP 100',
-            'NSE_NIFTY SMLCAP 100',
-            'NSE_INDIA VIX',
-        ]
-
-        // Fetch LTP data using internal API route
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-        const ltpUrl = new URL(`${baseUrl}/api/groww/ltp`)
-        ltpUrl.searchParams.append('segment', 'CASH')
-        ltpUrl.searchParams.append('exchange_symbols', marketSymbols.join(','))
+        const snapshots: any[] = []
 
-        const ltpResponse = await fetch(ltpUrl.toString(), {
-            headers: {
-                'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-            },
-            cache: 'no-store',
-        })
+        // Fetch NSE indices from NSE API (more accurate percentChange)
+        try {
+            const nseUrl = `${baseUrl}/api/nse/indices`
+            const nseResponse = await fetch(nseUrl, {
+                headers: {
+                    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                },
+                cache: 'no-store',
+            })
 
-        if (!ltpResponse.ok) {
-            throw new Error(`Groww LTP API returned ${ltpResponse.status}`)
+            if (nseResponse.ok) {
+                const nseData = await nseResponse.json()
+                
+                // Handle different NSE API response structures
+                let allIndices: any[] = []
+                
+                // Check if data is directly an array
+                if (Array.isArray(nseData.data)) {
+                    allIndices = nseData.data
+                } 
+                // Check if data has nested structure (e.g., "INDICES ELIGIBLE IN DERIVATIVES")
+                else if (nseData.data && typeof nseData.data === 'object') {
+                    // Try to find arrays in the data object
+                    Object.values(nseData.data).forEach((value: any) => {
+                        if (Array.isArray(value)) {
+                            allIndices = [...allIndices, ...value]
+                        }
+                    })
+                }
+                
+                // Target indices to capture
+                const targetIndices = [
+                    { searchName: 'NIFTY 50', displayName: 'NIFTY 50' },
+                    { searchName: 'NIFTY BANK', displayName: 'NIFTY BANK' },
+                    { searchName: 'NIFTY FIN SERVICE', displayName: 'FINNIFTY' },
+                    { searchName: 'NIFTY MIDCAP 100', displayName: 'NIFTY MIDCAP' },
+                    { searchName: 'NIFTY SMLCAP 100', displayName: 'NIFTY SMALLCAP' },
+                    { searchName: 'INDIA VIX', displayName: 'INDIA_VIX' },
+                ]
+                
+                // Process all target indices
+                targetIndices.forEach(({ searchName, displayName }) => {
+                    const indexData = allIndices.find((item: any) => 
+                        item.index === searchName || 
+                        item.indexSymbol === searchName ||
+                        item.index?.includes(searchName) ||
+                        item.indexSymbol?.includes(searchName)
+                    )
+                    
+                    if (indexData) {
+                        snapshots.push({
+                            captured_at: todayDate,
+                            index_name: displayName,
+                            value: indexData.last || indexData.lastPrice || 0,
+                            change: indexData.variation || (indexData.last && indexData.previousClose ? 
+                                   (indexData.last - indexData.previousClose) : 0) || 0,
+                            change_percent: indexData.percentChange !== undefined ? indexData.percentChange : 
+                                          (indexData.previousClose && indexData.last ? 
+                                           ((indexData.last - indexData.previousClose) / indexData.previousClose) * 100 : 0),
+                        })
+                    }
+                })
+            } else {
+                console.warn('[CRON] NSE API returned non-OK status:', nseResponse.status)
+                errors.push('NSE API returned non-OK status')
+            }
+        } catch (nseError) {
+            console.error('[CRON] Error fetching NSE indices:', nseError)
+            errors.push('Failed to fetch NSE indices')
         }
 
-        const ltpData: any = await ltpResponse.json()
+        // Fetch BSE SENSEX from Groww API (NSE doesn't have BSE data)
+        try {
+            const ltpUrl = new URL(`${baseUrl}/api/groww/ltp`)
+            ltpUrl.searchParams.append('segment', 'CASH')
+            ltpUrl.searchParams.append('exchange_symbols', 'BSE_SENSEX')
 
-        // Fetch OHLC data using internal API route
-        const ohlcUrl = new URL(`${baseUrl}/api/groww/ohlc`)
-        ohlcUrl.searchParams.append('segment', 'CASH')
-        ohlcUrl.searchParams.append('exchange_symbols', marketSymbols.join(','))
+            const ltpResponse = await fetch(ltpUrl.toString(), {
+                headers: {
+                    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                },
+                cache: 'no-store',
+            })
 
-        const ohlcResponse = await fetch(ohlcUrl.toString(), {
-            headers: {
-                'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-            },
-            cache: 'no-store',
-        })
+            if (ltpResponse.ok) {
+                const ltpData: any = await ltpResponse.json()
 
-        const ohlcData: any = ohlcResponse.ok ? await ohlcResponse.json() : {}
+                // Fetch OHLC data
+                const ohlcUrl = new URL(`${baseUrl}/api/groww/ohlc`)
+                ohlcUrl.searchParams.append('segment', 'CASH')
+                ohlcUrl.searchParams.append('exchange_symbols', 'BSE_SENSEX')
 
-        // Map symbols to display names
-        const symbolMap: Record<string, string> = {
-            'NSE_NIFTY 50': 'NIFTY 50',
-            'BSE_SENSEX': 'SENSEX',
-            'NSE_NIFTY BANK': 'NIFTY BANK',
-            'NSE_NIFTY FIN SERVICE': 'FINNIFTY',
-            'NSE_NIFTY MIDCAP 100': 'NIFTY MIDCAP',
-            'NSE_NIFTY SMLCAP 100': 'NIFTY SMALLCAP',
-            'NSE_INDIA VIX': 'INDIA_VIX',
-        }
+                const ohlcResponse = await fetch(ohlcUrl.toString(), {
+                    headers: {
+                        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                    },
+                    cache: 'no-store',
+                })
 
-        const snapshots = []
+                const ohlcData: any = ohlcResponse.ok ? await ohlcResponse.json() : {}
 
-        for (const symbol of marketSymbols) {
-            try {
-                const ltpResponse = ltpData[symbol]
-                const ltp = typeof ltpResponse === 'object' && ltpResponse !== null ? ltpResponse.ltp : (ltpResponse as number || 0)
-                const ohlc = ohlcData[symbol]
+                const ltpResponseData = ltpData['BSE_SENSEX']
+                const ltp = typeof ltpResponseData === 'object' && ltpResponseData !== null ? ltpResponseData.ltp : (ltpResponseData as number || 0)
+                const ohlc = ohlcData['BSE_SENSEX']
                 const previousClose = ohlc?.close || ltp
                 const change = ltp - previousClose
                 const changePercent = previousClose !== 0 ? (change / previousClose) * 100 : 0
 
                 snapshots.push({
                     captured_at: todayDate,
-                    index_name: symbolMap[symbol] || symbol,
+                    index_name: 'SENSEX',
                     value: ltp,
                     change: change,
                     change_percent: changePercent,
                 })
-            } catch (error) {
-                console.error(`[CRON] Error processing ${symbol}:`, error)
-                errors.push(`Failed to process ${symbol}`)
             }
+        } catch (growwError) {
+            console.error('[CRON] Error fetching BSE SENSEX from Groww:', growwError)
+            errors.push('Failed to fetch BSE SENSEX')
         }
 
         // Delete previous day's records before inserting new ones
