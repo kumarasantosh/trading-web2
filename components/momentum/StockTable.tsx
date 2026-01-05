@@ -300,7 +300,6 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
                     >
                       <td className="px-3 sm:px-4 py-2">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-900 group-hover:text-black transition-colors">{stock.symbol}</span>
                           {prevDayData[stock.symbol] && (
                             <>
                               {prevDayData[stock.symbol].close > prevDayData[stock.symbol].open && (
@@ -317,6 +316,7 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
                               )}
                             </>
                           )}
+                          <span className="font-bold text-gray-900 group-hover:text-black transition-colors">{stock.symbol}</span>
                         </div>
                       </td>
                       <td className="px-3 sm:px-4 py-2 text-right">
@@ -366,7 +366,6 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-gray-900 text-sm">{stock.symbol}</span>
                         {prevDayData[stock.symbol] && (
                           <>
                             {prevDayData[stock.symbol].close > prevDayData[stock.symbol].open && (
@@ -383,6 +382,7 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
                             )}
                           </>
                         )}
+                        <span className="font-bold text-gray-900 text-sm">{stock.symbol}</span>
                       </div>
                       <div className={`inline-flex items-center gap-1.5 font-bold px-2 py-1 rounded-lg ${isPositive
                         ? 'text-green-700 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200/50'

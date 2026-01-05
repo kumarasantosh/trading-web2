@@ -221,12 +221,6 @@ export default function BreakoutStocksPage() {
                             >
                               <td className="px-4 py-3 whitespace-nowrap">
                                 <div className="flex items-center gap-2">
-                                  <div>
-                                    <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
-                                    <div className="text-xs text-gray-500 truncate max-w-[120px]">
-                                      {stock.name}
-                                    </div>
-                                  </div>
                                   {stock.prevDayClose > stock.prevDayOpen && (
                                     <div
                                       className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
@@ -239,6 +233,12 @@ export default function BreakoutStocksPage() {
                                       title={`Yesterday close (₹${stock.prevDayClose.toFixed(2)}) < open (₹${stock.prevDayOpen.toFixed(2)})`}
                                     />
                                   )}
+                                  <div>
+                                    <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
+                                    <div className="text-xs text-gray-500 truncate max-w-[120px]">
+                                      {stock.name}
+                                    </div>
+                                  </div>
                                   {stock.is52WeekHigh && (
                                     <span className="px-2 py-0.5 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded">
                                       52W
@@ -321,12 +321,6 @@ export default function BreakoutStocksPage() {
                             >
                               <td className="px-4 py-3 whitespace-nowrap">
                                 <div className="flex items-center gap-2">
-                                  <div>
-                                    <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
-                                    <div className="text-xs text-gray-500 truncate max-w-[120px]">
-                                      {stock.name}
-                                    </div>
-                                  </div>
                                   {stock.prevDayClose > stock.prevDayOpen && (
                                     <div
                                       className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
@@ -339,6 +333,12 @@ export default function BreakoutStocksPage() {
                                       title={`Yesterday close (₹${stock.prevDayClose.toFixed(2)}) < open (₹${stock.prevDayOpen.toFixed(2)})`}
                                     />
                                   )}
+                                  <div>
+                                    <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
+                                    <div className="text-xs text-gray-500 truncate max-w-[120px]">
+                                      {stock.name}
+                                    </div>
+                                  </div>
                                 </div>
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap">
