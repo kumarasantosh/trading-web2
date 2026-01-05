@@ -349,54 +349,78 @@ async function captureMarketIndices() {
             errors.push('Failed to fetch NSE indices')
         }
 
-        // Fetch BSE SENSEX from Groww API (NSE doesn't have BSE data)
-        try {
-            const ltpUrl = new URL(`${baseUrl}/api/groww/ltp`)
-            ltpUrl.searchParams.append('segment', 'CASH')
-            ltpUrl.searchParams.append('exchange_symbols', 'BSE_SENSEX')
-
-            const ltpResponse = await fetch(ltpUrl.toString(), {
-                headers: {
-                    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-                },
-                cache: 'no-store',
-            })
-
-            if (ltpResponse.ok) {
-                const ltpData: any = await ltpResponse.json()
-
-                // Fetch OHLC data
-                const ohlcUrl = new URL(`${baseUrl}/api/groww/ohlc`)
-                ohlcUrl.searchParams.append('segment', 'CASH')
-                ohlcUrl.searchParams.append('exchange_symbols', 'BSE_SENSEX')
-
-                const ohlcResponse = await fetch(ohlcUrl.toString(), {
+        // Check if SENSEX was already found in NSE API response
+        const sensexInNse = snapshots.find(s => s.index_name === 'SENSEX')
+        
+        // Fetch BSE SENSEX from BSE API if not found in NSE
+        if (!sensexInNse) {
+            try {
+                const bseUrl = `${baseUrl}/api/bse/indices`
+                const bseResponse = await fetch(bseUrl, {
                     headers: {
                         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
                     },
                     cache: 'no-store',
                 })
 
-                const ohlcData: any = ohlcResponse.ok ? await ohlcResponse.json() : {}
+                if (bseResponse.ok) {
+                    const bseData = await bseResponse.json()
+                    console.log('[CRON] BSE API response:', bseData)
+                    
+                    // Handle different BSE API response structures
+                    let allBseIndices: any[] = []
+                    
+                    if (Array.isArray(bseData.data)) {
+                        allBseIndices = bseData.data
+                    } else if (bseData.data && typeof bseData.data === 'object') {
+                        Object.values(bseData.data).forEach((value: any) => {
+                            if (Array.isArray(value)) {
+                                allBseIndices = [...allBseIndices, ...value]
+                            }
+                        })
+                    }
+                    
+                    // Look for SENSEX in the BSE data
+                    const sensexData = allBseIndices.find((item: any) => 
+                        item.IndexName?.toUpperCase().includes('SENSEX') ||
+                        item.indexName?.toUpperCase().includes('SENSEX') ||
+                        item.name?.toUpperCase().includes('SENSEX') ||
+                        item.index?.toUpperCase().includes('SENSEX')
+                    )
+                    
+                    if (sensexData) {
+                        const value = sensexData.currentValue || sensexData.CurrentValue || sensexData.last || sensexData.Last || sensexData.value || sensexData.Value || 0
+                        const previousClose = sensexData.previousClose || sensexData.PreviousClose || sensexData.prevClose || sensexData.PrevClose || 0
+                        const change = sensexData.change || sensexData.Change || sensexData.variation || sensexData.Variation || (value && previousClose ? value - previousClose : 0)
+                        const changePercent = sensexData.changePercent || sensexData.ChangePercent || sensexData.percentChange || sensexData.PercentChange || 
+                                            (previousClose && previousClose > 0 ? (change / previousClose) * 100 : 0)
 
-                const ltpResponseData = ltpData['BSE_SENSEX']
-                const ltp = typeof ltpResponseData === 'object' && ltpResponseData !== null ? ltpResponseData.ltp : (ltpResponseData as number || 0)
-                const ohlc = ohlcData['BSE_SENSEX']
-                const previousClose = ohlc?.close || ltp
-                const change = ltp - previousClose
-                const changePercent = previousClose !== 0 ? (change / previousClose) * 100 : 0
+                        console.log(`[CRON] SENSEX from BSE API: value=${value}, previousClose=${previousClose}, change=${change}, changePercent=${changePercent}`)
 
-                snapshots.push({
-                    captured_at: todayDate,
-                    index_name: 'SENSEX',
-                    value: ltp,
-                    change: change,
-                    change_percent: changePercent,
-                })
+                        if (value > 0) {
+                            snapshots.push({
+                                captured_at: todayDate,
+                                index_name: 'SENSEX',
+                                value: Number(value),
+                                change: Number(change),
+                                change_percent: Number(changePercent),
+                            })
+                            console.log('[CRON] ✅ SENSEX added from BSE API')
+                        }
+                    } else {
+                        console.warn('[CRON] SENSEX not found in BSE API response')
+                        errors.push('SENSEX not found in BSE API')
+                    }
+                } else {
+                    console.warn('[CRON] BSE API returned non-OK status:', bseResponse.status)
+                    errors.push('BSE API returned non-OK status')
+                }
+            } catch (bseError) {
+                console.error('[CRON] Error fetching BSE SENSEX from BSE API:', bseError)
+                errors.push('Failed to fetch BSE SENSEX')
             }
-        } catch (growwError) {
-            console.error('[CRON] Error fetching BSE SENSEX from Groww:', growwError)
-            errors.push('Failed to fetch BSE SENSEX')
+        } else {
+            console.log('[CRON] ✅ SENSEX already found in NSE API response')
         }
 
         // Delete previous day's records before inserting new ones

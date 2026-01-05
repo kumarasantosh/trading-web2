@@ -23,8 +23,7 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
   // Load accordion states from localStorage or use defaults
   // Initialize with false to prevent flash, then load from localStorage in useEffect
   const [isMarketIndicesOpen, setIsMarketIndicesOpen] = useState(false)
-  const [isGainersOpen, setIsGainersOpen] = useState(false)
-  const [isLosersOpen, setIsLosersOpen] = useState(false)
+  const [isTopMoversOpen, setIsTopMoversOpen] = useState(false)
 
   // Load saved states from localStorage on mount
   useEffect(() => {
@@ -37,25 +36,17 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
           setIsMarketIndicesOpen(true) // Default to open if no saved value
         }
 
-        const savedGainers = localStorage.getItem('accordion_gainers')
-        if (savedGainers !== null) {
-          setIsGainersOpen(savedGainers === 'true')
+        const savedTopMovers = localStorage.getItem('accordion_topMovers')
+        if (savedTopMovers !== null) {
+          setIsTopMoversOpen(savedTopMovers === 'true')
         } else {
-          setIsGainersOpen(true) // Default to open if no saved value
-        }
-
-        const savedLosers = localStorage.getItem('accordion_losers')
-        if (savedLosers !== null) {
-          setIsLosersOpen(savedLosers === 'true')
-        } else {
-          setIsLosersOpen(true) // Default to open if no saved value
+          setIsTopMoversOpen(true) // Default to open if no saved value
         }
       } catch (e) {
         console.error('Error reading localStorage:', e)
         // If error, default to all open
         setIsMarketIndicesOpen(true)
-        setIsGainersOpen(true)
-        setIsLosersOpen(true)
+        setIsTopMoversOpen(true)
       }
     }
   }, []) // Only run once on mount
@@ -75,22 +66,11 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
     }
   }
 
-  const handleGainersToggle = (value: boolean) => {
-    setIsGainersOpen(value)
+  const handleTopMoversToggle = (value: boolean) => {
+    setIsTopMoversOpen(value)
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem('accordion_gainers', String(value))
-      } catch (e) {
-        console.error('Failed to save accordion state:', e)
-      }
-    }
-  }
-
-  const handleLosersToggle = (value: boolean) => {
-    setIsLosersOpen(value)
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('accordion_losers', String(value))
+        localStorage.setItem('accordion_topMovers', String(value))
       } catch (e) {
         console.error('Failed to save accordion state:', e)
       }
@@ -189,9 +169,8 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
   }, [])
 
   const navLinks = [
-    { name: 'Markets', href: '/momentum' },
-    { name: 'Options', href: '#' },
-    { name: 'Option Chain', href: '/option-chain' },
+    { name: 'Momentum', href: '/momentum' },
+    { name: 'Option Data', href: '/option-chain' },
     { name: 'Breakout Stocks', href: '/breakout-stocks' }
   ]
 
@@ -360,11 +339,6 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
           <div className="flex items-center gap-2">
             <div className="w-1 h-6 bg-blue-500 rounded-full"></div>
             <span className="text-sm font-semibold text-gray-700">Market Indices</span>
-            <span className="text-[10px] sm:text-xs text-gray-500">
-              Data Source: <span className={`font-semibold ${dataSource === 'database' ? 'text-blue-600' : 'text-green-600'}`}>
-                {dataSource === 'database' ? '📊 DB' : '🟢 Live'}
-              </span>
-            </span>
           </div>
           <svg
             className={`w-5 h-5 text-gray-600 transition-transform duration-300 ${isMarketIndicesOpen ? 'rotate-180' : ''}`}
@@ -400,19 +374,19 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
         </div>
       </div>
 
-      {/* Top Gainers Accordion - First */}
+      {/* Top Movers Accordion - Combined Gainers and Losers */}
       {!hideTopMovers && (
         <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200/50">
           <button
-            onClick={() => handleGainersToggle(!isGainersOpen)}
+            onClick={() => handleTopMoversToggle(!isTopMoversOpen)}
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
           >
             <div className="flex items-center gap-2">
-              <div className="w-1 h-6 bg-green-500 rounded-full"></div>
-              <span className="text-sm font-semibold text-gray-700">Top Gainers</span>
+              <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-red-500 rounded-full"></div>
+              <span className="text-sm font-semibold text-gray-700">Top Movers</span>
             </div>
             <svg
-              className={`w-5 h-5 text-gray-600 transition-transform duration-300 ${isGainersOpen ? 'rotate-180' : ''}`}
+              className={`w-5 h-5 text-gray-600 transition-transform duration-300 ${isTopMoversOpen ? 'rotate-180' : ''}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -420,37 +394,26 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isGainersOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+          <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isTopMoversOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
             <div className="px-2 sm:px-4 pb-4">
-              <TopGainersList />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Top Losers Accordion - Below Gainers */}
-      {!hideTopMovers && (
-        <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200/50">
-          <button
-            onClick={() => handleLosersToggle(!isLosersOpen)}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <div className="w-1 h-6 bg-red-500 rounded-full"></div>
-              <span className="text-sm font-semibold text-gray-700">Top Losers</span>
-            </div>
-            <svg
-              className={`w-5 h-5 text-gray-600 transition-transform duration-300 ${isLosersOpen ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isLosersOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-            <div className="px-2 sm:px-4 pb-4">
-              <TopLosersList />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Top Gainers */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-6 h-1 bg-green-500 rounded-full"></div>
+                    <h3 className="text-sm font-bold text-gray-700">Top Gainers</h3>
+                  </div>
+                  <TopGainersList />
+                </div>
+                {/* Top Losers */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-6 h-1 bg-red-500 rounded-full"></div>
+                    <h3 className="text-sm font-bold text-gray-700">Top Losers</h3>
+                  </div>
+                  <TopLosersList />
+                </div>
+              </div>
             </div>
           </div>
         </div>

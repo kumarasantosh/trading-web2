@@ -85,12 +85,12 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
 
         // Fetch first batch immediately
         const firstBatchData = await fetchStocksBatch(firstBatch, isReplayMode, replayTime)
-        
+
         // Filter out invalid data (symbols with 0 or null values)
-        const validFirstBatch = firstBatchData.filter(stock => 
+        const validFirstBatch = firstBatchData.filter(stock =>
           stock.ltp > 0 && stock.symbol && !isNaN(stock.changePercent)
         )
-        
+
         if (isMounted && validFirstBatch.length > 0) {
           setStocks(validFirstBatch)
           setIsLoading(false) // Hide loading after first batch
@@ -102,15 +102,15 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
           const processRemainingBatches = async () => {
             for (let i = 0; i < remainingBatches.length; i += BATCH_SIZE) {
               if (!isMounted) break
-              
+
               const batch = remainingBatches.slice(i, i + BATCH_SIZE)
               const batchData = await fetchStocksBatch(batch, isReplayMode, replayTime)
-              
+
               // Filter out invalid data
-              const validBatch = batchData.filter(stock => 
+              const validBatch = batchData.filter(stock =>
                 stock.ltp > 0 && stock.symbol && !isNaN(stock.changePercent)
               )
-              
+
               if (isMounted && validBatch.length > 0) {
                 setStocks(prev => {
                   // Merge new data with existing, avoiding duplicates
@@ -119,14 +119,14 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
                   return [...prev, ...newStocks]
                 })
               }
-              
+
               // Small delay between batches to avoid rate limiting
               if (i + BATCH_SIZE < remainingBatches.length) {
                 await new Promise(resolve => setTimeout(resolve, 200))
               }
             }
           }
-          
+
           // Start processing remaining batches asynchronously
           processRemainingBatches()
         } else if (validFirstBatch.length === 0) {
@@ -177,6 +177,10 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
 
   const toggleSortOrder = () => {
     setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')
+  }
+
+  const handleStockClick = (symbol: string) => {
+    window.open(`https://in.tradingview.com/chart/?symbol=NSE:${symbol}`, '_blank')
   }
 
   return (
@@ -244,7 +248,11 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
                   const isPositive = stock.changePercent >= 0
 
                   return (
-                    <tr key={index} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-white transition-all duration-200 group">
+                    <tr
+                      key={index}
+                      onClick={() => handleStockClick(stock.symbol)}
+                      className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-white transition-all duration-200 group cursor-pointer"
+                    >
                       <td className="px-3 sm:px-4 py-2">
                         <span className="font-bold text-gray-900 group-hover:text-black transition-colors">{stock.symbol}</span>
                       </td>
@@ -288,7 +296,11 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
                 const isPositive = stock.changePercent >= 0
 
                 return (
-                  <div key={index} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <div
+                    key={index}
+                    onClick={() => handleStockClick(stock.symbol)}
+                    className="bg-gray-50 rounded-lg p-3 border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+                  >
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-bold text-gray-900 text-sm">{stock.symbol}</span>
                       <div className={`inline-flex items-center gap-1.5 font-bold px-2 py-1 rounded-lg ${isPositive

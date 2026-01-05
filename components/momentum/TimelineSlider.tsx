@@ -7,30 +7,33 @@ interface TimelineSliderProps {
     onTimeChange: (time: Date) => void
     isReplayMode: boolean
     onReplayModeChange: (enabled: boolean) => void
+    intervalMinutes?: number // Optional: interval in minutes (default: 5 for sectors)
 }
 
 export default function TimelineSlider({
     selectedTime,
     onTimeChange,
     isReplayMode,
-    onReplayModeChange
+    onReplayModeChange,
+    intervalMinutes = 5 // Default to 5 minutes for sectors
 }: TimelineSliderProps) {
     const [sliderValue, setSliderValue] = useState(0)
     const [isUserDragging, setIsUserDragging] = useState(false)
 
-    // Market hours: 9:15 AM to 3:30 PM (375 minutes = 125 intervals of 3 minutes)
-    const intervals = 125 // Every 3 minutes
+    // Market hours: 9:15 AM to 3:30 PM (375 minutes)
+    // Calculate intervals based on intervalMinutes
+    const intervals = Math.floor(375 / intervalMinutes) // e.g., 375/5 = 75 for 5min, 375/3 = 125 for 3min
 
     // Get current time interval
     const getCurrentInterval = () => {
         const now = new Date()
         const minutes = (now.getHours() - 9) * 60 + now.getMinutes() - 15
-        return Math.max(0, Math.min(Math.floor(minutes / 3), intervals))
+        return Math.max(0, Math.min(Math.floor(minutes / intervalMinutes), intervals))
     }
 
     // Convert slider value to time
     const sliderToTime = (value: number) => {
-        const minutes = value * 3 + 9 * 60 + 15
+        const minutes = value * intervalMinutes + 9 * 60 + 15
         const hours = Math.floor(minutes / 60)
         const mins = minutes % 60
 
@@ -44,7 +47,7 @@ export default function TimelineSlider({
         const hours = time.getHours()
         const minutes = time.getMinutes()
         const totalMinutes = (hours - 9) * 60 + minutes - 15
-        return Math.max(0, Math.min(Math.floor(totalMinutes / 3), intervals))
+        return Math.max(0, Math.min(Math.floor(totalMinutes / intervalMinutes), intervals))
     }
 
     // Initialize to current time
@@ -52,7 +55,8 @@ export default function TimelineSlider({
         const currentInterval = getCurrentInterval()
         setSliderValue(currentInterval)
         onTimeChange(sliderToTime(currentInterval))
-    }, [])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [intervalMinutes]) // Re-initialize if interval changes
 
     // Sync slider value with selectedTime prop (only when not user-initiated)
     useEffect(() => {
@@ -60,7 +64,8 @@ export default function TimelineSlider({
             const sliderVal = timeToSlider(selectedTime)
             setSliderValue(sliderVal)
         }
-    }, [selectedTime, isUserDragging])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedTime, isUserDragging, intervalMinutes])
 
     // Auto-update slider position every minute when in live mode
     useEffect(() => {
@@ -74,7 +79,8 @@ export default function TimelineSlider({
         }, 60000) // Update every minute
 
         return () => clearInterval(updateInterval)
-    }, [isReplayMode, onTimeChange])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isReplayMode, intervalMinutes])
 
     // Handle slider change
     const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {

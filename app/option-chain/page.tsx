@@ -1441,6 +1441,7 @@ export default function OptionChainPage() {
                         onTimeChange={handleTimeChange}
                         isReplayMode={isReplayMode}
                         onReplayModeChange={handleReplayModeChange}
+                        intervalMinutes={3}
                     />
                 </div>
                 </div>

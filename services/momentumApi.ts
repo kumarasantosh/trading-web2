@@ -281,7 +281,7 @@ export async function fetchMarketData(): Promise<any[]> {
         })
       }
       
-      // Target indices to find
+      // Target indices to find (NSE indices)
       const targetIndices = [
         { searchName: 'NIFTY 50', displayName: 'NIFTY 50' },
         { searchName: 'NIFTY BANK', displayName: 'NIFTY BANK' },
@@ -289,6 +289,10 @@ export async function fetchMarketData(): Promise<any[]> {
         { searchName: 'NIFTY MIDCAP 100', displayName: 'NIFTY MIDCAP' },
         { searchName: 'NIFTY SMLCAP 100', displayName: 'NIFTY SMALLCAP' },
         { searchName: 'INDIA VIX', displayName: 'INDIA_VIX' },
+        // Check if NSE API includes SENSEX (unlikely but let's check)
+        { searchName: 'SENSEX', displayName: 'SENSEX' },
+        { searchName: 'BSE SENSEX', displayName: 'SENSEX' },
+        { searchName: 'S&P BSE SENSEX', displayName: 'SENSEX' },
       ]
       
       // Process all target indices
@@ -296,15 +300,21 @@ export async function fetchMarketData(): Promise<any[]> {
         const indexData = allIndices.find((item: any) => 
           item.index === searchName || 
           item.indexSymbol === searchName ||
-          item.index?.includes(searchName) ||
-          item.indexSymbol?.includes(searchName)
+          item.index?.toUpperCase().includes(searchName.toUpperCase()) ||
+          item.indexSymbol?.toUpperCase().includes(searchName.toUpperCase())
         )
         
         if (indexData) {
+          // Skip duplicate SENSEX entries (only add once)
+          if (displayName === 'SENSEX' && nseIndices.find(idx => idx.name === 'SENSEX')) {
+            return
+          }
+          
           nseIndices.push({
             name: displayName,
-            value: indexData.last || indexData.lastPrice || 0,
-            change: indexData.variation || (indexData.last - indexData.previousClose) || 0,
+            value: indexData.last || indexData.lastPrice || indexData.currentValue || 0,
+            change: indexData.variation || indexData.change || (indexData.last && indexData.previousClose ? 
+                   (indexData.last - indexData.previousClose) : 0) || 0,
             changePercent: indexData.percentChange !== undefined ? indexData.percentChange : 
                           (indexData.previousClose && indexData.last ? 
                            ((indexData.last - indexData.previousClose) / indexData.previousClose) * 100 : 0),
@@ -313,61 +323,77 @@ export async function fetchMarketData(): Promise<any[]> {
       })
     }
 
-    // Fetch BSE SENSEX from Groww API (NSE doesn't have BSE data)
-    try {
-      const growwUrl = new URL('/api/groww/ltp', window.location.origin)
-      growwUrl.searchParams.append('segment', 'CASH')
-      growwUrl.searchParams.append('exchange_symbols', bseIndices.join(','))
-      growwUrl.searchParams.append('_t', Date.now().toString())
+    // Check if SENSEX was already found in NSE API response
+    const sensexAlreadyFound = nseIndices.find(idx => idx.name === 'SENSEX')
+    
+    // If SENSEX not found in NSE API, try BSE API
+    if (!sensexAlreadyFound) {
+      try {
+        const bseUrl = new URL('/api/bse/indices', window.location.origin)
+        bseUrl.searchParams.append('_t', Date.now().toString())
 
-      const growwLtpResponse = await fetch(growwUrl.toString(), {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
-        cache: 'no-store',
-      })
-
-      if (growwLtpResponse.ok) {
-        const ltpData: GrowwLTP = await growwLtpResponse.json()
-        
-        // Fetch OHLC for change calculation
-        const ohlcUrl = new URL('/api/groww/ohlc', window.location.origin)
-        ohlcUrl.searchParams.append('segment', 'CASH')
-        ohlcUrl.searchParams.append('exchange_symbols', bseIndices.join(','))
-        ohlcUrl.searchParams.append('_t', Date.now().toString())
-
-        const ohlcResponse = await fetch(ohlcUrl.toString(), {
+        const bseResponse = await fetch(bseUrl.toString(), {
           method: 'GET',
           headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
           cache: 'no-store',
         })
 
-        const ohlcData: GrowwOHLC = ohlcResponse.ok ? await ohlcResponse.json() : {}
-
-        bseIndices.forEach(symbol => {
-          const ltpResponse = ltpData[symbol]
-          const ohlc = ohlcData[symbol]
+        if (bseResponse.ok) {
+          const bseData = await bseResponse.json()
+          console.log('[fetchMarketData] BSE API response:', bseData)
           
-          let ltp: number = 0
-          if (typeof ltpResponse === 'number' && ltpResponse > 0) {
-            ltp = ltpResponse
-          } else if (typeof ltpResponse === 'object' && ltpResponse !== null && ltpResponse.ltp) {
-            ltp = ltpResponse.ltp
+          // Handle different BSE API response structures
+          let allBseIndices: any[] = []
+          
+          if (Array.isArray(bseData.data)) {
+            allBseIndices = bseData.data
+          } else if (bseData.data && typeof bseData.data === 'object') {
+            Object.values(bseData.data).forEach((value: any) => {
+              if (Array.isArray(value)) {
+                allBseIndices = [...allBseIndices, ...value]
+              }
+            })
           }
           
-          const previousClose = ohlc?.close || ltp
-          const change = previousClose > 0 && ltp > 0 ? ltp - previousClose : 0
-          const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0
-
-          nseIndices.push({
-            name: 'SENSEX',
-            value: ltp,
-            change: change,
-            changePercent: changePercent,
-          })
-        })
+          // Look for SENSEX in the BSE data
+          // SENSEX might be named as 'SENSEX', 'BSE SENSEX', 'S&P BSE SENSEX', etc.
+          const sensexData = allBseIndices.find((item: any) => 
+            item.IndexName?.toUpperCase().includes('SENSEX') ||
+            item.indexName?.toUpperCase().includes('SENSEX') ||
+            item.name?.toUpperCase().includes('SENSEX') ||
+            item.index?.toUpperCase().includes('SENSEX')
+          )
+          
+          if (sensexData) {
+            // Extract data based on BSE API structure
+            const value = sensexData.currentValue || sensexData.CurrentValue || sensexData.last || sensexData.Last || sensexData.value || sensexData.Value || 0
+            const previousClose = sensexData.previousClose || sensexData.PreviousClose || sensexData.prevClose || sensexData.PrevClose || 0
+            const change = sensexData.change || sensexData.Change || sensexData.variation || sensexData.Variation || (value && previousClose ? value - previousClose : 0)
+            const changePercent = sensexData.changePercent || sensexData.ChangePercent || sensexData.percentChange || sensexData.PercentChange || 
+                                 (previousClose && previousClose > 0 ? (change / previousClose) * 100 : 0)
+            
+            console.log(`[fetchMarketData] SENSEX from BSE API: value=${value}, previousClose=${previousClose}, change=${change}, changePercent=${changePercent}`)
+            
+            if (value > 0) {
+              nseIndices.push({
+                name: 'SENSEX',
+                value: Number(value),
+                change: Number(change),
+                changePercent: Number(changePercent),
+              })
+              console.log('[fetchMarketData] ✅ SENSEX added to indices from BSE API')
+            }
+          } else {
+            console.warn('[fetchMarketData] SENSEX not found in BSE API response')
+          }
+        } else {
+          console.warn('[fetchMarketData] BSE API returned non-OK status:', bseResponse.status)
+        }
+      } catch (bseError) {
+        console.error('Error fetching BSE SENSEX from BSE API:', bseError)
       }
-    } catch (growwError) {
-      console.error('Error fetching BSE SENSEX from Groww:', growwError)
+    } else {
+      console.log('[fetchMarketData] ✅ SENSEX already found in NSE API response')
     }
 
     // If no indices found from NSE API, try Groww API as fallback
