@@ -37,10 +37,13 @@ export default function BreakoutStocksPage() {
   }
 
   useEffect(() => {
-    const fetchBreakoutStocks = async () => {
-      setIsLoading(true)
-      setGainers([])
-      setLosers([])
+    const fetchBreakoutStocks = async (isBackground = false) => {
+      if (!isBackground) setIsLoading(true)
+      // Don't clear lists immediately if background refresh to avoid flash
+      if (!isBackground) {
+        setGainers([])
+        setLosers([])
+      }
 
       const breakoutStocks: BreakoutStock[] = []
       const breakdownStocks: BreakoutStock[] = []
@@ -193,7 +196,7 @@ export default function BreakoutStocksPage() {
     }
 
     fetchBreakoutStocks()
-    const interval = setInterval(fetchBreakoutStocks, 300000)
+    const interval = setInterval(() => fetchBreakoutStocks(true), 300000)
     return () => clearInterval(interval)
   }, [])
 
@@ -292,9 +295,7 @@ export default function BreakoutStocksPage() {
                                   )}
                                   <div>
                                     <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
-                                    <div className="text-xs text-gray-500 truncate max-w-[120px]">
-                                      {stock.name}
-                                    </div>
+
                                   </div>
                                 </div>
                               </td>
@@ -310,11 +311,11 @@ export default function BreakoutStocksPage() {
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap">
                                 {stock.prevDayHigh > 0 && (
-                                  <div className="text-sm">
-                                    <div className="font-semibold text-green-600">
+                                  <div className="text-sm flex flex-row items-center gap-1 font-semibold text-green-600">
+                                    <div>
                                       +₹{(stock.ltp - stock.prevDayHigh).toFixed(2)}
                                     </div>
-                                    <div className="text-xs text-green-600">
+                                    <div className="text-xs">
                                       (+{(((stock.ltp - stock.prevDayHigh) / stock.prevDayHigh) * 100).toFixed(2)}%)
                                     </div>
                                   </div>
@@ -397,9 +398,7 @@ export default function BreakoutStocksPage() {
                                   )}
                                   <div>
                                     <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
-                                    <div className="text-xs text-gray-500 truncate max-w-[120px]">
-                                      {stock.name}
-                                    </div>
+
                                   </div>
                                 </div>
                               </td>
@@ -415,11 +414,11 @@ export default function BreakoutStocksPage() {
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap">
                                 {stock.prevDayLow > 0 && (
-                                  <div className="text-sm">
-                                    <div className="font-semibold text-red-600">
+                                  <div className="text-sm flex flex-row items-center gap-1 font-semibold text-red-600">
+                                    <div>
                                       -₹{(stock.prevDayLow - stock.ltp).toFixed(2)}
                                     </div>
-                                    <div className="text-xs text-red-600">
+                                    <div className="text-xs">
                                       (-{(((stock.prevDayLow - stock.ltp) / stock.prevDayLow) * 100).toFixed(2)}%)
                                     </div>
                                   </div>

@@ -20,14 +20,7 @@ interface Snapshot {
     option_chain_data: any
 }
 
-interface TrendLineData {
-    time: string
-    timestamp: number
-    trendLine: number
-    alphaArc: number
-    alphaArcBullish?: number
-    alphaArcBearish?: number
-}
+
 
 interface PcrData {
     time: string
@@ -53,12 +46,9 @@ export default function OptionChainPage() {
     const [dataCaptureTime, setDataCaptureTime] = useState<Date | null>(null)
 
     // Trendline state
-    const [trendLineData, setTrendLineData] = useState<TrendLineData[]>([])
-    const trendLineHistoryRef = useRef<TrendLineData[]>([])
+
     const lastResetDateRef = useRef<string | null>(null)
-    const previousAlphaArcRef = useRef<number>(0)
-    const currentTrendLineRef = useRef<number>(0)
-    const currentAlphaArcRef = useRef<number>(0)
+
 
     // PCR chart state
     const [pcrData, setPcrData] = useState<PcrData[]>([])
@@ -132,92 +122,12 @@ export default function OptionChainPage() {
     // Calculate net seller volume delta
     // delta_t = (Total Put Sellers Volume_t) - (Total Call Sellers Volume_t)
     // Positive OI change = sellers entering (new short positions)
-    const calculateNetSellerDelta = useCallback((optionData: OptionChainData[]): number => {
-        let totalPutSellersVolume = 0
-        let totalCallSellersVolume = 0
 
-        optionData.forEach((item) => {
-            // Positive OI change means sellers entering (new short positions)
-            // Put sellers (bullish): betting price won't fall
-            if (item.putOIChange > 0) {
-                totalPutSellersVolume += item.putOIChange
-            }
-            // Call sellers (bearish): betting price won't rise
-            if (item.callOIChange > 0) {
-                totalCallSellersVolume += item.callOIChange
-            }
-        })
-
-        // Net seller volume delta = Put sellers - Call sellers
-        // Positive = more put sellers (bullish pressure)
-        // Negative = more call sellers (bearish pressure)
-        return totalPutSellersVolume - totalCallSellersVolume
-    }, [])
 
     // Update trendline and alpha arc
     // trendline_t = trendline_{t-1} + delta_t
     // alpha_arc_t = α × trendline_t + (1 - α) × alpha_arc_{t-1}
-    const updateTrendLine = useCallback((delta: number, timestamp: Date) => {
-        // Check if we need to reset for new trading day
-        if (shouldResetTrendLine(timestamp)) {
-            console.log('[TrendLine] Resetting for new trading day')
-            currentTrendLineRef.current = 0
-            currentAlphaArcRef.current = 0
-            previousAlphaArcRef.current = 0
-            trendLineHistoryRef.current = []
-            // Also reset PCR chart
-            pcrHistoryRef.current = []
-            setPcrData([])
-        }
 
-        // Calculate new cumulative trendline using refs to avoid dependency issues
-        const newTrendLine = currentTrendLineRef.current + delta
-        currentTrendLineRef.current = newTrendLine
-
-        // Calculate alpha arc using EMA (Exponential Moving Average)
-        // α = 0.3 (smoothing factor - adjustable between 0.2 to 0.4)
-        const alpha = 0.3
-        const newAlphaArc = alpha * newTrendLine + (1 - alpha) * currentAlphaArcRef.current
-        currentAlphaArcRef.current = newAlphaArc
-
-        // Determine if alpha arc is bullish or bearish
-        const prevAlphaArc = previousAlphaArcRef.current
-        const isRising = newAlphaArc > prevAlphaArc
-        const isAboveZero = newAlphaArc >= 0
-
-        // Bullish: rising OR (above zero and not falling significantly)
-        // Bearish: falling OR (below zero and not rising significantly)
-        const isBullish = isRising || (isAboveZero && !(newAlphaArc < prevAlphaArc - 1000000))
-
-        // Format time string for display (IST)
-        const timeStr = timestamp.toLocaleTimeString('en-IN', {
-            timeZone: 'Asia/Kolkata',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-        })
-
-        const newDataPoint: TrendLineData = {
-            time: timeStr,
-            timestamp: timestamp.getTime(),
-            trendLine: newTrendLine,
-            alphaArc: newAlphaArc,
-            alphaArcBullish: isBullish ? newAlphaArc : undefined,
-            alphaArcBearish: !isBullish ? newAlphaArc : undefined
-        }
-
-        // Add to history
-        trendLineHistoryRef.current = [...trendLineHistoryRef.current, newDataPoint]
-
-        // Keep only last 1000 points to prevent memory issues
-        if (trendLineHistoryRef.current.length > 1000) {
-            trendLineHistoryRef.current = trendLineHistoryRef.current.slice(-1000)
-        }
-
-        setTrendLineData([...trendLineHistoryRef.current])
-        previousAlphaArcRef.current = newAlphaArc
-    }, [shouldResetTrendLine])
 
     // Fetch expiry dates from dropdown API
     const fetchExpiryDates = useCallback(async () => {
@@ -362,15 +272,7 @@ export default function OptionChainPage() {
             console.log('[OptionChain] Updating PCR chart with value:', calculatedPCR)
             updatePcrChart(calculatedPCR, dataTime)
 
-            // Calculate and update trendline if we have data
-            if (filteredData.length > 0) {
-                const delta = calculateNetSellerDelta(filteredData)
-                console.log('[OptionChain] Net seller delta:', delta)
-                console.log('[OptionChain] Updating trendline')
-                updateTrendLine(delta, dataTime)
-            } else {
-                console.warn('[OptionChain] ⚠️ Skipping trendline update - no data')
-            }
+
 
             console.log('[OptionChain] ✅ Processing complete')
         } catch (error) {
@@ -378,7 +280,7 @@ export default function OptionChainPage() {
             setData([])
             setHasAttemptedLoad(true)
         }
-    }, [expiryDate, calculateNetSellerDelta, updateTrendLine, updatePcrChart])
+    }, [expiryDate, updatePcrChart])
 
     // Fetch option chain data (ONLY when NOT in replay mode)
     const fetchOptionChainData = useCallback(async () => {
@@ -755,8 +657,8 @@ export default function OptionChainPage() {
                                                 key={exp}
                                                 onClick={() => setExpiryDate(exp)}
                                                 className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 ${expiryDate === exp
-                                                        ? 'bg-black text-white shadow-md hover:bg-gray-900'
-                                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
+                                                    ? 'bg-black text-white shadow-md hover:bg-gray-900'
+                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
                                                     }`}
                                             >
                                                 {exp}
@@ -781,8 +683,8 @@ export default function OptionChainPage() {
                                     <button
                                         onClick={() => setChartType('1x1')}
                                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${chartType === '1x1'
-                                                ? 'bg-black text-white shadow-md hover:bg-gray-900'
-                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
+                                            ? 'bg-black text-white shadow-md hover:bg-gray-900'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
                                             }`}
                                     >
                                         1x1
@@ -790,8 +692,8 @@ export default function OptionChainPage() {
                                     <button
                                         onClick={() => setChartType('2x2')}
                                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${chartType === '2x2'
-                                                ? 'bg-black text-white shadow-md hover:bg-gray-900'
-                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
+                                            ? 'bg-black text-white shadow-md hover:bg-gray-900'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
                                             }`}
                                     >
                                         2x2
@@ -799,8 +701,8 @@ export default function OptionChainPage() {
                                     <button
                                         onClick={() => setChartType('1x4')}
                                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${chartType === '1x4'
-                                                ? 'bg-black text-white shadow-md hover:bg-gray-900'
-                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
+                                            ? 'bg-black text-white shadow-md hover:bg-gray-900'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
                                             }`}
                                     >
                                         1x4
@@ -808,8 +710,8 @@ export default function OptionChainPage() {
                                     <button
                                         onClick={() => setChartType('4x4')}
                                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${chartType === '4x4'
-                                                ? 'bg-black text-white shadow-md hover:bg-gray-900'
-                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
+                                            ? 'bg-black text-white shadow-md hover:bg-gray-900'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
                                             }`}
                                     >
                                         4x4
@@ -858,12 +760,12 @@ export default function OptionChainPage() {
                             console.log('[OptionChain] 🎨 Rendering: Charts with', data.length, 'data items')
                             return (
                                 <div className={`grid gap-6 ${chartType === '1x4'
-                                        ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4'
-                                        : chartType === '4x4'
-                                            ? 'grid-cols-1'
-                                            : chartType === '2x2'
-                                                ? 'grid-cols-1 lg:grid-cols-2'
-                                                : 'grid-cols-1'
+                                    ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4'
+                                    : chartType === '4x4'
+                                        ? 'grid-cols-1'
+                                        : chartType === '2x2'
+                                            ? 'grid-cols-1 lg:grid-cols-2'
+                                            : 'grid-cols-1'
                                     }`}>
                                     {/* Open Interest Chart */}
                                     <div className="bg-white/95 backdrop-blur-sm rounded-2xl border border-gray-200/50 shadow-xl p-6">
@@ -1001,117 +903,7 @@ export default function OptionChainPage() {
                                         </ResponsiveContainer>
                                     </div>
 
-                                    {/* Index Trend Line Chart - Show in 1x4 or 4x4 layout */}
-                                    {(chartType === '1x4' || chartType === '4x4') && trendLineData.length > 0 && (
-                                        <div className="bg-gray-800 rounded-2xl border border-gray-700 shadow-xl p-6">
-                                            <div className="mb-4 flex items-center justify-between">
-                                                <h2 className="text-xl font-extrabold text-white">Index Trend Line</h2>
-                                                {dataCaptureTime && (
-                                                    <div className="text-xs text-gray-400">
-                                                        {dataCaptureTime.toLocaleString('en-IN', {
-                                                            timeZone: 'Asia/Kolkata',
-                                                            day: '2-digit',
-                                                            month: 'short',
-                                                            year: 'numeric',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit',
-                                                            second: '2-digit',
-                                                            hour12: true
-                                                        })}
-                                                        {isReplayMode && (
-                                                            <span className="ml-2 text-blue-400 font-medium">(Historical)</span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <ResponsiveContainer width="100%" height={500}>
-                                                <LineChart
-                                                    data={trendLineData}
-                                                    margin={{ top: 20, right: 30, left: 60, bottom: 80 }}
-                                                >
-                                                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff" opacity={0.3} />
-                                                    <XAxis
-                                                        dataKey="time"
-                                                        tick={{ fontSize: 11, fill: '#ffffff' }}
-                                                        angle={-45}
-                                                        textAnchor="end"
-                                                        height={80}
-                                                        stroke="#ffffff"
-                                                    />
-                                                    <YAxis
-                                                        label={{ value: 'Volume Delta (M)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 12, fill: '#ffffff' } }}
-                                                        tick={{ fontSize: 11, fill: '#ffffff' }}
-                                                        stroke="#ffffff"
-                                                        tickFormatter={(value) => {
-                                                            const millions = value / 1000000
-                                                            return `${millions.toFixed(0)}M`
-                                                        }}
-                                                        domain={['auto', 'auto']}
-                                                    />
-                                                    <Tooltip
-                                                        contentStyle={{
-                                                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                                                            border: '1px solid #ffffff',
-                                                            borderRadius: '4px',
-                                                            color: '#ffffff'
-                                                        }}
-                                                        formatter={(value: number, name: string) => {
-                                                            if (value === undefined || value === null) return null
-                                                            const millions = value / 1000000
-                                                            return [`${millions.toFixed(2)}M`, name]
-                                                        }}
-                                                        labelFormatter={(label) => `Time: ${label}`}
-                                                        labelStyle={{ color: '#ffffff' }}
-                                                    />
-                                                    <Legend
-                                                        wrapperStyle={{ color: '#ffffff', paddingTop: '10px' }}
-                                                        iconType="line"
-                                                    />
-                                                    <ReferenceLine y={0} stroke="#ffffff" strokeDasharray="3 3" opacity={0.5} />
-                                                    <Line
-                                                        type="monotone"
-                                                        dataKey="trendLine"
-                                                        stroke="#ffffff"
-                                                        strokeWidth={2}
-                                                        dot={false}
-                                                        name="Trend Line"
-                                                    />
-                                                    <Line
-                                                        type="monotone"
-                                                        dataKey="alphaArcBullish"
-                                                        stroke="#3b82f6"
-                                                        strokeWidth={3}
-                                                        dot={false}
-                                                        name="Alpha Arc"
-                                                        connectNulls={true}
-                                                    />
-                                                    <Line
-                                                        type="monotone"
-                                                        dataKey="alphaArcBearish"
-                                                        stroke="#ec4899"
-                                                        strokeWidth={3}
-                                                        dot={false}
-                                                        name="Alpha Arc"
-                                                        connectNulls={true}
-                                                    />
-                                                </LineChart>
-                                            </ResponsiveContainer>
-                                            <div className="mt-4 text-xs text-gray-400 space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-4 h-0.5 bg-white"></div>
-                                                    <span>Trend Line: Net seller volume delta</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-4 h-1 bg-blue-500"></div>
-                                                    <span>Alpha Arc (Blue): Bullish</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-4 h-1 bg-pink-500"></div>
-                                                    <span>Alpha Arc (Pink): Bearish</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
+
 
                                     {/* PCR Chart - Show in 1x4 or 4x4 layout */}
                                     {(chartType === '1x4' || chartType === '4x4') && pcrData.length > 0 && (
@@ -1216,121 +1008,9 @@ export default function OptionChainPage() {
                         return null
                     })()}
 
-                    {/* Trend Line and PCR Charts - Layout depends on chart type */}
-                    {!loading && data.length > 0 && (trendLineData.length > 0 || pcrData.length > 0) && chartType !== '1x4' && chartType !== '4x4' && (
+                    {/* PCR Chart - Layout depends on chart type */}
+                    {!loading && data.length > 0 && pcrData.length > 0 && chartType !== '1x4' && chartType !== '4x4' && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-                            {/* Index Trend Line Chart */}
-                            {trendLineData.length > 0 && (
-                                <div className="bg-gray-800 rounded-2xl border border-gray-700 shadow-xl p-6">
-                                    <div className="mb-4 flex items-center justify-between">
-                                        <h2 className="text-xl font-extrabold text-white">Index Trend Line</h2>
-                                        {dataCaptureTime && (
-                                            <div className="text-xs text-gray-400">
-                                                {dataCaptureTime.toLocaleString('en-IN', {
-                                                    timeZone: 'Asia/Kolkata',
-                                                    day: '2-digit',
-                                                    month: 'short',
-                                                    year: 'numeric',
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                    second: '2-digit',
-                                                    hour12: true
-                                                })}
-                                                {isReplayMode && (
-                                                    <span className="ml-2 text-blue-400 font-medium">(Historical)</span>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <ResponsiveContainer width="100%" height={500}>
-                                        <LineChart
-                                            data={trendLineData}
-                                            margin={{ top: 20, right: 30, left: 60, bottom: 80 }}
-                                        >
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff" opacity={0.3} />
-                                            <XAxis
-                                                dataKey="time"
-                                                tick={{ fontSize: 11, fill: '#ffffff' }}
-                                                angle={-45}
-                                                textAnchor="end"
-                                                height={80}
-                                                stroke="#ffffff"
-                                            />
-                                            <YAxis
-                                                label={{ value: 'Volume Delta (M)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 12, fill: '#ffffff' } }}
-                                                tick={{ fontSize: 11, fill: '#ffffff' }}
-                                                stroke="#ffffff"
-                                                tickFormatter={(value) => {
-                                                    const millions = value / 1000000
-                                                    return `${millions.toFixed(0)}M`
-                                                }}
-                                                domain={['auto', 'auto']}
-                                            />
-                                            <Tooltip
-                                                contentStyle={{
-                                                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                                                    border: '1px solid #ffffff',
-                                                    borderRadius: '4px',
-                                                    color: '#ffffff'
-                                                }}
-                                                formatter={(value: number, name: string) => {
-                                                    if (value === undefined || value === null) return null
-                                                    const millions = value / 1000000
-                                                    return [`${millions.toFixed(2)}M`, name]
-                                                }}
-                                                labelFormatter={(label) => `Time: ${label}`}
-                                                labelStyle={{ color: '#ffffff' }}
-                                            />
-                                            <Legend
-                                                wrapperStyle={{ color: '#ffffff', paddingTop: '10px' }}
-                                                iconType="line"
-                                            />
-                                            <ReferenceLine y={0} stroke="#ffffff" strokeDasharray="3 3" opacity={0.5} />
-                                            <Line
-                                                type="monotone"
-                                                dataKey="trendLine"
-                                                stroke="#ffffff"
-                                                strokeWidth={2}
-                                                dot={false}
-                                                name="Trend Line"
-                                            />
-                                            <Line
-                                                type="monotone"
-                                                dataKey="alphaArcBullish"
-                                                stroke="#3b82f6"
-                                                strokeWidth={3}
-                                                dot={false}
-                                                name="Alpha Arc"
-                                                connectNulls={true}
-                                            />
-                                            <Line
-                                                type="monotone"
-                                                dataKey="alphaArcBearish"
-                                                stroke="#ec4899"
-                                                strokeWidth={3}
-                                                dot={false}
-                                                name="Alpha Arc"
-                                                connectNulls={true}
-                                            />
-                                        </LineChart>
-                                    </ResponsiveContainer>
-                                    <div className="mt-4 text-xs text-gray-400 space-y-1">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-4 h-0.5 bg-white"></div>
-                                            <span>Trend Line: Net seller volume delta (Put sellers - Call sellers)</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-4 h-1 bg-blue-500"></div>
-                                            <span>Alpha Arc (Blue): Bullish trend (EMA smoothed, α=0.3)</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-4 h-1 bg-pink-500"></div>
-                                            <span>Alpha Arc (Pink): Bearish trend (EMA smoothed, α=0.3)</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
                             {/* PCR Chart */}
                             {pcrData.length > 0 && (
                                 <div className="bg-gray-800 rounded-2xl border border-gray-700 shadow-xl p-6">

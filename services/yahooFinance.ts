@@ -26,7 +26,7 @@ export const fetchYahooStockData = async (symbol: string, exchange: 'NSE' | 'BSE
         }
 
         // Use our local proxy to avoid CORS issues
-        const url = `/api/yahoo?symbol=${yahooSymbol}&interval=1d&range=10d`;
+        const url = `/api/yahoo?symbol=${encodeURIComponent(yahooSymbol)}&interval=1d&range=10d`;
 
         const response = await fetch(url);
 
