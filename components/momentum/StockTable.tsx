@@ -225,7 +225,7 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
   }
 
   const handleStockClick = (symbol: string) => {
-    window.open(`https://in.tradingview.com/chart/?symbol=NSE:${symbol}`, '_blank')
+    window.open(`https://in.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(symbol)}`, '_blank')
   }
 
   return (

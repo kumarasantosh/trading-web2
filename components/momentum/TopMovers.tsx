@@ -135,7 +135,7 @@ export default function TopMovers() {
         // I'll stick to the original implementation's navigation behavior to be safe, 
         // OR better: use router.push(`/chart/${symbol}`) as it provides a better UX if the page exists.
         // Let's stick to `window.open` as per the file I read in step 72.
-        window.open(`https://in.tradingview.com/chart/?symbol=NSE:${symbol}`, '_blank')
+        window.open(`https://in.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(symbol)}`, '_blank')
     }
 
     const renderStockRow = (stock: Stock, index: number, isGainer: boolean) => {
@@ -194,12 +194,12 @@ export default function TopMovers() {
                     <span className="text-xs font-bold text-gray-400 w-5 sm:w-6 flex-shrink-0">{index + 1}</span>
                     {/* Circle indicator based on yesterday's close vs open */}
                     {prevDayCloseVsOpen === 'green' && (
-                        <div className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500" 
-                             title={`Yesterday close (₹${prevDay.close.toFixed(2)}) > open (₹${prevDay.open.toFixed(2)})`}></div>
+                        <div className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
+                            title={`Yesterday close (₹${prevDay.close.toFixed(2)}) > open (₹${prevDay.open.toFixed(2)})`}></div>
                     )}
                     {prevDayCloseVsOpen === 'red' && (
-                        <div className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500" 
-                             title={`Yesterday close (₹${prevDay.close.toFixed(2)}) < open (₹${prevDay.open.toFixed(2)})`}></div>
+                        <div className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500"
+                            title={`Yesterday close (₹${prevDay.close.toFixed(2)}) < open (₹${prevDay.open.toFixed(2)})`}></div>
                     )}
                     <div className="min-w-0 flex-1">
                         <div className="font-semibold text-xs sm:text-sm text-gray-900 flex items-center gap-1">

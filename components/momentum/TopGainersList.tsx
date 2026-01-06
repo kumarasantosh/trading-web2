@@ -97,7 +97,7 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
         if (onStockClick) {
             onStockClick(symbol)
         } else {
-            window.open(`https://in.tradingview.com/chart/?symbol=NSE:${symbol}`, '_blank')
+            window.open(`https://in.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(symbol)}`, '_blank')
         }
     }
 

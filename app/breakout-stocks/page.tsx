@@ -36,100 +36,86 @@ export default function BreakoutStocksPage() {
   }
 
   useEffect(() => {
-    const mappedStocksSet = getAllMappedStocks()
-
-    const processStocks = async (stocks: any[]): Promise<BreakoutStock[]> => {
-      const stocksWithData: BreakoutStock[] = []
-
-      for (const stock of stocks) {
-        // Only process stocks that belong to mapped sectors
-        if (!mappedStocksSet.has(stock.symbol)) {
-          continue
-        }
-
-        try {
-          // Fetch previous day data from Yahoo Finance
-          const yahooData = await fetchYahooStockData(stock.symbol)
-
-          if (yahooData) {
-            const currentPrice = stock.ltp || stock.dayChange + (stock.prevDayClose || 0)
-            const isBreakingHigh = currentPrice > (yahooData.high || 0)
-
-            stocksWithData.push({
-              symbol: stock.symbol,
-              name: stock.name || stock.symbol,
-              ltp: stock.ltp || currentPrice,
-              dayChange: stock.dayChange,
-              dayChangePerc: stock.dayChangePerc,
-              volume: stock.volume || 0,
-              prevDayHigh: yahooData.high || 0,
-              prevDayLow: yahooData.low || 0,
-              prevDayClose: yahooData.close || 0,
-              prevDayOpen: yahooData.open || 0,
-              is52WeekHigh: isBreakingHigh,
-              isBreakout: isBreakingHigh && (stock.volume || 0) > 500000,
-            })
-          } else {
-            // Fallback if Yahoo data is not available
-            stocksWithData.push({
-              symbol: stock.symbol,
-              name: stock.name || stock.symbol,
-              ltp: stock.ltp,
-              dayChange: stock.dayChange,
-              dayChangePerc: stock.dayChangePerc,
-              volume: stock.volume || 0,
-              prevDayHigh: stock.prevDayHigh || 0,
-              prevDayLow: stock.prevDayLow || 0,
-              prevDayClose: stock.prevDayClose || 0,
-              prevDayOpen: stock.prevDayOpen || 0,
-              isBreakout: false,
-            })
-          }
-
-          // Small delay to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 100))
-        } catch (error) {
-          console.error(`Error fetching data for ${stock.symbol}:`, error)
-        }
-      }
-
-      return stocksWithData.sort((a, b) => {
-        return Math.abs(b.dayChangePerc) - Math.abs(a.dayChangePerc)
-      })
-    }
-
     const fetchBreakoutStocks = async () => {
       setIsLoading(true)
+      setGainers([])
+      setLosers([])
+
       try {
-        // Fetch both top gainers and top losers
-        const [gainersRes, losersRes] = await Promise.all([
-          fetch('/api/groww/top-movers?moverType=TOP_GAINERS'),
-          fetch('/api/groww/top-movers?moverType=TOP_LOSERS')
-        ])
+        // Get all unique stocks from sector mapping
+        const mappedStocksSet = getAllMappedStocks()
+        const allStockSymbols = Array.from(mappedStocksSet)
 
-        const gainersData = await gainersRes.json()
-        const losersData = await losersRes.json()
+        // Fetch live price data for all stocks
+        const { fetchStockData } = await import('@/services/momentumApi')
+        const liveStockData = await fetchStockData(allStockSymbols)
 
-        if (gainersData.success && gainersData.stocks) {
-          const processedGainers = await processStocks(gainersData.stocks.slice(0, 100))
-          // Filter to only show breakout stocks (LTP > prev day high)
-          const breakoutStocks = processedGainers.filter(stock => {
-            return stock.prevDayHigh > 0 && stock.ltp > stock.prevDayHigh
+        setIsLoading(false) // Hide initial loading spinner
+
+        // Filter to only stocks with valid LTP data (eliminates 401 errors)
+        const validStocks = liveStockData.filter(stock => stock.ltp && stock.ltp > 0)
+
+        // Process stocks in batches and update UI progressively
+        const BATCH_SIZE = 20 // Increased for faster processing
+        const breakoutStocks: BreakoutStock[] = []
+        const breakdownStocks: BreakoutStock[] = []
+
+        for (let i = 0; i < validStocks.length; i += BATCH_SIZE) {
+          const batch = validStocks.slice(i, i + BATCH_SIZE)
+
+          const batchPromises = batch.map(async (stock) => {
+            try {
+              // Fetch previous day data from Yahoo Finance
+              const yahooData = await fetchYahooStockData(stock.symbol)
+
+              if (yahooData && yahooData.high > 0 && yahooData.low > 0) {
+                const dayChange = stock.ltp - yahooData.close
+                const dayChangePerc = yahooData.close > 0 ? (dayChange / yahooData.close) * 100 : 0
+
+                return {
+                  symbol: stock.symbol,
+                  name: stock.symbol,
+                  ltp: stock.ltp,
+                  dayChange: dayChange,
+                  dayChangePerc: dayChangePerc,
+                  volume: 0,
+                  prevDayHigh: yahooData.high,
+                  prevDayLow: yahooData.low,
+                  prevDayClose: yahooData.close,
+                  prevDayOpen: yahooData.open,
+                  is52WeekHigh: stock.ltp > yahooData.high,
+                  isBreakout: stock.ltp > yahooData.high,
+                }
+              }
+            } catch (error) {
+              // Silently skip stocks with errors
+            }
+            return null
           })
-          setGainers(breakoutStocks)
-        }
 
-        if (losersData.success && losersData.stocks) {
-          const processedLosers = await processStocks(losersData.stocks.slice(0, 100))
-          // Filter to only show breakdown stocks (LTP < prev day low)
-          const breakdownStocks = processedLosers.filter(stock => {
-            return stock.prevDayLow > 0 && stock.ltp < stock.prevDayLow
+          const batchResults = await Promise.all(batchPromises)
+          const validResults = batchResults.filter((s) => s !== null) as BreakoutStock[]
+
+          // Separate into breakouts and breakdowns
+          validResults.forEach(stock => {
+            if (stock.ltp > stock.prevDayHigh) {
+              breakoutStocks.push(stock)
+            } else if (stock.ltp < stock.prevDayLow) {
+              breakdownStocks.push(stock)
+            }
           })
-          setLosers(breakdownStocks)
+
+          // Update UI progressively after each batch
+          setGainers([...breakoutStocks].sort((a, b) => b.dayChangePerc - a.dayChangePerc))
+          setLosers([...breakdownStocks].sort((a, b) => a.dayChangePerc - b.dayChangePerc))
+
+          // Reduced delay for faster processing
+          if (i + BATCH_SIZE < validStocks.length) {
+            await new Promise(resolve => setTimeout(resolve, 200))
+          }
         }
       } catch (error) {
         console.error('Failed to fetch breakout stocks:', error)
-      } finally {
         setIsLoading(false)
       }
     }
@@ -141,7 +127,7 @@ export default function BreakoutStocksPage() {
   }, [])
 
   const handleStockClick = (symbol: string) => {
-    window.open(`https://in.tradingview.com/chart/?symbol=NSE:${symbol}`, '_blank')
+    window.open(`https://in.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(symbol)}`, '_blank')
   }
 
   return (
@@ -239,11 +225,6 @@ export default function BreakoutStocksPage() {
                                       {stock.name}
                                     </div>
                                   </div>
-                                  {stock.is52WeekHigh && (
-                                    <span className="px-2 py-0.5 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded">
-                                      52W
-                                    </span>
-                                  )}
                                 </div>
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap">

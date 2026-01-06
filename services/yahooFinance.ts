@@ -12,10 +12,18 @@ export interface YahooStockData {
 export const fetchYahooStockData = async (symbol: string, exchange: 'NSE' | 'BSE' = 'NSE'): Promise<YahooStockData | null> => {
     try {
         // Format symbol for Yahoo Finance
-        const suffix = exchange === 'NSE' ? '.NS' : '.BO';
-        const yahooSymbol = symbol.toUpperCase().endsWith('.NS') || symbol.toUpperCase().endsWith('.BO')
-            ? symbol.toUpperCase()
-            : `${symbol.toUpperCase()}${suffix}`;
+        // Don't add suffix for index symbols (starting with ^)
+        let yahooSymbol: string;
+        if (symbol.startsWith('^')) {
+            // Index symbol - use as is
+            yahooSymbol = symbol.toUpperCase();
+        } else {
+            // Stock symbol - add exchange suffix
+            const suffix = exchange === 'NSE' ? '.NS' : '.BO';
+            yahooSymbol = symbol.toUpperCase().endsWith('.NS') || symbol.toUpperCase().endsWith('.BO')
+                ? symbol.toUpperCase()
+                : `${symbol.toUpperCase()}${suffix}`;
+        }
 
         // Use our local proxy to avoid CORS issues
         const url = `/api/yahoo?symbol=${yahooSymbol}&interval=1d&range=10d`;

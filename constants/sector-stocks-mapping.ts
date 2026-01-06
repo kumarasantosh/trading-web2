@@ -46,6 +46,8 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'SBIN'
     ],
     'Financial Services': [
+        '360ONE',
+        'ABCAPITAL',
         'ANGELONE',
         'AXISBANK',
         'BAJAJFINSV',
@@ -66,7 +68,9 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'KOTAKBANK',
         'LICHSGFIN',
         'LICI',
-        'MAXHEALTH',
+        'LTF',
+        'MANAPPURAM',
+        'MFSL',
         'MUTHOOTFIN',
         'NUVAMA',
         'PAYTM',
@@ -78,12 +82,7 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'SBICARD',
         'SBILIFE',
         'SBIN',
-        'SHRIRAMFIN',
-        '360ONE',
-        'ABCAPITAL',
-        'LTF',
-        'MANAPPURAM',
-        'MFSL'
+        'SHRIRAMFIN'
     ],
 
     // === CORE SECTORS ===
@@ -93,6 +92,7 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'BOSCHLTD',
         'EICHERMOT',
         'EXIDEIND',
+        'HAL',
         'HEROMOTOCO',
         'M&M',
         'MARUTI',
@@ -102,8 +102,7 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'TITAGARH',
         'TMPV',
         'TVSMOTOR',
-        'UNOMINDA',
-        'HAL'
+        'UNOMINDA'
     ],
     'Metal': [
         'ADANIENT',
@@ -122,11 +121,14 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'ADANIENSOL',
         'ADANIGREEN',
         'BDL',
+        'BHEL',
         'BLUESTARCO',
         'BPCL',
         'CGPOWER',
         'COALINDIA',
         'GMRAIRPORT',
+        'HINDPETRO',
+        'IEX',
         'IGL',
         'INOXWIND',
         'IOC',
@@ -144,8 +146,7 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'SOLARINDS',
         'SUZLON',
         'TATAPOWER',
-        'TORENTPOWER',
-        'IEX'
+        'TORENTPOWER'
     ],
     'Oil & Gas': [
         'BPCL',
@@ -191,46 +192,47 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'VOLTAS'
     ],
     'Consumption': [
+        'AMBUJACEM',
         'APOLLOHOSP',
         'ASIANPAINT',
         'BAJAJ-AUTO',
         'BHARTIARTL',
         'BRITANIA',
+        'DALBHARAT',
+        'DELHIVERY',
         'DIXON',
         'DLF',
         'DMART',
         'EICHERMOT',
         'ETERNAL',
         'GODREJCP',
+        'GRASIM',
         'HAVELLS',
         'HEROMOTOCO',
         'HINDUNILVR',
         'INDHOTEL',
         'INDIGO',
         'ITC',
+        'KEI',
         'M&M',
         'MARUTI',
         'MAXHEALTH',
         'NAUKRI',
         'NESTLEIND',
+        'PIDILITEIND',
         'TATACONSUM',
         'TATAPOWER',
         'TITAN',
         'TRENT',
         'TVSMOTOR',
+        'ULTRACEMCO',
         'UNITEDSPR',
-        'VBL',
-        'DELHIVERY',
-        'GRASIM',
-        'KEI',
-        'AMBUJACEM',
-        'DALBHARAT',
-        'PIDILITEIND',
-        'ULTRACEMCO'
+        'VBL'
     ],
     'Realty': [
         'DLF',
         'GODREJPROP',
+        'INDUSTOWER',
         'LODHA',
         'LT',
         'NBCC',
@@ -238,11 +240,11 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'OBEROIRLTY',
         'PHOENIXLTD',
         'PRESTIGE',
-        'INDUSTOWER',
         'SIEMENS'
     ],
     'Pharma': [
         'ALKEM',
+        'APOLLOHOSP',
         'AUROPHARMA',
         'BIOCON',
         'CIPLA',
@@ -253,21 +255,24 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'LAURUSLAB',
         'LUPIN',
         'MANKIND',
+        'MAXHEALTH',
         'PPLPHARMA',
         'SUNPHARMA',
+        'SYNGENE',
         'TORNTPHARM',
         'ZYDUSLIFE'
     ],
 
     // === TECHNOLOGY ===
     'IT': [
+        'ABB',
         'CAMS',
         'COFORGE',
         'CYIENT',
         'HCLTECH',
-        'ABB',
         'INFY',
         'KAYNES',
+        'KFINTECH',
         'KPITTECH',
         'LTIM',
         'MPHASIS',
@@ -277,8 +282,7 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'TATATECH',
         'TCS',
         'TECHM',
-        'WIPRO',
-        'KFINTECH'
+        'WIPRO'
     ],
 
     // === INDICES / BROAD MARKET ===
@@ -319,6 +323,7 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'ASTRAL',
         'AUBANK',
         'AUROPHARMA',
+        'BEL',
         'BHARATFORG',
         'COFORGE',
         'CONCOR',
@@ -328,6 +333,7 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'HDFCAMC',
         'HEROMOTOCO',
         'HINDPETRO',
+        'IDFCFIRSTB',
         'INDHOTEL',
         'JUBLFOOD',
         'LUPIN',
@@ -339,9 +345,7 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'POLYCAB',
         'RVNL',
         'UPL',
-        'VOLTAS',
-        'IDFCFIRSTB',
-        'BEL'
+        'VOLTAS'
     ]
 }
 
