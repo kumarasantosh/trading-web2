@@ -25,7 +25,6 @@ export default function BreakoutStocksPage() {
   const [gainers, setGainers] = useState<BreakoutStock[]>([])
   const [losers, setLosers] = useState<BreakoutStock[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isLoadingPhase2, setIsLoadingPhase2] = useState(false)
 
   // Get all unique stock symbols from mapped sectors
   const getAllMappedStocks = (): Set<string> => {
@@ -42,105 +41,33 @@ export default function BreakoutStocksPage() {
       setGainers([])
       setLosers([])
 
-      const breakoutStocks: BreakoutStock[] = []
-      const breakdownStocks: BreakoutStock[] = []
-
       try {
-        // PHASE 1: Quick load from top gainers/losers (fast)
-        const [gainersRes, losersRes] = await Promise.all([
-          fetch('/api/groww/top-movers?moverType=TOP_GAINERS'),
-          fetch('/api/groww/top-movers?moverType=TOP_LOSERS')
-        ])
-
-        const gainersData = await gainersRes.json()
-        const losersData = await losersRes.json()
-        const topMoversSymbols = new Set<string>()
-
-        // Process top gainers for breakouts
-        if (gainersData.success && gainersData.stocks) {
-          const topGainers = gainersData.stocks.slice(0, 50)
-          for (const stock of topGainers) {
-            topMoversSymbols.add(stock.symbol)
-            try {
-              const yahooData = await fetchYahooStockData(stock.symbol)
-              if (yahooData && yahooData.high > 0 && stock.ltp > yahooData.high) {
-                const dayChange = stock.ltp - yahooData.close
-                const dayChangePerc = yahooData.close > 0 ? (dayChange / yahooData.close) * 100 : 0
-
-                breakoutStocks.push({
-                  symbol: stock.symbol,
-                  name: stock.symbol,
-                  ltp: stock.ltp,
-                  dayChange,
-                  dayChangePerc,
-                  volume: 0,
-                  prevDayHigh: yahooData.high,
-                  prevDayLow: yahooData.low,
-                  prevDayClose: yahooData.close,
-                  prevDayOpen: yahooData.open,
-                  is52WeekHigh: stock.ltp > yahooData.high,
-                  isBreakout: true,
-                })
-              }
-            } catch (error) {
-              // Skip
-            }
-          }
-        }
-
-        // Process top losers for breakdowns
-        if (losersData.success && losersData.stocks) {
-          const topLosers = losersData.stocks.slice(0, 50)
-          for (const stock of topLosers) {
-            topMoversSymbols.add(stock.symbol)
-            try {
-              const yahooData = await fetchYahooStockData(stock.symbol)
-              if (yahooData && yahooData.low > 0 && stock.ltp < yahooData.low) {
-                const dayChange = stock.ltp - yahooData.close
-                const dayChangePerc = yahooData.close > 0 ? (dayChange / yahooData.close) * 100 : 0
-
-                breakdownStocks.push({
-                  symbol: stock.symbol,
-                  name: stock.symbol,
-                  ltp: stock.ltp,
-                  dayChange,
-                  dayChangePerc,
-                  volume: 0,
-                  prevDayHigh: yahooData.high,
-                  prevDayLow: yahooData.low,
-                  prevDayClose: yahooData.close,
-                  prevDayOpen: yahooData.open,
-                  is52WeekHigh: false,
-                  isBreakout: false,
-                })
-              }
-            } catch (error) {
-              // Skip
-            }
-          }
-        }
-
-        // Show initial results from top movers (descending order)
-        setGainers([...breakoutStocks].sort((a, b) => b.dayChangePerc - a.dayChangePerc))
-        setLosers([...breakdownStocks].sort((a, b) => Math.abs(b.dayChangePerc) - Math.abs(a.dayChangePerc)))
-        setIsLoading(false)
-        setIsLoadingPhase2(true)
-
-        // PHASE 2: Progressive load from all sector stocks
+        // Get all unique stocks from sector mapping
         const mappedStocksSet = getAllMappedStocks()
-        const allStockSymbols = Array.from(mappedStocksSet).filter(s => !topMoversSymbols.has(s))
+        const allStockSymbols = Array.from(mappedStocksSet)
 
+        // Fetch live price data for all stocks
         const { fetchStockData } = await import('@/services/momentumApi')
         const liveStockData = await fetchStockData(allStockSymbols)
+
+        setIsLoading(false) // Hide initial loading spinner
+
+        // Filter to only stocks with valid LTP data (eliminates 401 errors)
         const validStocks = liveStockData.filter(stock => stock.ltp && stock.ltp > 0)
 
-        const BATCH_SIZE = 20
+        // Process stocks in batches and update UI progressively
+        const BATCH_SIZE = 20 // Increased for faster processing
+        const breakoutStocks: BreakoutStock[] = []
+        const breakdownStocks: BreakoutStock[] = []
+
         for (let i = 0; i < validStocks.length; i += BATCH_SIZE) {
           const batch = validStocks.slice(i, i + BATCH_SIZE)
 
           const batchPromises = batch.map(async (stock) => {
             try {
+              // Fetch previous day data from Yahoo Finance
               const yahooData = await fetchYahooStockData(stock.symbol)
+
               if (yahooData && yahooData.high > 0 && yahooData.low > 0) {
                 const dayChange = stock.ltp - yahooData.close
                 const dayChangePerc = yahooData.close > 0 ? (dayChange / yahooData.close) * 100 : 0
@@ -149,8 +76,8 @@ export default function BreakoutStocksPage() {
                   symbol: stock.symbol,
                   name: stock.symbol,
                   ltp: stock.ltp,
-                  dayChange,
-                  dayChangePerc,
+                  dayChange: dayChange,
+                  dayChangePerc: dayChangePerc,
                   volume: 0,
                   prevDayHigh: yahooData.high,
                   prevDayLow: yahooData.low,
@@ -161,7 +88,7 @@ export default function BreakoutStocksPage() {
                 }
               }
             } catch (error) {
-              // Skip
+              // Silently skip stocks with errors
             }
             return null
           })
@@ -169,6 +96,7 @@ export default function BreakoutStocksPage() {
           const batchResults = await Promise.all(batchPromises)
           const validResults = batchResults.filter((s) => s !== null) as BreakoutStock[]
 
+          // Separate into breakouts and breakdowns
           validResults.forEach(stock => {
             if (stock.ltp > stock.prevDayHigh) {
               breakoutStocks.push(stock)
@@ -177,23 +105,24 @@ export default function BreakoutStocksPage() {
             }
           })
 
+          // Update UI progressively after each batch
           setGainers([...breakoutStocks].sort((a, b) => b.dayChangePerc - a.dayChangePerc))
-          setLosers([...breakdownStocks].sort((a, b) => Math.abs(b.dayChangePerc) - Math.abs(a.dayChangePerc)))
+          setLosers([...breakdownStocks].sort((a, b) => a.dayChangePerc - b.dayChangePerc))
 
+          // Reduced delay for faster processing
           if (i + BATCH_SIZE < validStocks.length) {
             await new Promise(resolve => setTimeout(resolve, 200))
           }
         }
-        setIsLoadingPhase2(false)
       } catch (error) {
         console.error('Failed to fetch breakout stocks:', error)
         setIsLoading(false)
-        setIsLoadingPhase2(false)
       }
     }
 
     fetchBreakoutStocks()
-    const interval = setInterval(fetchBreakoutStocks, 300000)
+    const interval = setInterval(fetchBreakoutStocks, 300000) // Refresh every 5 minutes
+
     return () => clearInterval(interval)
   }, [])
 
@@ -323,16 +252,6 @@ export default function BreakoutStocksPage() {
                             </tr>
                           )
                         })}
-                        {isLoadingPhase2 && (
-                          <tr>
-                            <td colSpan={4} className="px-4 py-3 text-center">
-                              <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
-                                <div className="w-4 h-4 border-2 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
-                                <span>Loading more breakout stocks...</span>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
                       </tbody>
                     </table>
                   </div>
@@ -428,16 +347,6 @@ export default function BreakoutStocksPage() {
                             </tr>
                           )
                         })}
-                        {isLoadingPhase2 && (
-                          <tr>
-                            <td colSpan={4} className="px-4 py-3 text-center">
-                              <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
-                                <div className="w-4 h-4 border-2 border-red-200 border-t-red-600 rounded-full animate-spin"></div>
-                                <span>Loading more breakdown stocks...</span>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
                       </tbody>
                     </table>
                   </div>
