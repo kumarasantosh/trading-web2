@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import TopNavigation from '@/components/momentum/TopNavigation'
 import Footer from '@/components/Footer'
 import { fetchYahooStockData } from '@/services/yahooFinance'
@@ -34,6 +34,7 @@ export default function BreakoutStocksPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [usingDatabase, setUsingDatabase] = useState(true)
+  const isLoadingRef = useRef(false) // Track if loading is in progress
 
   // Get all unique stock symbols from mapped sectors
   const getAllMappedStocks = (): string[] => {
@@ -46,6 +47,13 @@ export default function BreakoutStocksPage() {
 
   useEffect(() => {
     const fetchBreakoutStocks = async () => {
+      // Prevent concurrent fetches
+      if (isLoadingRef.current) {
+        console.log('[BREAKOUT] Skipping fetch - already in progress')
+        return
+      }
+
+      isLoadingRef.current = true
       const isInitialLoad = gainers.length === 0 && losers.length === 0
 
       // Only show loading spinner on initial load
@@ -255,9 +263,13 @@ export default function BreakoutStocksPage() {
         console.timeEnd('[BREAKOUT] Total fetch time')
         console.log(`✅ Found ${breakoutStocks.length} breakouts and ${breakdownStocks.length} breakdowns`)
 
+        // Reset loading ref to allow next fetch
+        isLoadingRef.current = false
+
       } catch (error) {
         console.error('Failed to fetch breakout stocks:', error)
         setIsLoading(false)
+        isLoadingRef.current = false // Reset on error too
       }
     }
 
