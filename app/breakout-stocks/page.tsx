@@ -21,26 +21,42 @@ interface BreakoutStock {
   isBreakout?: boolean
 }
 
+interface DailyHighLow {
+  symbol: string
+  sector: string
+  today_high: number
+  today_low: number
+}
+
 export default function BreakoutStocksPage() {
   const [gainers, setGainers] = useState<BreakoutStock[]>([])
   const [losers, setLosers] = useState<BreakoutStock[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isLoadingPhase2, setIsLoadingPhase2] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [usingDatabase, setUsingDatabase] = useState(true)
 
   // Get all unique stock symbols from mapped sectors
-  const getAllMappedStocks = (): Set<string> => {
+  const getAllMappedStocks = (): string[] => {
     const allStocks = new Set<string>()
     Object.values(SECTOR_STOCKS).forEach(stocks => {
       stocks.forEach(stock => allStocks.add(stock))
     })
-    return allStocks
+    return Array.from(allStocks)
   }
 
   useEffect(() => {
-    const fetchBreakoutStocks = async (isBackground = false) => {
-      if (!isBackground) setIsLoading(true)
-      // Don't clear lists immediately if background refresh to avoid flash
-      if (!isBackground) {
+    const fetchBreakoutStocks = async () => {
+      const isInitialLoad = gainers.length === 0 && losers.length === 0
+
+      // Only show loading spinner on initial load
+      if (isInitialLoad) {
+        setIsLoading(true)
+      }
+
+      // Don't clear existing data on refresh
+      if (!isInitialLoad) {
+        // Keep existing data visible during background refresh
+      } else {
         setGainers([])
         setLosers([])
       }
@@ -49,154 +65,204 @@ export default function BreakoutStocksPage() {
       const breakdownStocks: BreakoutStock[] = []
 
       try {
-        // PHASE 1: Quick load from top gainers/losers (fast)
-        const [gainersRes, losersRes] = await Promise.all([
-          fetch('/api/groww/top-movers?moverType=TOP_GAINERS'),
-          fetch('/api/groww/top-movers?moverType=TOP_LOSERS')
-        ])
+        console.time('[BREAKOUT] Total fetch time')
 
-        const gainersData = await gainersRes.json()
-        const losersData = await losersRes.json()
-        const topMoversSymbols = new Set<string>()
+        // STEP 1: Try to fetch yesterday's high-low data from database
+        console.time('[BREAKOUT] Fetch daily high-low from DB')
+        const dailyHighLowRes = await fetch('/api/daily-high-low')
+        const dailyHighLowData = await dailyHighLowRes.json()
+        console.timeEnd('[BREAKOUT] Fetch daily high-low from DB')
+        console.log('[BREAKOUT] DB data count:', dailyHighLowData.count)
 
-        // Process top gainers for breakouts
-        if (gainersData.success && gainersData.stocks) {
-          const topGainers = gainersData.stocks.slice(0, 50)
-          for (const stock of topGainers) {
-            topMoversSymbols.add(stock.symbol)
-            try {
-              const yahooData = await fetchYahooStockData(stock.symbol)
-              if (yahooData && yahooData.high > 0 && stock.ltp > yahooData.high) {
-                const dayChange = stock.ltp - yahooData.close
-                const dayChangePerc = yahooData.close > 0 ? (dayChange / yahooData.close) * 100 : 0
+        const hasDbData = dailyHighLowData.success && dailyHighLowData.data && dailyHighLowData.data.length > 0
 
-                breakoutStocks.push({
-                  symbol: stock.symbol,
-                  name: stock.symbol,
-                  ltp: stock.ltp,
-                  dayChange,
-                  dayChangePerc,
-                  volume: 0,
-                  prevDayHigh: yahooData.high,
-                  prevDayLow: yahooData.low,
-                  prevDayClose: yahooData.close,
-                  prevDayOpen: yahooData.open,
-                  is52WeekHigh: stock.ltp > yahooData.high,
-                  isBreakout: true,
-                })
-              }
-            } catch (error) {
-              // Skip
-            }
+        // Check if database data is from today (won't work for breakouts)
+        let isDataFromToday = false
+        if (hasDbData && dailyHighLowData.data.length > 0) {
+          const firstRecord = dailyHighLowData.data[0]
+          const capturedDate = firstRecord.captured_date
+          const today = new Date().toISOString().split('T')[0]
+          isDataFromToday = capturedDate === today
+
+          if (isDataFromToday) {
+            console.log('⚠️ Database has today\'s data - need yesterday\'s data for breakouts. Falling back to Yahoo Finance.')
           }
         }
 
-        // Process top losers for breakdowns
-        if (losersData.success && losersData.stocks) {
-          const topLosers = losersData.stocks.slice(0, 50)
-          for (const stock of topLosers) {
-            topMoversSymbols.add(stock.symbol)
-            try {
-              const yahooData = await fetchYahooStockData(stock.symbol)
-              if (yahooData && yahooData.low > 0 && stock.ltp < yahooData.low) {
-                const dayChange = stock.ltp - yahooData.close
-                const dayChangePerc = yahooData.close > 0 ? (dayChange / yahooData.close) * 100 : 0
+        if (hasDbData && !isDataFromToday) {
+          // USE DATABASE DATA (preferred - fast!)
+          console.log('✅ Using database data for breakout/breakdown detection')
+          setUsingDatabase(true)
 
-                breakdownStocks.push({
-                  symbol: stock.symbol,
-                  name: stock.symbol,
-                  ltp: stock.ltp,
-                  dayChange,
-                  dayChangePerc,
-                  volume: 0,
-                  prevDayHigh: yahooData.high,
-                  prevDayLow: yahooData.low,
-                  prevDayClose: yahooData.close,
-                  prevDayOpen: yahooData.open,
-                  is52WeekHigh: false,
-                  isBreakout: false,
-                })
-              }
-            } catch (error) {
-              // Skip
+          // Create a map for quick lookup
+          console.time('[BREAKOUT] Create high-low map')
+          const highLowMap = new Map<string, DailyHighLow>()
+          dailyHighLowData.data.forEach((item: DailyHighLow) => {
+            highLowMap.set(item.symbol, item)
+          })
+          console.timeEnd('[BREAKOUT] Create high-low map')
+          console.log('[BREAKOUT] Mapped stocks:', highLowMap.size)
+
+          // Fetch live LTP data PROGRESSIVELY in batches for better UX
+          const allSymbols = Array.from(highLowMap.keys())
+          console.time('[BREAKOUT] Fetch live LTP for all stocks')
+          console.log('[BREAKOUT] Starting progressive loading...')
+
+          const BATCH_SIZE = 20 // Fetch 20 stocks at a time
+          let totalFetched = 0
+
+          for (let i = 0; i < allSymbols.length; i += BATCH_SIZE) {
+            const batch = allSymbols.slice(i, i + BATCH_SIZE)
+
+            // Show "loading more" indicator for batches after the first
+            if (i > 0) {
+              setIsLoadingMore(true)
             }
+
+            // Fetch this batch
+            const { fetchStockData } = await import('@/services/momentumApi')
+            const batchData = await fetchStockData(batch)
+            totalFetched += batchData.length
+
+            console.log(`[BREAKOUT] Batch ${Math.floor(i / BATCH_SIZE) + 1}: fetched ${batchData.length} stocks (total: ${totalFetched}/${allSymbols.length})`)
+
+            // Hide loading spinner after first batch to show progressive results
+            if (i === 0 && isInitialLoad) {
+              setIsLoading(false)
+            }
+
+            // Process this batch immediately
+            const validStocks = batchData.filter(stock => stock.ltp && stock.ltp > 0)
+
+            validStocks.forEach(stock => {
+              const highLowData = highLowMap.get(stock.symbol)
+              if (!highLowData) return
+
+              const ltp = stock.ltp
+              const prevDayHigh = highLowData.today_high
+              const prevDayLow = highLowData.today_low
+
+              const stockData: BreakoutStock = {
+                symbol: stock.symbol,
+                name: stock.symbol,
+                ltp: ltp,
+                dayChange: stock.price - stock.close,
+                dayChangePerc: stock.changePercent,
+                volume: 0,
+                prevDayHigh: prevDayHigh,
+                prevDayLow: prevDayLow,
+                prevDayClose: stock.close,
+                prevDayOpen: stock.open,
+              }
+
+              // Check for BREAKOUT (LTP > yesterday's high)
+              if (ltp > prevDayHigh) {
+                breakoutStocks.push(stockData)
+                // Update UI immediately with sorted data
+                setGainers([...breakoutStocks].sort((a, b) => b.dayChangePerc - a.dayChangePerc))
+              }
+
+              // Check for BREAKDOWN (LTP < yesterday's low)
+              if (ltp < prevDayLow) {
+                breakdownStocks.push(stockData)
+                // Update UI immediately with sorted data
+                setLosers([...breakdownStocks].sort((a, b) => Math.abs(b.dayChangePerc) - Math.abs(a.dayChangePerc)))
+              }
+            })
           }
-        }
 
-        // Show initial results from top movers (descending order)
-        setGainers([...breakoutStocks].sort((a, b) => b.dayChangePerc - a.dayChangePerc))
-        setLosers([...breakdownStocks].sort((a, b) => Math.abs(b.dayChangePerc) - Math.abs(a.dayChangePerc)))
-        setIsLoading(false)
-        setIsLoadingPhase2(true)
+          console.timeEnd('[BREAKOUT] Fetch live LTP for all stocks')
+          console.log('[BREAKOUT] Live data fetched:', totalFetched)
+          console.log('[BREAKOUT] Breakouts found:', breakoutStocks.length)
+          console.log('[BREAKOUT] Breakdowns found:', breakdownStocks.length)
+          setIsLoadingMore(false)
 
-        // PHASE 2: Progressive load from all sector stocks
-        const mappedStocksSet = getAllMappedStocks()
-        const allStockSymbols = Array.from(mappedStocksSet).filter(s => !topMoversSymbols.has(s))
+        } else {
+          // FALLBACK TO YAHOO FINANCE (for testing when DB is empty)
+          console.log('⚠️ No database data - falling back to Yahoo Finance API')
+          console.time('[BREAKOUT] Yahoo Finance fallback')
+          setUsingDatabase(false)
 
-        const { fetchStockData } = await import('@/services/momentumApi')
-        const liveStockData = await fetchStockData(allStockSymbols)
-        const validStocks = liveStockData.filter(stock => stock.ltp && stock.ltp > 0)
+          const allStockSymbols = getAllMappedStocks()
+          const { fetchStockData } = await import('@/services/momentumApi')
+          const liveStockData = await fetchStockData(allStockSymbols)
+          const validStocks = liveStockData.filter(stock => stock.ltp && stock.ltp > 0)
 
-        const BATCH_SIZE = 20
-        for (let i = 0; i < validStocks.length; i += BATCH_SIZE) {
-          const batch = validStocks.slice(i, i + BATCH_SIZE)
+          setIsLoading(false) // Show progress
 
-          const batchPromises = batch.map(async (stock) => {
-            try {
-              const yahooData = await fetchYahooStockData(stock.symbol)
-              if (yahooData && yahooData.high > 0 && yahooData.low > 0) {
-                const dayChange = stock.ltp - yahooData.close
-                const dayChangePerc = yahooData.close > 0 ? (dayChange / yahooData.close) * 100 : 0
+          // Process in batches
+          const BATCH_SIZE = 20
+          for (let i = 0; i < validStocks.length; i += BATCH_SIZE) {
+            const batch = validStocks.slice(i, i + BATCH_SIZE)
 
-                return {
-                  symbol: stock.symbol,
-                  name: stock.symbol,
-                  ltp: stock.ltp,
-                  dayChange,
-                  dayChangePerc,
-                  volume: 0,
-                  prevDayHigh: yahooData.high,
-                  prevDayLow: yahooData.low,
-                  prevDayClose: yahooData.close,
-                  prevDayOpen: yahooData.open,
-                  is52WeekHigh: stock.ltp > yahooData.high,
-                  isBreakout: stock.ltp > yahooData.high,
+            const batchPromises = batch.map(async (stock) => {
+              try {
+                const yahooData = await fetchYahooStockData(stock.symbol)
+                if (yahooData && yahooData.high > 0 && yahooData.low > 0) {
+                  const dayChange = stock.ltp - yahooData.close
+                  const dayChangePerc = yahooData.close > 0 ? (dayChange / yahooData.close) * 100 : 0
+
+                  return {
+                    symbol: stock.symbol,
+                    name: stock.symbol,
+                    ltp: stock.ltp,
+                    dayChange,
+                    dayChangePerc,
+                    volume: 0,
+                    prevDayHigh: yahooData.high,
+                    prevDayLow: yahooData.low,
+                    prevDayClose: yahooData.close,
+                    prevDayOpen: yahooData.open,
+                    is52WeekHigh: stock.ltp > yahooData.high,
+                    isBreakout: stock.ltp > yahooData.high,
+                  }
                 }
+              } catch (error) {
+                // Skip
               }
-            } catch (error) {
-              // Skip
+              return null
+            })
+
+            const batchResults = await Promise.all(batchPromises)
+            const validResults = batchResults.filter((s) => s !== null) as BreakoutStock[]
+
+            validResults.forEach(stock => {
+              if (stock.ltp > stock.prevDayHigh) {
+                breakoutStocks.push(stock)
+              } else if (stock.ltp < stock.prevDayLow) {
+                breakdownStocks.push(stock)
+              }
+            })
+
+            // Update UI progressively
+            setGainers([...breakoutStocks].sort((a, b) => b.dayChangePerc - a.dayChangePerc))
+            setLosers([...breakdownStocks].sort((a, b) => Math.abs(b.dayChangePerc) - Math.abs(a.dayChangePerc)))
+
+            if (i + BATCH_SIZE < validStocks.length) {
+              await new Promise(resolve => setTimeout(resolve, 200))
             }
-            return null
-          })
-
-          const batchResults = await Promise.all(batchPromises)
-          const validResults = batchResults.filter((s) => s !== null) as BreakoutStock[]
-
-          validResults.forEach(stock => {
-            if (stock.ltp > stock.prevDayHigh) {
-              breakoutStocks.push(stock)
-            } else if (stock.ltp < stock.prevDayLow) {
-              breakdownStocks.push(stock)
-            }
-          })
-
-          setGainers([...breakoutStocks].sort((a, b) => b.dayChangePerc - a.dayChangePerc))
-          setLosers([...breakdownStocks].sort((a, b) => Math.abs(b.dayChangePerc) - Math.abs(a.dayChangePerc)))
-
-          if (i + BATCH_SIZE < validStocks.length) {
-            await new Promise(resolve => setTimeout(resolve, 200))
           }
+          console.timeEnd('[BREAKOUT] Yahoo Finance fallback')
         }
-        setIsLoadingPhase2(false)
+
+        // Final sort to ensure everything is in order
+        console.time('[BREAKOUT] Sort results')
+        setGainers(prev => [...prev].sort((a, b) => b.dayChangePerc - a.dayChangePerc))
+        setLosers(prev => [...prev].sort((a, b) => Math.abs(b.dayChangePerc) - Math.abs(a.dayChangePerc)))
+        console.timeEnd('[BREAKOUT] Sort results')
+        setIsLoading(false)
+
+        console.timeEnd('[BREAKOUT] Total fetch time')
+        console.log(`✅ Found ${breakoutStocks.length} breakouts and ${breakdownStocks.length} breakdowns`)
+
       } catch (error) {
         console.error('Failed to fetch breakout stocks:', error)
         setIsLoading(false)
-        setIsLoadingPhase2(false)
       }
     }
 
     fetchBreakoutStocks()
-    const interval = setInterval(() => fetchBreakoutStocks(true), 300000)
+    const interval = setInterval(fetchBreakoutStocks, 60000) // Refresh every 1 minute
     return () => clearInterval(interval)
   }, [])
 
@@ -208,7 +274,7 @@ export default function BreakoutStocksPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       {/* Top Navigation with Market Indices */}
       <div className="relative z-50">
-        <TopNavigation />
+        <TopNavigation hideTopMovers={true} />
       </div>
 
       <div className="w-full py-8 min-h-[calc(100vh-200px)]">
@@ -221,12 +287,12 @@ export default function BreakoutStocksPage() {
                   Breakout Stocks
                 </h1>
                 <p className="mt-2 text-sm text-gray-600">
-                  Stocks breaking previous day high/low from mapped sectors
+                  {usingDatabase
+                    ? 'Stocks breaking previous day high/low (using saved database data)'
+                    : 'Stocks breaking previous day high/low (using Yahoo Finance - run EOD capture for faster loading)'}
                 </p>
               </div>
-
             </div>
-
           </div>
 
           {/* Stocks Tables - Side by Side */}
@@ -251,6 +317,11 @@ export default function BreakoutStocksPage() {
                 {gainers.length === 0 ? (
                   <div className="p-12 text-center">
                     <div className="text-gray-500 font-medium">No breakout stocks found.</div>
+                    {!usingDatabase && (
+                      <div className="text-xs text-gray-400 mt-2">
+                        Tip: Run the EOD capture at 3:35 PM to populate the database for faster loading
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -272,64 +343,45 @@ export default function BreakoutStocksPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {gainers.map((stock) => {
-                          return (
-                            <tr
-                              key={stock.symbol}
-                              onClick={() => handleStockClick(stock.symbol)}
-                              className="hover:bg-green-50 cursor-pointer transition-colors duration-150"
-                            >
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <div className="flex items-center gap-2">
-                                  {stock.prevDayClose > stock.prevDayOpen && (
-                                    <div
-                                      className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
-                                      title={`Yesterday close w(₹${stock.prevDayClose.toFixed(2)}) > open (₹${stock.prevDayOpen.toFixed(2)})`}
-                                    />
-                                  )}
-                                  {stock.prevDayClose < stock.prevDayOpen && (
-                                    <div
-                                      className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500"
-                                      title={`Yesterday close (₹${stock.prevDayClose.toFixed(2)}) < open (₹${stock.prevDayOpen.toFixed(2)})`}
-                                    />
-                                  )}
+                        {gainers.map((stock) => (
+                          <tr
+                            key={stock.symbol}
+                            onClick={() => handleStockClick(stock.symbol)}
+                            className="hover:bg-green-50 cursor-pointer transition-colors duration-150"
+                          >
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="text-sm font-semibold text-gray-900">
+                                ₹{stock.ltp.toFixed(2)}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="text-sm font-bold text-green-600">
+                                +{stock.dayChangePerc.toFixed(2)}%
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              {stock.prevDayHigh > 0 && (
+                                <div className="text-sm flex flex-row items-center gap-1 font-semibold text-green-600">
                                   <div>
-                                    <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
-
+                                    +₹{(stock.ltp - stock.prevDayHigh).toFixed(2)}
+                                  </div>
+                                  <div className="text-xs">
+                                    (+{(((stock.ltp - stock.prevDayHigh) / stock.prevDayHigh) * 100).toFixed(2)}%)
                                   </div>
                                 </div>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <div className="text-sm font-semibold text-gray-900">
-                                  ₹{stock.ltp.toFixed(2)}
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <div className="text-sm font-bold text-green-600">
-                                  +{stock.dayChangePerc.toFixed(2)}%
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                {stock.prevDayHigh > 0 && (
-                                  <div className="text-sm flex flex-row items-center gap-1 font-semibold text-green-600">
-                                    <div>
-                                      +₹{(stock.ltp - stock.prevDayHigh).toFixed(2)}
-                                    </div>
-                                    <div className="text-xs">
-                                      (+{(((stock.ltp - stock.prevDayHigh) / stock.prevDayHigh) * 100).toFixed(2)}%)
-                                    </div>
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                        {isLoadingPhase2 && (
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        {isLoadingMore && gainers.length > 0 && (
                           <tr>
-                            <td colSpan={4} className="px-4 py-3 text-center">
-                              <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
+                            <td colSpan={4} className="px-4 py-4 text-center">
+                              <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
                                 <div className="w-4 h-4 border-2 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
-                                <span>Loading more breakout stocks...</span>
+                                <span>Loading more stocks...</span>
                               </div>
                             </td>
                           </tr>
@@ -354,6 +406,11 @@ export default function BreakoutStocksPage() {
                 {losers.length === 0 ? (
                   <div className="p-12 text-center">
                     <div className="text-gray-500 font-medium">No breakdown stocks found.</div>
+                    {!usingDatabase && (
+                      <div className="text-xs text-gray-400 mt-2">
+                        Tip: Run the EOD capture at 3:35 PM to populate the database for faster loading
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -375,64 +432,45 @@ export default function BreakoutStocksPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {losers.map((stock) => {
-                          return (
-                            <tr
-                              key={stock.symbol}
-                              onClick={() => handleStockClick(stock.symbol)}
-                              className="hover:bg-red-50 cursor-pointer transition-colors duration-150"
-                            >
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <div className="flex items-center gap-2">
-                                  {stock.prevDayClose > stock.prevDayOpen && (
-                                    <div
-                                      className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
-                                      title={`Yesterday close (₹${stock.prevDayClose.toFixed(2)}) > open (₹${stock.prevDayOpen.toFixed(2)})`}
-                                    />
-                                  )}
-                                  {stock.prevDayClose < stock.prevDayOpen && (
-                                    <div
-                                      className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500"
-                                      title={`Yesterday close (₹${stock.prevDayClose.toFixed(2)}) < open (₹${stock.prevDayOpen.toFixed(2)})`}
-                                    />
-                                  )}
+                        {losers.map((stock) => (
+                          <tr
+                            key={stock.symbol}
+                            onClick={() => handleStockClick(stock.symbol)}
+                            className="hover:bg-red-50 cursor-pointer transition-colors duration-150"
+                          >
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="text-sm font-semibold text-gray-900">
+                                ₹{stock.ltp.toFixed(2)}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="text-sm font-bold text-red-600">
+                                {stock.dayChangePerc.toFixed(2)}%
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              {stock.prevDayLow > 0 && (
+                                <div className="text-sm flex flex-row items-center gap-1 font-semibold text-red-600">
                                   <div>
-                                    <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
-
+                                    -₹{(stock.prevDayLow - stock.ltp).toFixed(2)}
+                                  </div>
+                                  <div className="text-xs">
+                                    (-{(((stock.prevDayLow - stock.ltp) / stock.prevDayLow) * 100).toFixed(2)}%)
                                   </div>
                                 </div>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <div className="text-sm font-semibold text-gray-900">
-                                  ₹{stock.ltp.toFixed(2)}
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <div className="text-sm font-bold text-red-600">
-                                  {stock.dayChangePerc.toFixed(2)}%
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                {stock.prevDayLow > 0 && (
-                                  <div className="text-sm flex flex-row items-center gap-1 font-semibold text-red-600">
-                                    <div>
-                                      -₹{(stock.prevDayLow - stock.ltp).toFixed(2)}
-                                    </div>
-                                    <div className="text-xs">
-                                      (-{(((stock.prevDayLow - stock.ltp) / stock.prevDayLow) * 100).toFixed(2)}%)
-                                    </div>
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                        {isLoadingPhase2 && (
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        {isLoadingMore && losers.length > 0 && (
                           <tr>
-                            <td colSpan={4} className="px-4 py-3 text-center">
-                              <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
+                            <td colSpan={4} className="px-4 py-4 text-center">
+                              <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
                                 <div className="w-4 h-4 border-2 border-red-200 border-t-red-600 rounded-full animate-spin"></div>
-                                <span>Loading more breakdown stocks...</span>
+                                <span>Loading more stocks...</span>
                               </div>
                             </td>
                           </tr>
@@ -450,4 +488,3 @@ export default function BreakoutStocksPage() {
     </div>
   )
 }
-

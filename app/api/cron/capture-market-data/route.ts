@@ -42,7 +42,8 @@ export async function GET(request: NextRequest) {
         const sectorResults = await captureSectorData(capturedAt)
 
         // Capture stock data for selected sectors
-        const stockResults = await captureStockData(capturedAt)
+        // const stockResults = await captureStockData(capturedAt)
+        const stockResults = { count: 0, errors: [] as string[] }
 
         // Capture market indices at 3:30 PM (end of trading day)
         let marketIndicesResults = { count: 0, errors: [] as string[] }
