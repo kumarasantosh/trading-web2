@@ -47,39 +47,58 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
             if (!isBackground) setIsLoading(true)
 
             try {
-                const gainersRes = await fetch('/api/groww/top-movers?moverType=TOP_GAINERS')
-                const gainersData = await gainersRes.json()
+                // Fetch from new stock snapshots API
+                const response = await fetch('/api/top-movers', {
+                    cache: 'no-store',
+                })
 
-                const filteredGainers = gainersData.success && gainersData.stocks
-                    ? gainersData.stocks.filter((stock: Stock) => mappedStocksSet.has(stock.symbol))
-                    : []
+                if (!response.ok) {
+                    throw new Error('Failed to fetch top movers')
+                }
 
-                setGainers(filteredGainers)
+                const data = await response.json()
 
-                const symbolsToFetch = filteredGainers
-                    .map((s: Stock) => s.symbol)
-                    .filter((symbol: string) => !fetchedSymbolsRef.current.has(symbol))
+                if (data.success) {
+                    // Map new API response to match old format
+                    const mappedGainers = (data.gainers || []).map((stock: any) => ({
+                        symbol: stock.symbol,
+                        name: stock.symbol,
+                        ltp: stock.last_price,
+                        dayChange: stock.last_price - stock.open_price,
+                        dayChangePerc: stock.percent_change,
+                        open: stock.open_price,
+                    }))
 
-                if (symbolsToFetch.length > 0) {
-                    symbolsToFetch.forEach((s: string) => fetchedSymbolsRef.current.add(s))
-                    const yahooPromises = symbolsToFetch.map((symbol: string) => fetchYahooStockData(symbol))
-                    const yahooResults = await Promise.all(yahooPromises)
+                    // Filter to only mapped sectors
+                    const filteredGainers = mappedGainers.filter((stock: Stock) => mappedStocksSet.has(stock.symbol))
+                    setGainers(filteredGainers)
 
-                    setPrevDayData(prev => {
-                        const newData = { ...prev }
-                        yahooResults.forEach(result => {
-                            if (result) {
-                                const baseSymbol = result.symbol.replace('.NS', '').replace('.BO', '')
-                                newData[baseSymbol] = {
-                                    high: result.high,
-                                    low: result.low,
-                                    open: result.open,
-                                    close: result.close,
+                    // Fetch Yahoo data for previous day info
+                    const symbolsToFetch = filteredGainers
+                        .map((s: Stock) => s.symbol)
+                        .filter((symbol: string) => !fetchedSymbolsRef.current.has(symbol))
+
+                    if (symbolsToFetch.length > 0) {
+                        symbolsToFetch.forEach((s: string) => fetchedSymbolsRef.current.add(s))
+                        const yahooPromises = symbolsToFetch.map((symbol: string) => fetchYahooStockData(symbol))
+                        const yahooResults = await Promise.all(yahooPromises)
+
+                        setPrevDayData(prev => {
+                            const newData = { ...prev }
+                            yahooResults.forEach(result => {
+                                if (result) {
+                                    const baseSymbol = result.symbol.replace('.NS', '').replace('.BO', '')
+                                    newData[baseSymbol] = {
+                                        high: result.high,
+                                        low: result.low,
+                                        open: result.open,
+                                        close: result.close,
+                                    }
                                 }
-                            }
+                            })
+                            return newData
                         })
-                        return newData
-                    })
+                    }
                 }
             } catch (error) {
                 console.error('Failed to fetch top gainers:', error)
