@@ -7,21 +7,6 @@ on:
     - cron: '*/1 3-10 * * 1-5'
   
   workflow_dispatch:
-    inputs:
-      capture_type:
-        description: 'Type of capture'
-        required: false
-        type: choice
-        default: 'all'
-        options:
-          - all
-          - market-data
-          - option-chain
-          - stock-snapshots
-          - breakouts
-          - pcr
-          - eod
-          - cleanup
 
 env:
   VERCEL_URL: ${{ secrets.VERCEL_URL || 'https://trading-web2.vercel.app' }}
@@ -32,272 +17,104 @@ jobs:
     timeout-minutes: 5
     
     steps:
-      - name: Determine tasks to run
-        id: tasks
+      - name: ⏰ Check schedule and determine tasks
+        id: schedule
         run: |
           MINUTE=$(date +%M)
           HOUR=$(date +%H)
-          CAPTURE_TYPE="${{ github.event.inputs.capture_type || 'all' }}"
           
-          echo "Current time: $HOUR:$MINUTE UTC"
+          echo "=== Current Time: $HOUR:$MINUTE UTC ==="
           
-          # Cleanup: Run once at start of day (9:15 AM IST = 3:45 AM UTC)
+          # EVERY MINUTE (60 seconds interval):
+          echo "run_market=true" >> $GITHUB_OUTPUT          # Market data
+          echo "run_breakout_check=true" >> $GITHUB_OUTPUT  # Breakout check
+          echo "run_pcr=true" >> $GITHUB_OUTPUT             # PCR calculation
+          
+          # EVERY 3 MINUTES (180 seconds interval):
+          if [ $((MINUTE % 3)) -eq 0 ]; then
+            echo "run_oi=true" >> $GITHUB_OUTPUT              # Option chain
+            echo "run_snapshots=true" >> $GITHUB_OUTPUT       # Stock snapshots
+            echo "run_breakout_snapshots=true" >> $GITHUB_OUTPUT  # Breakout snapshots
+          fi
+          
+          # ONCE AT START OF DAY (9:15 AM IST = 3:45 AM UTC):
           if [ "$HOUR" -eq 3 ] && [ "$MINUTE" -eq 45 ]; then
-            if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "cleanup" ]; then
-              echo "run_cleanup=true" >> $GITHUB_OUTPUT
-            fi
+            echo "run_cleanup=true" >> $GITHUB_OUTPUT
           fi
           
-          # Market data: every minute
-          if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "market-data" ]; then
-            echo "run_market=true" >> $GITHUB_OUTPUT
-          fi
-          
-          # OI data: every 3 minutes
-          if [ $((MINUTE % 3)) -eq 0 ]; then
-            if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "option-chain" ]; then
-              echo "run_oi=true" >> $GITHUB_OUTPUT
-            fi
-          fi
-          
-          # Stock snapshots: every 3 minutes
-          if [ $((MINUTE % 3)) -eq 0 ]; then
-            if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "stock-snapshots" ]; then
-              echo "run_snapshots=true" >> $GITHUB_OUTPUT
-            fi
-          fi
-          
-          # Breakout snapshots: every 3 minutes
-          if [ $((MINUTE % 3)) -eq 0 ]; then
-            if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "breakouts" ]; then
-              echo "run_breakout_snapshots=true" >> $GITHUB_OUTPUT
-            fi
-          fi
-          
-          # Breakout check: every minute
-          if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "breakouts" ]; then
-            echo "run_breakout_check=true" >> $GITHUB_OUTPUT
-          fi
-          
-          # PCR: every minute
-          if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "pcr" ]; then
-            echo "run_pcr=true" >> $GITHUB_OUTPUT
-          fi
-          
-          # EOD daily high-low: 3:35 PM IST (10:05 AM UTC)
+          # ONCE AT EOD (3:35 PM IST = 10:05 AM UTC):
           if [ "$HOUR" -eq 10 ] && [ "$MINUTE" -ge 5 ] && [ "$MINUTE" -lt 10 ]; then
-            if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "eod" ]; then
-              echo "run_eod=true" >> $GITHUB_OUTPUT
-            fi
+            echo "run_eod=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: 🧹 Cleanup intraday data (start of day)
-        if: steps.tasks.outputs.run_cleanup == 'true'
+      - name: 🧹 Cleanup intraday data
+        if: steps.schedule.outputs.run_cleanup == 'true'
         continue-on-error: true
         run: |
-          echo "🧹 Cleaning up previous day's intraday data..."
-          response=$(curl -s -w "\nHTTP_CODE:%{http_code}" \
-            -X GET "${{ env.VERCEL_URL }}/api/cron/cleanup-intraday" \
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🧹 Cleaning up previous day's intraday data..."
+          curl -X GET "${{ env.VERCEL_URL }}/api/cron/cleanup-intraday" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            --max-time 30)
-          
-          http_code=$(echo "$response" | grep HTTP_CODE | cut -d':' -f2)
-          body=$(echo "$response" | sed '/HTTP_CODE/d')
-          
-          if [ "$http_code" = "200" ]; then
-            echo "✅ Cleanup complete"
-          else
-            echo "⚠️ Cleanup returned HTTP $http_code"
-          fi
+            --max-time 30 -v
 
-      - name: 📊 Capture market data (sectors)
-        if: steps.tasks.outputs.run_market == 'true'
+      - name: 📊 Capture market data (every 1 min)
+        if: steps.schedule.outputs.run_market == 'true'
         continue-on-error: true
         run: |
-          echo "📊 Capturing market data (sectors)..."
-          response=$(curl -s -w "\nHTTP_CODE:%{http_code}" \
-            -X GET "${{ env.VERCEL_URL }}/api/cron/capture-market-data" \
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] 📊 Capturing market data (sectors)..."
+          curl -X GET "${{ env.VERCEL_URL }}/api/cron/capture-market-data" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            --max-time 30 \
-            --retry 2)
-          
-          http_code=$(echo "$response" | grep HTTP_CODE | cut -d':' -f2)
-          body=$(echo "$response" | sed '/HTTP_CODE/d')
-          
-          if [ "$http_code" = "200" ]; then
-            sectors=$(echo "$body" | grep -o '"sectors_captured":[0-9]*' | cut -d':' -f2)
-            echo "✅ Market Data: $sectors sectors captured"
-          else
-            echo "❌ Failed with HTTP $http_code"
-            echo "$body"
-          fi
+            --max-time 30 --retry 2 -v
 
-      - name: 📈 Capture option chain OI data
-        if: steps.tasks.outputs.run_oi == 'true'
+      - name: 🔍 Check breakouts/breakdowns (every 1 min)
+        if: steps.schedule.outputs.run_breakout_check == 'true'
         continue-on-error: true
         run: |
-          echo "📈 Capturing option chain OI data..."
-          response=$(curl -s -w "\nHTTP_CODE:%{http_code}" \
-            -X GET "${{ env.VERCEL_URL }}/api/option-chain/cron" \
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🔍 Checking breakouts/breakdowns..."
+          curl -X GET "${{ env.VERCEL_URL }}/api/cron/check-breakouts" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            --max-time 30)
-          
-          http_code=$(echo "$response" | grep HTTP_CODE | cut -d':' -f2)
-          body=$(echo "$response" | sed '/HTTP_CODE/d')
-          
-          if [ "$http_code" = "200" ]; then
-            # Check if skipped
-            message=$(echo "$body" | grep -o '"message":"[^"]*"' | cut -d'"' -f4)
-            if [ "$message" = "Outside market hours" ]; then
-              echo "⏭️  Skipped (outside market hours)"
-            else
-              symbol=$(echo "$body" | grep -o '"symbol":"[^"]*"' | cut -d'"' -f4)
-              putOI=$(echo "$body" | grep -o '"total_put_oi":[0-9]*' | cut -d':' -f2)
-              callOI=$(echo "$body" | grep -o '"total_call_oi":[0-9]*' | cut -d':' -f2)
-              echo "✅ Option Chain: $symbol - Put OI: $putOI, Call OI: $callOI"
-            fi
-          else
-            echo "❌ Failed with HTTP $http_code"
-          fi
+            --max-time 30 -v
 
-      - name: 📸 Update stock snapshots (top movers)
-        if: steps.tasks.outputs.run_snapshots == 'true'
+      - name: 📊 Calculate PCR (every 1 min)
+        if: steps.schedule.outputs.run_pcr == 'true'
         continue-on-error: true
         run: |
-          echo "📸 Updating stock snapshots..."
-          response=$(curl -s -w "\nHTTP_CODE:%{http_code}" \
-            -X GET "${{ env.VERCEL_URL }}/api/cron/update-stock-snapshots" \
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] 📊 Calculating PCR..."
+          curl -X GET "${{ env.VERCEL_URL }}/api/cron/calculate-pcr" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            --max-time 30)
-          
-          http_code=$(echo "$response" | grep HTTP_CODE | cut -d':' -f2)
-          body=$(echo "$response" | sed '/HTTP_CODE/d')
-          
-          if [ "$http_code" = "200" ]; then
-            # Check if skipped
-            message=$(echo "$body" | grep -o '"message":"[^"]*"' | cut -d'"' -f4)
-            if [ -n "$message" ]; then
-              echo "⏭️  $message"
-            else
-              stocks_updated=$(echo "$body" | grep -o '"stocks_updated":[0-9]*' | cut -d':' -f2)
-              stocks_processed=$(echo "$body" | grep -o '"stocks_processed":[0-9]*' | cut -d':' -f2)
-              echo "✅ Stock Snapshots: $stocks_updated/$stocks_processed stocks updated"
-            fi
-          else
-            echo "❌ Failed with HTTP $http_code"
-          fi
+            --max-time 30 -v
 
-      - name: 🎯 Update breakout snapshots
-        if: steps.tasks.outputs.run_breakout_snapshots == 'true'
+      - name: 📈 Capture option chain OI (every 3 min)
+        if: steps.schedule.outputs.run_oi == 'true'
         continue-on-error: true
         run: |
-          echo "🎯 Updating breakout snapshots..."
-          response=$(curl -s -w "\nHTTP_CODE:%{http_code}" \
-            -X GET "${{ env.VERCEL_URL }}/api/cron/update-breakout-snapshots" \
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] 📈 Capturing option chain OI data..."
+          curl -X GET "${{ env.VERCEL_URL }}/api/option-chain/cron" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            --max-time 30)
-          
-          http_code=$(echo "$response" | grep HTTP_CODE | cut -d':' -f2)
-          body=$(echo "$response" | sed '/HTTP_CODE/d')
-          
-          if [ "$http_code" = "200" ]; then
-            updated=$(echo "$body" | grep -o '"updated":[0-9]*' | cut -d':' -f2)
-            breakouts=$(echo "$body" | grep -o '"breakouts":[0-9]*' | cut -d':' -f2)
-            breakdowns=$(echo "$body" | grep -o '"breakdowns":[0-9]*' | cut -d':' -f2)
-            echo "✅ Breakout Snapshots: $updated stocks ($breakouts breakouts, $breakdowns breakdowns)"
-          else
-            echo "❌ Failed with HTTP $http_code"
-          fi
+            --max-time 30 -v
 
-      - name: 🔍 Check breakouts/breakdowns
-        if: steps.tasks.outputs.run_breakout_check == 'true'
+      - name: 📸 Update stock snapshots (every 3 min)
+        if: steps.schedule.outputs.run_snapshots == 'true'
         continue-on-error: true
         run: |
-          echo "🔍 Checking for breakouts/breakdowns..."
-          response=$(curl -s -w "\nHTTP_CODE:%{http_code}" \
-            -X GET "${{ env.VERCEL_URL }}/api/cron/check-breakouts" \
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] 📸 Updating stock snapshots..."
+          curl -X GET "${{ env.VERCEL_URL }}/api/cron/update-stock-snapshots" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            --max-time 30)
-          
-          http_code=$(echo "$response" | grep HTTP_CODE | cut -d':' -f2)
-          body=$(echo "$response" | sed '/HTTP_CODE/d')
-          
-          if [ "$http_code" = "200" ]; then
-            # Check if skipped
-            message=$(echo "$body" | grep -o '"message":"[^"]*"' | cut -d'"' -f4)
-            if [ -n "$message" ]; then
-              echo "⏭️  $message"
-            else
-              breakouts=$(echo "$body" | grep -o '"breakouts_detected":[0-9]*' | cut -d':' -f2)
-              breakdowns=$(echo "$body" | grep -o '"breakdowns_detected":[0-9]*' | cut -d':' -f2)
-              stocks_checked=$(echo "$body" | grep -o '"stocks_checked":[0-9]*' | cut -d':' -f2)
-              echo "✅ Breakout Check: $stocks_checked stocks - $breakouts breakouts, $breakdowns breakdowns"
-            fi
-          else
-            echo "❌ Failed with HTTP $http_code"
-          fi
+            --max-time 30 -v
 
-      - name: 📊 Calculate PCR (Put-Call Ratio)
-        if: steps.tasks.outputs.run_pcr == 'true'
+      - name: 🎯 Update breakout snapshots (every 3 min)
+        if: steps.schedule.outputs.run_breakout_snapshots == 'true'
         continue-on-error: true
         run: |
-          echo "📊 Calculating PCR..."
-          response=$(curl -s -w "\nHTTP_CODE:%{http_code}" \
-            -X GET "${{ env.VERCEL_URL }}/api/cron/calculate-pcr" \
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🎯 Updating breakout snapshots..."
+          curl -X GET "${{ env.VERCEL_URL }}/api/cron/update-breakout-snapshots" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            --max-time 30)
-          
-          http_code=$(echo "$response" | grep HTTP_CODE | cut -d':' -f2)
-          body=$(echo "$response" | sed '/HTTP_CODE/d')
-          
-          if [ "$http_code" = "200" ]; then
-            # Check if skipped
-            message=$(echo "$body" | grep -o '"message":"[^"]*"' | cut -d'"' -f4)
-            if [ -n "$message" ]; then
-              echo "⏭️  $message"
-            else
-              pcr_calculated=$(echo "$body" | grep -o '"pcr_calculated":[0-9]*' | cut -d':' -f2)
-              indices=$(echo "$body" | grep -o '"indices_processed":[0-9]*' | cut -d':' -f2)
-              if [ -n "$pcr_calculated" ]; then
-                echo "✅ PCR: $pcr_calculated indices calculated"
-              elif [ -n "$indices" ]; then
-                echo "✅ PCR: $indices indices processed"
-              else
-                echo "✅ PCR calculation completed"
-              fi
-            fi
-          else
-            echo "❌ Failed with HTTP $http_code"
-          fi
+            --max-time 30 -v
 
       - name: 🏁 Capture daily high-low (EOD)
-        if: steps.tasks.outputs.run_eod == 'true'
+        if: steps.schedule.outputs.run_eod == 'true'
         continue-on-error: true
         run: |
-          echo "🏁 Capturing daily high-low (End of Day)..."
-          response=$(curl -s -w "\nHTTP_CODE:%{http_code}" \
-            -X GET "${{ env.VERCEL_URL }}/api/cron/save-daily-high-low" \
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🏁 Capturing daily high-low (End of Day)..."
+          curl -X GET "${{ env.VERCEL_URL }}/api/cron/save-daily-high-low" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            --max-time 60)
-          
-          http_code=$(echo "$response" | grep HTTP_CODE | cut -d':' -f2)
-          body=$(echo "$response" | sed '/HTTP_CODE/d')
-          
-          if [ "$http_code" = "200" ]; then
-            stocks_captured=$(echo "$body" | grep -o '"stocks_captured":[0-9]*' | cut -d':' -f2)
-            stocks_inserted=$(echo "$body" | grep -o '"stocks_inserted":[0-9]*' | cut -d':' -f2)
-            echo "✅ Daily High-Low: $stocks_inserted stocks saved (fetched: $stocks_captured)"
-          else
-            echo "❌ Failed with HTTP $http_code"
-            echo "$body"
-          fi
-
-      - name: 📋 Workflow Summary
-        if: always()
-        run: |
-          echo "==================================="
-          echo "Workflow Execution Summary"
-          echo "==================================="
-          echo "Timestamp: $(date '+%Y-%m-%d %H:%M:%S UTC')"
-          echo "Capture Type: ${{ github.event.inputs.capture_type || 'all (scheduled)' }}"
-          echo "==================================="
+            --max-time 60 -v
