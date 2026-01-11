@@ -1,0 +1,246 @@
+# .github/workflows/market-data-capture.yml
+name: Market Data Auto-Capture
+
+on:
+  schedule:
+    # Every minute during market hours (9:15 AM - 3:30 PM IST = 3:45 AM - 10:00 AM UTC)
+    - cron: '*/1 3-10 * * 1-5'
+  
+  workflow_dispatch:
+    inputs:
+      capture_type:
+        description: 'Type of capture'
+        required: false
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - market-data
+          - option-chain
+          - stock-snapshots
+          - breakouts
+          - pcr
+          - eod
+      manual_run:
+        description: 'Run auto-capture.sh locally (duration in minutes)'
+        required: false
+        default: '0'
+
+env:
+  VERCEL_URL: ${{ secrets.VERCEL_URL || 'https://trading-web2.vercel.app' }}
+
+jobs:
+  # Job 1: Trigger Vercel API endpoints
+  trigger-captures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Determine tasks to run
+        id: tasks
+        run: |
+          MINUTE=$(date +%M)
+          HOUR=$(date +%H)
+          CAPTURE_TYPE="${{ github.event.inputs.capture_type || 'all' }}"
+          
+          echo "Current time: $HOUR:$MINUTE UTC"
+          
+          # Market data: every minute
+          if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "market-data" ]; then
+            echo "run_market=true" >> $GITHUB_OUTPUT
+          fi
+          
+          # OI data: every 3 minutes
+          if [ $((MINUTE % 3)) -eq 0 ]; then
+            if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "option-chain" ]; then
+              echo "run_oi=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+          
+          # Stock snapshots: every 3 minutes
+          if [ $((MINUTE % 3)) -eq 0 ]; then
+            if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "stock-snapshots" ]; then
+              echo "run_snapshots=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+          
+          # Breakout snapshots: every 3 minutes
+          if [ $((MINUTE % 3)) -eq 0 ]; then
+            if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "breakouts" ]; then
+              echo "run_breakouts=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+          
+          # Breakout check: every minute
+          if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "breakouts" ]; then
+            echo "run_breakout_check=true" >> $GITHUB_OUTPUT
+          fi
+          
+          # PCR: every minute
+          if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "pcr" ]; then
+            echo "run_pcr=true" >> $GITHUB_OUTPUT
+          fi
+          
+          # EOD capture: 3:35 PM IST (10:05 AM UTC)
+          if [ "$HOUR" -eq 10 ] && [ "$MINUTE" -eq 5 ]; then
+            if [ "$CAPTURE_TYPE" = "all" ] || [ "$CAPTURE_TYPE" = "eod" ]; then
+              echo "run_eod=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: 📊 Capture market data
+        if: steps.tasks.outputs.run_market == 'true'
+        run: |
+          echo "Capturing market data..."
+          response=$(curl -s -w "\nHTTP_CODE:%{http_code}" \
+            -X GET "${{ env.VERCEL_URL }}/api/cron/capture-market-data" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --max-time 30 \
+            --retry 2 \
+            --retry-delay 3)
+          
+          http_code=$(echo "$response" | grep HTTP_CODE | cut -d':' -f2)
+          body=$(echo "$response" | sed '/HTTP_CODE/d')
+          
+          if [ "$http_code" = "200" ]; then
+            echo "✅ Market data captured successfully"
+            echo "$body"
+          else
+            echo "❌ Failed with HTTP $http_code"
+            echo "$body"
+            exit 1
+          fi
+
+      - name: 📈 Capture option chain OI
+        if: steps.tasks.outputs.run_oi == 'true'
+        continue-on-error: true
+        run: |
+          echo "Capturing option chain data..."
+          curl -X GET "${{ env.VERCEL_URL }}/api/option-chain/cron" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --max-time 30 \
+            --retry 2 \
+            -f -v
+
+      - name: 📸 Update stock snapshots
+        if: steps.tasks.outputs.run_snapshots == 'true'
+        continue-on-error: true
+        run: |
+          echo "Updating stock snapshots..."
+          curl -X GET "${{ env.VERCEL_URL }}/api/cron/update-stock-snapshots" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --max-time 30 \
+            -f -v
+
+      - name: 🎯 Update breakout snapshots
+        if: steps.tasks.outputs.run_breakouts == 'true'
+        continue-on-error: true
+        run: |
+          echo "Updating breakout snapshots..."
+          curl -X GET "${{ env.VERCEL_URL }}/api/cron/update-breakout-snapshots" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --max-time 30 \
+            -f -v
+
+      - name: 🔍 Check breakouts/breakdowns
+        if: steps.tasks.outputs.run_breakout_check == 'true'
+        continue-on-error: true
+        run: |
+          echo "Checking for breakouts/breakdowns..."
+          curl -X GET "${{ env.VERCEL_URL }}/api/cron/check-breakouts" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --max-time 30 \
+            -f -v
+
+      - name: 📊 Calculate PCR
+        if: steps.tasks.outputs.run_pcr == 'true'
+        continue-on-error: true
+        run: |
+          echo "Calculating PCR..."
+          curl -X GET "${{ env.VERCEL_URL }}/api/cron/calculate-pcr" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --max-time 30 \
+            -f -v
+
+      - name: 🏁 EOD daily high-low capture
+        if: steps.tasks.outputs.run_eod == 'true'
+        run: |
+          echo "Capturing daily high-low (EOD)..."
+          curl -X GET "${{ env.VERCEL_URL }}/api/cron/save-daily-high-low" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --max-time 60 \
+            -f -v
+
+  # Job 2: Alternative - Run auto-capture.sh script locally (manual trigger only)
+  run-local-script:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.manual_run != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Setup environment
+        run: |
+          echo "NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}" >> .env.local
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" >> .env.local
+          echo "SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" >> .env.local
+          echo "CRON_SECRET=${{ secrets.CRON_SECRET }}" >> .env.local
+          echo "GROWW_USER_ID=${{ secrets.GROWW_USER_ID }}" >> .env.local
+          echo "GROWW_TOKEN=${{ secrets.GROWW_TOKEN }}" >> .env.local
+
+      - name: Build Next.js app
+        run: npm run build
+
+      - name: Start Next.js app
+        run: |
+          npm start &
+          APP_PID=$!
+          echo $APP_PID > app.pid
+          
+          echo "Waiting for Next.js to start..."
+          for i in {1..60}; do
+            if curl -sf http://localhost:3000/api/health > /dev/null 2>&1; then
+              echo "✅ Next.js is ready!"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "❌ Next.js failed to start"
+              exit 1
+            fi
+            echo "Attempt $i/60: Not ready yet..."
+            sleep 2
+          done
+
+      - name: Run auto-capture script
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          chmod +x ./auto-capture.sh
+          DURATION=${{ github.event.inputs.manual_run }}
+          ./auto-capture.sh $DURATION
+
+      - name: Cleanup
+        if: always()
+        run: |
+          [ -f app.pid ] && kill $(cat app.pid) || true
+
+      - name: Upload capture logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-logs-${{ github.run_number }}
+          path: |
+            *.log
+            logs/
+          retention-days: 3
