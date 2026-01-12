@@ -21,7 +21,7 @@ export const SECTOR_STOCKS: SectorStockMapping = {
     'Private Bank': [
         'AXISBANK',
         'BANDHANBNK',
-        'FEDERALBANK',
+        'FEDERALBNK',
         'HDFCBANK',
         'ICICIBANK',
         'IDFCFIRSTB',
@@ -78,7 +78,7 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'PNBHOUSING',
         'POLICYBZR',
         'RECLTD',
-        'SAMMANCAP',
+        'SAMMAANCAP',
         'SBICARD',
         'SBILIFE',
         'SBIN',
@@ -88,13 +88,13 @@ export const SECTOR_STOCKS: SectorStockMapping = {
     // === CORE SECTORS ===
     'Auto': [
         'ASHOKLEY',
-        'BHARATFORGE',
+        'BHARATFORG',
         'BOSCHLTD',
         'EICHERMOT',
         'EXIDEIND',
         'HAL',
         'HEROMOTOCO',
-        'M&M',
+        'M%26M',
         'MARUTI',
         'MOTHERSON',
         'SONACOMS',
@@ -146,7 +146,7 @@ export const SECTOR_STOCKS: SectorStockMapping = {
         'SOLARINDS',
         'SUZLON',
         'TATAPOWER',
-        'TORENTPOWER'
+        'TORNTPOWER'
     ],
     'Oil & Gas': [
         'BPCL',

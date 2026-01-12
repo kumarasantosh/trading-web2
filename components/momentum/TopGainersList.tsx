@@ -108,7 +108,7 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
         }
 
         fetchTopGainers()
-        const interval = setInterval(() => fetchTopGainers(true), 60000)
+        const interval = setInterval(() => fetchTopGainers(true), 10000)
         return () => clearInterval(interval)
     }, [])
 

@@ -46,7 +46,7 @@ export default function TopMovers() {
         }
 
         fetchTopMovers() // Initial load (shows spinner)
-        const interval = setInterval(() => fetchTopMovers(true), 180000) // Background refresh every 3 minutes (no spinner)
+        const interval = setInterval(() => fetchTopMovers(true), 10000) // Background refresh every 10 seconds (no spinner)
 
         return () => clearInterval(interval)
     }, [])

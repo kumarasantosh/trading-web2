@@ -91,28 +91,28 @@ export default function BreakoutStocksPage() {
               const mappedBreakouts: BreakoutStock[] = newApiData.breakouts.map((s: any) => ({
                 symbol: s.symbol,
                 name: s.symbol,
-                ltp: s.current_price,
-                dayChange: s.current_price - s.prev_day_close,
-                dayChangePerc: s.breakout_percentage,
-                volume: s.volume,
-                prevDayHigh: s.prev_day_high,
-                prevDayLow: s.prev_day_low,
-                prevDayClose: s.prev_day_close,
-                prevDayOpen: s.prev_day_open || s.prev_day_close,
+                ltp: parseFloat(s.ltp),
+                dayChange: parseFloat(s.ltp) - parseFloat(s.yesterday_high || s.ltp),
+                dayChangePerc: parseFloat(s.breakout_percent),
+                volume: 0,
+                prevDayHigh: parseFloat(s.yesterday_high),
+                prevDayLow: parseFloat(s.yesterday_low || s.yesterday_high),
+                prevDayClose: parseFloat(s.yesterday_high), // Using yesterday_high as close approximation
+                prevDayOpen: parseFloat(s.yesterday_high),
                 isBreakout: true,
               }))
 
               const mappedBreakdowns: BreakoutStock[] = newApiData.breakdowns.map((s: any) => ({
                 symbol: s.symbol,
                 name: s.symbol,
-                ltp: s.current_price,
-                dayChange: s.current_price - s.prev_day_close,
-                dayChangePerc: Math.abs(s.breakdown_percentage),
-                volume: s.volume,
-                prevDayHigh: s.prev_day_high,
-                prevDayLow: s.prev_day_low,
-                prevDayClose: s.prev_day_close,
-                prevDayOpen: s.prev_day_open || s.prev_day_close,
+                ltp: parseFloat(s.ltp),
+                dayChange: parseFloat(s.yesterday_low) - parseFloat(s.ltp),
+                dayChangePerc: parseFloat(s.breakdown_percent),
+                volume: 0,
+                prevDayHigh: parseFloat(s.yesterday_low), // For breakdowns, we care about yesterday_low
+                prevDayLow: parseFloat(s.yesterday_low),
+                prevDayClose: parseFloat(s.yesterday_low),
+                prevDayOpen: parseFloat(s.yesterday_low),
                 isBreakout: false,
               }))
 

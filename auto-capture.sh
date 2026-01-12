@@ -16,7 +16,7 @@ MARKET_INTERVAL=60  # 1 minute in seconds (for market data)
 OI_INTERVAL=180  # 3 minutes in seconds (for option chain OI data)
 BREAKOUT_INTERVAL=60  # 1 minute in seconds (for breakout/breakdown checking)
 PCR_INTERVAL=60  # 1 minute in seconds (for PCR calculation)
-STOCK_SNAPSHOT_INTERVAL=180  # 3 minutes in seconds (for stock snapshots)
+STOCK_SNAPSHOT_INTERVAL=60  # 1 minute in seconds (for stock snapshots)
 BREAKOUT_SNAPSHOT_INTERVAL=180  # 3 minutes in seconds (for breakout snapshots)
 CRON_SECRET="${CRON_SECRET:-9f3c1a7e4b2d8f0a6e9c3d1b5f7a2e4c8a6d0b9e3f2c1a4d7e8b5c6f0}"
 MARKET_DATA_API_URL="http://localhost:3000/api/cron/capture-market-data"
@@ -373,11 +373,12 @@ while true; do
         LAST_STOCK_SNAPSHOT=$(date +%s)
     fi
     
+    # DISABLED: Redundant - check_breakouts_breakdowns already populates breakout_stocks/breakdown_stocks tables
     # Check if it's time to update breakout snapshots (every 5 minutes)
-    if [ $((CURRENT_TIME - LAST_BREAKOUT_SNAPSHOT)) -ge $BREAKOUT_SNAPSHOT_INTERVAL ]; then
-        update_breakout_snapshots
-        LAST_BREAKOUT_SNAPSHOT=$(date +%s)
-    fi
+    # if [ $((CURRENT_TIME - LAST_BREAKOUT_SNAPSHOT)) -ge $BREAKOUT_SNAPSHOT_INTERVAL ]; then
+    #     update_breakout_snapshots
+    #     LAST_BREAKOUT_SNAPSHOT=$(date +%s)
+    # fi
     
     # Check if it's 3:35 PM IST for daily high-low capture (only once per day)
     if [ "$DAILY_HIGH_LOW_CAPTURED" = false ]; then

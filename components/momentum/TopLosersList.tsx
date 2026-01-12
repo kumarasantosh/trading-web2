@@ -108,7 +108,7 @@ export default function TopLosersList({ onStockClick }: TopLosersListProps) {
         }
 
         fetchTopLosers()
-        const interval = setInterval(() => fetchTopLosers(true), 60000)
+        const interval = setInterval(() => fetchTopLosers(true), 10000)
         return () => clearInterval(interval)
     }, [])
 

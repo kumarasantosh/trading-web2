@@ -63,10 +63,44 @@ export async function GET(request: NextRequest) {
         const todayDate = istTime.toISOString().split('T')[0] // YYYY-MM-DD format
         console.log(`[BREAKOUT-CHECK] Checking breakouts/breakdowns for ${todayDate}`)
 
+        // Clear ALL breakout/breakdown records to show real-time state (non-cumulative)
+        console.log('[BREAKOUT-CHECK] Clearing ALL breakout/breakdown records for real-time mode...')
+
+        const { error: deleteBreakoutsError } = await supabaseAdmin
+            .from('breakout_stocks')
+            .delete()
+            .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all rows (valid UUID comparison)
+
+        if (deleteBreakoutsError) {
+            console.error('[BREAKOUT-CHECK] Error deleting breakouts:', deleteBreakoutsError)
+        }
+
+        const { error: deleteBreakdownsError } = await supabaseAdmin
+            .from('breakdown_stocks')
+            .delete()
+            .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all rows (valid UUID comparison)
+
+        if (deleteBreakdownsError) {
+            console.error('[BREAKOUT-CHECK] Error deleting breakdowns:', deleteBreakdownsError)
+        }
+
+        console.log('[BREAKOUT-CHECK] Old records cleared')
+
         // Fetch yesterday's high-low data from database
+        console.log('[BREAKOUT-CHECK] Attempting to fetch from daily_high_low table...')
+        console.log('[BREAKOUT-CHECK] Using supabaseAdmin client')
+
         const { data: highLowData, error: fetchError } = await supabaseAdmin
             .from('daily_high_low')
             .select('symbol, sector, today_high, today_low')
+
+        console.log('[BREAKOUT-CHECK] Query completed')
+        console.log('[BREAKOUT-CHECK] Error:', fetchError ? JSON.stringify(fetchError) : 'null')
+        console.log('[BREAKOUT-CHECK] Data length:', highLowData?.length || 0)
+
+        if (highLowData && highLowData.length > 0) {
+            console.log('[BREAKOUT-CHECK] Sample data:', JSON.stringify(highLowData[0]))
+        }
 
         if (fetchError) {
             console.error('[BREAKOUT-CHECK] Error fetching high-low data:', fetchError)
@@ -75,6 +109,8 @@ export async function GET(request: NextRequest) {
                 { status: 500 }
             )
         }
+
+        console.log(`[BREAKOUT-CHECK] Fetched ${highLowData?.length || 0} stocks from daily_high_low table`)
 
         if (!highLowData || highLowData.length === 0) {
             console.log('[BREAKOUT-CHECK] No high-low data available - run EOD capture first')
@@ -88,8 +124,8 @@ export async function GET(request: NextRequest) {
 
         console.log(`[BREAKOUT-CHECK] Checking ${highLowData.length} stocks`)
 
-        let breakoutCount = 0
-        let breakdownCount = 0
+        const breakoutsToInsert: any[] = []
+        const breakdownsToInsert: any[] = []
         const errors: string[] = []
 
         // Check each stock for breakout/breakdown
@@ -115,66 +151,72 @@ export async function GET(request: NextRequest) {
                         // Check for BREAKOUT (LTP > yesterday's high)
                         if (ltp > stock.today_high) {
                             const breakoutPercent = ((ltp - stock.today_high) / stock.today_high) * 100
-
-                            // Try to insert (will fail silently if already exists due to unique constraint)
-                            const { error: insertError } = await supabaseAdmin
-                                .from('breakout_stocks')
-                                .insert({
-                                    symbol: stock.symbol,
-                                    sector: stock.sector,
-                                    ltp: ltp,
-                                    yesterday_high: stock.today_high,
-                                    breakout_percent: breakoutPercent,
-                                    breakout_date: todayDate,
-                                })
-
-                            // Only count as success if no error or if error is duplicate (code 23505)
-                            if (!insertError) {
-                                breakoutCount++
-                                console.log(`[BREAKOUT-CHECK] ✅ ${stock.symbol} breakout: ${ltp} > ${stock.today_high} (+${breakoutPercent.toFixed(2)}%)`)
-                            } else if (insertError.code !== '23505') {
-                                // Log non-duplicate errors
-                                errors.push(`${stock.symbol} breakout insert: ${insertError.message}`)
-                            }
+                            breakoutsToInsert.push({
+                                symbol: stock.symbol,
+                                sector: stock.sector,
+                                ltp: ltp,
+                                yesterday_high: stock.today_high,
+                                breakout_percent: breakoutPercent,
+                                breakout_date: todayDate,
+                            })
+                            console.log(`[BREAKOUT-CHECK] ✅ ${stock.symbol} breakout: ${ltp} > ${stock.today_high} (+${breakoutPercent.toFixed(2)}%)`)
                         }
 
                         // Check for BREAKDOWN (LTP < yesterday's low)
                         if (ltp < stock.today_low) {
                             const breakdownPercent = ((stock.today_low - ltp) / stock.today_low) * 100
-
-                            // Try to insert (will fail silently if already exists due to unique constraint)
-                            const { error: insertError } = await supabaseAdmin
-                                .from('breakdown_stocks')
-                                .insert({
-                                    symbol: stock.symbol,
-                                    sector: stock.sector,
-                                    ltp: ltp,
-                                    yesterday_low: stock.today_low,
-                                    breakdown_percent: breakdownPercent,
-                                    breakdown_date: todayDate,
-                                })
-
-                            // Only count as success if no error or if error is duplicate (code 23505)
-                            if (!insertError) {
-                                breakdownCount++
-                                console.log(`[BREAKOUT-CHECK] ⬇️ ${stock.symbol} breakdown: ${ltp} < ${stock.today_low} (-${breakdownPercent.toFixed(2)}%)`)
-                            } else if (insertError.code !== '23505') {
-                                // Log non-duplicate errors
-                                errors.push(`${stock.symbol} breakdown insert: ${insertError.message}`)
-                            }
+                            breakdownsToInsert.push({
+                                symbol: stock.symbol,
+                                sector: stock.sector,
+                                ltp: ltp,
+                                yesterday_low: stock.today_low,
+                                breakdown_percent: breakdownPercent,
+                                breakdown_date: todayDate,
+                            })
+                            console.log(`[BREAKOUT-CHECK] ⬇️ ${stock.symbol} breakdown: ${ltp} < ${stock.today_low} (-${breakdownPercent.toFixed(2)}%)`)
                         }
                     }
                 }
 
-                // Small delay to avoid rate limiting (50ms per stock for faster checking)
-                await new Promise(resolve => setTimeout(resolve, 50))
+                // Small delay to avoid rate limiting (reduced to 10ms for faster collection)
+                await new Promise(resolve => setTimeout(resolve, 10))
 
             } catch (error) {
                 errors.push(`${stock.symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`)
             }
         }
 
-        console.log(`[BREAKOUT-CHECK] ✅ Complete: ${breakoutCount} breakouts, ${breakdownCount} breakdowns`)
+        // --- ATOMIC UPDATE START ---
+        // 1. Clear old records
+        await supabaseAdmin.from('breakout_stocks').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabaseAdmin.from('breakdown_stocks').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+        // 2. Batch insert new records (if any)
+        let breakoutCount = 0
+        let breakdownCount = 0
+
+        if (breakoutsToInsert.length > 0) {
+            const { error: insertError } = await supabaseAdmin.from('breakout_stocks').insert(breakoutsToInsert)
+            if (insertError) {
+                console.error('[BREAKOUT-CHECK] Error batch inserting breakouts:', insertError)
+                errors.push(`Batch insert breakouts: ${insertError.message}`)
+            } else {
+                breakoutCount = breakoutsToInsert.length
+            }
+        }
+
+        if (breakdownsToInsert.length > 0) {
+            const { error: insertError } = await supabaseAdmin.from('breakdown_stocks').insert(breakdownsToInsert)
+            if (insertError) {
+                console.error('[BREAKOUT-CHECK] Error batch inserting breakdowns:', insertError)
+                errors.push(`Batch insert breakdowns: ${insertError.message}`)
+            } else {
+                breakdownCount = breakdownsToInsert.length
+            }
+        }
+        // --- ATOMIC UPDATE END ---
+
+        console.log(`[BREAKOUT-CHECK] ✅ Complete: ${breakoutCount} breakouts, ${breakdownCount} breakdowns persisted`)
 
         return NextResponse.json({
             success: true,

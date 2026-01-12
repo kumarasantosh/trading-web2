@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 /**
  * Lightweight API endpoint to fetch top gainers and losers from database
@@ -46,6 +47,12 @@ export async function GET() {
                 gainers: gainers?.length || 0,
                 losers: losers?.length || 0,
             },
+        }, {
+            headers: {
+                'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0',
+            }
         })
 
     } catch (error) {

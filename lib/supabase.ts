@@ -2,11 +2,11 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 // Helper to create a chainable mock query builder for build-time
 function createMockQueryBuilder() {
-    const errorResult = Promise.resolve({ 
-        data: null, 
-        error: { message: 'Supabase not configured. Please set environment variables.' } 
+    const errorResult = Promise.resolve({
+        data: null,
+        error: { message: 'Supabase not configured. Please set environment variables.' }
     })
-    
+
     const chainable = {
         select: () => chainable,
         insert: () => errorResult,
@@ -18,7 +18,7 @@ function createMockQueryBuilder() {
         lte: () => chainable,
         order: () => errorResult,
     }
-    
+
     return chainable
 }
 
@@ -33,10 +33,10 @@ function createSupabaseClient(url: string | undefined, key: string | undefined, 
         const mockClient = {
             from: () => createMockQueryBuilder(),
         } as any as SupabaseClient
-        
+
         return mockClient
     }
-    
+
     return createClient(url, key, isAdmin ? {
         auth: {
             autoRefreshToken: false,
@@ -54,6 +54,11 @@ export const supabase = createSupabaseClient(
 
 // Supabase client for server-side usage (uses service role key)
 // This bypasses RLS and should only be used in API routes
+console.log('[SUPABASE-LIB] Initializing supabaseAdmin...')
+console.log('[SUPABASE-LIB] URL exists:', !!process.env.NEXT_PUBLIC_SUPABASE_URL)
+console.log('[SUPABASE-LIB] Key exists:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
+console.log('[SUPABASE-LIB] Key length:', process.env.SUPABASE_SERVICE_ROLE_KEY?.length || 0)
+
 export const supabaseAdmin = createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY,

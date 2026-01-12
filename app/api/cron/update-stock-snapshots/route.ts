@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
         console.log(`[STOCK-SNAPSHOTS] Fetching data for ${symbols.length} stocks`)
 
         // Fetch stock data using individual quote API (parallel batches)
-        const BATCH_SIZE = 10 // Reduced to avoid rate limits
+        const BATCH_SIZE = 5 // Reduced to avoid 429 Rate Limiting
         const snapshots: Array<{
             symbol: string
             open_price: number
@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
         }> = []
         let successCount = 0
         let errorCount = 0
+        const errors: string[] = []
 
         for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
             const batch = symbols.slice(i, i + BATCH_SIZE)
@@ -107,6 +108,8 @@ export async function GET(request: NextRequest) {
 
                     if (!response.ok) {
                         console.error(`[STOCK-SNAPSHOTS] Failed to fetch ${symbol}: ${response.status}`)
+                        const errorMsg = `HTTP ${response.status} for ${symbol}`
+                        errors.push(errorMsg)
                         return null
                     }
 
@@ -114,6 +117,7 @@ export async function GET(request: NextRequest) {
 
                     // Check if response is successful
                     if (data.status !== 'SUCCESS' || !data.payload) {
+                        errors.push(`Invalid payload for ${symbol}`)
                         return null
                     }
 
@@ -135,6 +139,7 @@ export async function GET(request: NextRequest) {
 
                     if (!ltp || !open || ltp <= 0 || open <= 0) {
                         console.log(`[STOCK-SNAPSHOTS] Skipping ${symbol}: ltp=${ltp}, open=${open}`)
+                        errors.push(`Invalid data for ${symbol}: ltp=${ltp}, open=${open}`)
                         return null
                     }
 
@@ -154,6 +159,7 @@ export async function GET(request: NextRequest) {
                     }
                 } catch (error) {
                     console.error(`[STOCK-SNAPSHOTS] Error processing ${symbol}:`, error)
+                    errors.push(`${symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`)
                     return null
                 }
             })
@@ -174,7 +180,7 @@ export async function GET(request: NextRequest) {
 
             // Add delay between batches to avoid rate limiting
             if (i + BATCH_SIZE < symbols.length) {
-                await new Promise(resolve => setTimeout(resolve, 5000)) // 5 second delay
+                await new Promise(resolve => setTimeout(resolve, 1000)) // 1 second delay
             }
         }
 
@@ -206,6 +212,7 @@ export async function GET(request: NextRequest) {
             stocks_processed: symbols.length,
             stocks_updated: successCount,
             errors: errorCount,
+            errorDetails: errors.slice(0, 5),
         })
 
     } catch (error) {

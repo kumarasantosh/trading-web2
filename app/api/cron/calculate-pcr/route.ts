@@ -130,8 +130,13 @@ async function calculatePCR(indexName: string, capturedAt: string) {
         }
 
         // Fetch option chain data
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-        const response = await fetch(`${baseUrl}/api/option-chain?symbol=${encodeURIComponent(growwSymbol)}`, {
+        const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL && process.env.NEXT_PUBLIC_BASE_URL !== '/')
+            ? process.env.NEXT_PUBLIC_BASE_URL
+            : 'http://localhost:3000'
+        const apiUrl = `${baseUrl}/api/option-chain?symbol=${encodeURIComponent(growwSymbol)}`
+        console.log(`[PCR] Fetching option chain from: ${apiUrl}`)
+
+        const response = await fetch(apiUrl, {
             cache: 'no-store',
         })
 
