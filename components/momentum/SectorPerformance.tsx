@@ -393,7 +393,7 @@ export default function SectorPerformance({
               <div
                 key={index}
                 onClick={() => isClickable && onSectorClick(sector.name)}
-                className={`relative flex flex-row sm:grid sm:grid-cols-[minmax(120px,200px)_1fr] gap-2 items-center p-2 sm:p-1 rounded-lg transition-all duration-200 group ${isClickable ? 'cursor-pointer hover:bg-blue-50 hover:shadow-md' : 'hover:bg-gray-50'
+                className={`relative flex flex-col sm:grid sm:grid-cols-[minmax(120px,200px)_1fr] gap-2 items-stretch p-2 sm:p-1 rounded-lg transition-all duration-200 group ${isClickable ? 'cursor-pointer hover:bg-blue-50 hover:shadow-md' : 'hover:bg-gray-50'
                   } ${isSelected ? 'bg-blue-100 shadow-md ring-2 ring-blue-400' : ''}`}
               >
                 {/* Hover Tooltip - positioned just before center line */}

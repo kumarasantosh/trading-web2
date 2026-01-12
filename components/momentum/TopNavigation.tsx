@@ -17,8 +17,7 @@ interface TopNavigationProps {
 }
 
 export default function TopNavigation({ hideTopMovers = false }: TopNavigationProps) {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [activeTab, setActiveTab] = useState('F&O')
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   // Load accordion states from localStorage or use defaults
@@ -96,11 +95,11 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
         // Use DB if after market close OR before market open
         const shouldUseDB = isAfter330PM || isBeforeMarketOpen
 
-        console.log(`[TopNavigation] Current UTC time: ${utcHour}:${utcMinutes.toString().padStart(2, '0')}, isAfter330PM: ${isAfter330PM}, isBeforeMarketOpen: ${isBeforeMarketOpen}, shouldUseDB: ${shouldUseDB}`)
+
 
         if (shouldUseDB) {
           // After market close or before market open - try to use saved data from database first
-          console.log('[TopNavigation] Market closed - attempting to fetch saved market indices from database')
+
           try {
             const response = await fetch('/api/market-indices', {
               cache: 'no-store',
@@ -113,7 +112,7 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
                 // Verify the data has actual values (not all zeros)
                 const hasValidData = result.indices.some((idx: any) => idx.value && idx.value > 0)
                 if (hasValidData) {
-                  console.log(`[TopNavigation] ✅ Loaded ${result.indices.length} indices from database`)
+
                   // Filter out SMALLCAP indices
                   const filteredIndices = result.indices.filter((idx: any) =>
                     !idx.name.toUpperCase().includes('SMALLCAP')
@@ -122,23 +121,23 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
                   setDataSource('database')
                   return
                 } else {
-                  console.log('[TopNavigation] ⚠️ Database data exists but all values are zero/null')
+
                 }
               } else {
-                console.log('[TopNavigation] ⚠️ Database returned empty or invalid data:', result)
+
               }
             } else {
-              console.log(`[TopNavigation] ⚠️ API error: ${response.status}`)
+
             }
           } catch (error) {
             console.error('[TopNavigation] Error fetching from database:', error)
           }
           // If saved data not available or invalid, fall through to live fetch
-          console.log('[TopNavigation] ⚠️ No valid saved data found in database, falling back to live fetch')
+
         }
 
         // During market hours (9:15 AM - 3:30 PM IST) or if saved data unavailable - fetch live data
-        console.log('[TopNavigation] Market hours - fetching live market data from NSE/Groww APIs')
+
         const { fetchMarketData } = await import('@/services/momentumApi')
         const data = await fetchMarketData()
         // Filter out SMALLCAP indices
@@ -213,81 +212,26 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
             </button>
           </div>
 
-          {/* Center: Search Bar - Hidden on Mobile */}
-          <div className="hidden lg:flex lg:flex-1 lg:max-w-xs lg:mx-2 xl:mx-4 order-3 lg:order-2">
-            <div className="relative w-full">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Q Stock Search"
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 pl-7 sm:pl-8 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-xs sm:text-sm bg-white/80 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200"
-              />
-              <svg
-                className="absolute left-2 top-1.5 sm:top-2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-          </div>
 
-          {/* Right: Icons and Buttons */}
-          <div className="flex items-center space-x-2 sm:space-x-3 lg:space-x-4 order-2 lg:order-3 w-full lg:w-auto justify-between lg:justify-end">
-            <div className="flex items-center space-x-1 sm:space-x-2">
-              <button className="hidden sm:inline-block p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                <span className="text-gray-700 font-medium text-xs sm:text-sm">Tools</span>
-              </button>
-              {/* User Authentication */}
-              <SignedIn>
-                <UserButton
-                  appearance={{
-                    elements: {
-                      avatarBox: "w-8 h-8 sm:w-10 sm:h-10"
-                    }
-                  }}
-                />
-              </SignedIn>
-              <SignedOut>
-                <SignInButton>
-                  <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all duration-200 font-semibold text-sm shadow-md hover:shadow-lg">
-                    Sign In
-                  </button>
-                </SignInButton>
-              </SignedOut>
-              <button className="hidden lg:inline-block p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-              </button>
-              <button className="hidden lg:inline-block p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                </svg>
-              </button>
-            </div>
-            <div className="hidden lg:flex space-x-1 sm:space-x-2">
-              <button
-                onClick={() => setActiveTab('F&O')}
-                className={`px-3 sm:px-4 lg:px-5 py-2 sm:py-2.5 rounded-xl font-semibold text-xs sm:text-sm transition-all duration-300 transform ${activeTab === 'F&O'
-                  ? 'bg-green-500 text-white shadow-md scale-105'
-                  : 'bg-white border-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:scale-105'
-                  }`}
-              >
-                F&O
-              </button>
-              <button
-                onClick={() => setActiveTab('CASH')}
-                className={`px-3 sm:px-4 lg:px-5 py-2 sm:py-2.5 rounded-xl font-semibold text-xs sm:text-sm transition-all duration-300 transform ${activeTab === 'CASH'
-                  ? 'bg-green-500 text-white shadow-md scale-105'
-                  : 'bg-white border-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:scale-105'
-                  }`}
-              >
-                CASH
-              </button>
-            </div>
+
+          {/* Right: User Authentication */}
+          <div className="flex items-center space-x-2 sm:space-x-3 order-2 lg:order-3">
+            <SignedIn>
+              <UserButton
+                appearance={{
+                  elements: {
+                    avatarBox: "w-8 h-8 sm:w-10 sm:h-10"
+                  }
+                }}
+              />
+            </SignedIn>
+            <SignedOut>
+              <SignInButton>
+                <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all duration-200 font-semibold text-sm shadow-md hover:shadow-lg">
+                  Sign In
+                </button>
+              </SignInButton>
+            </SignedOut>
           </div>
         </div>
         {/* Desktop Nav Links */}
@@ -318,33 +262,6 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
                   {link.name}
                 </a>
               ))}
-              {/* F&O and CASH Buttons */}
-              <div className="flex space-x-2 px-3 pt-2">
-                <button
-                  onClick={() => {
-                    setActiveTab('F&O')
-                    setIsMobileMenuOpen(false)
-                  }}
-                  className={`flex-1 px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 ${activeTab === 'F&O'
-                    ? 'bg-green-500 text-white shadow-md'
-                    : 'bg-white border-2 border-gray-200 text-gray-700 hover:bg-gray-50'
-                    }`}
-                >
-                  F&O
-                </button>
-                <button
-                  onClick={() => {
-                    setActiveTab('CASH')
-                    setIsMobileMenuOpen(false)
-                  }}
-                  className={`flex-1 px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 ${activeTab === 'CASH'
-                    ? 'bg-green-500 text-white shadow-md'
-                    : 'bg-white border-2 border-gray-200 text-gray-700 hover:bg-gray-50'
-                    }`}
-                >
-                  CASH
-                </button>
-              </div>
             </nav>
           </div>
         )}
