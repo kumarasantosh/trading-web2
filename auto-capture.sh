@@ -12,11 +12,12 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Configuration
-MARKET_INTERVAL=300  # 5 minutes in seconds (for market data)
+MARKET_INTERVAL=60  # 1 minute in seconds (for market data)
 OI_INTERVAL=180  # 3 minutes in seconds (for option chain OI data)
 BREAKOUT_INTERVAL=60  # 1 minute in seconds (for breakout/breakdown checking)
 PCR_INTERVAL=60  # 1 minute in seconds (for PCR calculation)
 STOCK_SNAPSHOT_INTERVAL=180  # 3 minutes in seconds (for stock snapshots)
+BREAKOUT_SNAPSHOT_INTERVAL=180  # 3 minutes in seconds (for breakout snapshots)
 CRON_SECRET="${CRON_SECRET:-9f3c1a7e4b2d8f0a6e9c3d1b5f7a2e4c8a6d0b9e3f2c1a4d7e8b5c6f0}"
 MARKET_DATA_API_URL="http://localhost:3000/api/cron/capture-market-data"
 OPTION_CHAIN_API_URL="http://localhost:3000/api/option-chain/cron"
@@ -24,6 +25,7 @@ DAILY_HIGH_LOW_API_URL="http://localhost:3000/api/cron/save-daily-high-low"
 BREAKOUT_CHECK_API_URL="http://localhost:3000/api/cron/check-breakouts"
 PCR_API_URL="http://localhost:3000/api/cron/calculate-pcr"
 STOCK_SNAPSHOT_API_URL="http://localhost:3000/api/cron/update-stock-snapshots"
+BREAKOUT_SNAPSHOT_API_URL="http://localhost:3000/api/cron/update-breakout-snapshots"
 
 # Get duration from argument or default to infinite
 DURATION_MINUTES=${1:-0}
@@ -36,8 +38,9 @@ else
 fi
 
 echo -e "${BLUE}📊 Capturing data:${NC}"
-echo -e "${BLUE}   - Market data (sectors): every 5 minutes${NC}"
+echo -e "${BLUE}   - Market data (sectors): every 1 minute${NC}"
 echo -e "${BLUE}   - Stock snapshots (top movers): every 3 minutes (9:15 AM - 3:30 PM IST)${NC}"
+echo -e "${BLUE}   - Breakout snapshots: every 3 minutes (9:15 AM - 3:30 PM IST)${NC}"
 echo -e "${BLUE}   - Option chain OI data: every 3 minutes (9:15 AM - 3:30 PM IST)${NC}"
 echo -e "${BLUE}   - Breakout/Breakdown check: every 1 minute (9:15 AM - 3:30 PM IST)${NC}"
 echo -e "${BLUE}   - PCR calculation: every 1 minute (9:15 AM - 3:30 PM IST)${NC}"
@@ -50,6 +53,7 @@ OI_CAPTURE_COUNT=0
 BREAKOUT_CHECK_COUNT=0
 PCR_CAPTURE_COUNT=0
 STOCK_SNAPSHOT_COUNT=0
+BREAKOUT_SNAPSHOT_COUNT=0
 DAILY_HIGH_LOW_CAPTURED=false
 
 # Function to call API endpoint with retry logic
@@ -88,6 +92,18 @@ call_api() {
         fi
     done
 }
+
+# Cleanup function
+cleanup_intraday_data() {
+    echo -e "${BLUE}🧹 Cleaning up previous day's intraday data...${NC}"
+    response=$(call_api "http://localhost:3000/api/cron/cleanup-intraday" "Cleanup")
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ Cleanup complete: Preserved daily_high_low, cleared live snapshots.${NC}"
+    fi
+}
+
+# Initial cleanup
+cleanup_intraday_data
 
 # Function to capture market data (sectors & stocks)
 capture_market_data() {
@@ -279,8 +295,26 @@ update_stock_snapshots() {
     fi
 }
 
+# Function to update breakout snapshots
+update_breakout_snapshots() {
+    echo -e "${BLUE}📈 Updating breakout snapshots...${NC}"
+    response=$(call_api "$BREAKOUT_SNAPSHOT_API_URL")
+    
+    if [ $? -eq 0 ] && echo "$response" | grep -q '"success":true'; then
+        BREAKOUT_SNAPSHOT_COUNT=$((BREAKOUT_SNAPSHOT_COUNT + 1))
+        updated=$(echo "$response" | grep -o '"updated":[0-9]*' | cut -d':' -f2)
+        breakouts=$(echo "$response" | grep -o '"breakouts":[0-9]*' | cut -d':' -f2)
+        breakdowns=$(echo "$response" | grep -o '"breakdowns":[0-9]*' | cut -d':' -f2)
+        echo -e "${GREEN}✅ Breakout Snapshots: ${updated} stocks (${breakouts} breakouts, ${breakdowns} breakdowns) (total: ${BREAKOUT_SNAPSHOT_COUNT})${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ Breakout snapshots update failed${NC}"
+        return 1
+    fi
+}
+
 # Trap Ctrl+C to show summary
-trap 'echo -e "\n${YELLOW}Stopping auto-capture...${NC}"; echo -e "${GREEN}Market data captures: ${MARKET_CAPTURE_COUNT}${NC}"; echo -e "${GREEN}Stock snapshot updates: ${STOCK_SNAPSHOT_COUNT}${NC}"; echo -e "${GREEN}OI data captures: ${OI_CAPTURE_COUNT}${NC}"; echo -e "${GREEN}Breakout checks: ${BREAKOUT_CHECK_COUNT}${NC}"; echo -e "${GREEN}PCR calculations: ${PCR_CAPTURE_COUNT}${NC}"; echo -e "${GREEN}Daily high-low captured: ${DAILY_HIGH_LOW_CAPTURED}${NC}"; exit 0' INT
+trap 'echo -e "\n${YELLOW}Stopping auto-capture...${NC}"; echo -e "${GREEN}Market data captures: ${MARKET_CAPTURE_COUNT}${NC}"; echo -e "${GREEN}Stock snapshot updates: ${STOCK_SNAPSHOT_COUNT}${NC}"; echo -e "${GREEN}Breakout snapshot updates: ${BREAKOUT_SNAPSHOT_COUNT}${NC}"; echo -e "${GREEN}OI data captures: ${OI_CAPTURE_COUNT}${NC}"; echo -e "${GREEN}Breakout checks: ${BREAKOUT_CHECK_COUNT}${NC}"; echo -e "${GREEN}PCR calculations: ${PCR_CAPTURE_COUNT}${NC}"; echo -e "${GREEN}Daily high-low captured: ${DAILY_HIGH_LOW_CAPTURED}${NC}"; exit 0' INT
 
 # Track last capture times
 LAST_MARKET_CAPTURE=0
@@ -288,6 +322,7 @@ LAST_OI_CAPTURE=0
 LAST_BREAKOUT_CHECK=0
 LAST_PCR_CAPTURE=0
 LAST_STOCK_SNAPSHOT=0
+LAST_BREAKOUT_SNAPSHOT=0
 
 # Initial captures
 capture_market_data
@@ -336,6 +371,12 @@ while true; do
     if [ $((CURRENT_TIME - LAST_STOCK_SNAPSHOT)) -ge $STOCK_SNAPSHOT_INTERVAL ]; then
         update_stock_snapshots
         LAST_STOCK_SNAPSHOT=$(date +%s)
+    fi
+    
+    # Check if it's time to update breakout snapshots (every 5 minutes)
+    if [ $((CURRENT_TIME - LAST_BREAKOUT_SNAPSHOT)) -ge $BREAKOUT_SNAPSHOT_INTERVAL ]; then
+        update_breakout_snapshots
+        LAST_BREAKOUT_SNAPSHOT=$(date +%s)
     fi
     
     # Check if it's 3:35 PM IST for daily high-low capture (only once per day)

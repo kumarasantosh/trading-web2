@@ -261,7 +261,7 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
         </button>
       </div>
 
-      <div className="overflow-x-auto -mx-3 sm:mx-0">
+      <div className="overflow-x-auto overflow-y-auto max-h-[600px] -mx-3 sm:mx-0 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent pr-2">
         {isLoading && stocks.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="relative">

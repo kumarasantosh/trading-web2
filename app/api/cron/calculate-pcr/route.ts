@@ -29,6 +29,8 @@ export async function GET(request: NextRequest) {
         const dayOfWeek = istTime.getUTCDay() // 0 = Sunday, 6 = Saturday
 
         // Check if it's a weekend
+        // DISABLED FOR TESTING
+        /*
         if (dayOfWeek === 0 || dayOfWeek === 6) {
             console.log('[PCR] Skipping - Weekend')
             return NextResponse.json({
@@ -37,6 +39,7 @@ export async function GET(request: NextRequest) {
                 pcr_calculated: 0,
             })
         }
+        */
 
         // Check if within market hours (9:15 AM - 3:30 PM IST)
         const currentTimeInMinutes = istHour * 60 + istMinute

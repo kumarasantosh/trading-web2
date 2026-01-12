@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
         const dayOfWeek = istTime.getUTCDay() // 0 = Sunday, 6 = Saturday
 
         // Check if it's a weekend
-        // TEMPORARY: Disabled for testing
+        // DISABLED FOR TESTING
         /*
         if (dayOfWeek === 0 || dayOfWeek === 6) {
             console.log('[STOCK-SNAPSHOTS] Skipping - Weekend')
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
         console.log(`[STOCK-SNAPSHOTS] Fetching data for ${symbols.length} stocks`)
 
         // Fetch stock data using individual quote API (parallel batches)
-        const BATCH_SIZE = 50 // Process 50 stocks at a time
+        const BATCH_SIZE = 10 // Reduced to avoid rate limits
         const snapshots: Array<{
             symbol: string
             open_price: number
@@ -171,6 +171,11 @@ export async function GET(request: NextRequest) {
             })
 
             console.log(`[STOCK-SNAPSHOTS] Batch complete: ${successCount}/${symbols.length} successful`)
+
+            // Add delay between batches to avoid rate limiting
+            if (i + BATCH_SIZE < symbols.length) {
+                await new Promise(resolve => setTimeout(resolve, 5000)) // 5 second delay
+            }
         }
 
         console.log(`[STOCK-SNAPSHOTS] Processed: ${successCount} success, ${errorCount} errors`)

@@ -34,19 +34,19 @@ export default function Hero() {
                 </span>
               </h1>
               <p className="text-xl sm:text-2xl text-gray-300 max-w-2xl leading-relaxed">
-                Empower your trading journey with real-time data, advanced analytics, 
+                Empower your trading journey with real-time data, advanced analytics,
                 and professional-grade tools designed for modern investors.
               </p>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-              <button
-                onClick={() => scrollToSection('subscribe')}
-                className="group relative bg-white text-black px-8 py-4 rounded-xl font-semibold text-lg overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-2xl"
+              <a
+                href="/sign-in"
+                className="group relative bg-white text-black px-8 py-4 rounded-xl font-semibold text-lg overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-2xl text-center"
               >
                 <span className="relative z-10">Get Started</span>
                 <div className="absolute inset-0 bg-gradient-to-r from-gray-100 to-white opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              </button>
+              </a>
               <button
                 onClick={() => scrollToSection('explore')}
                 className="group bg-transparent border-2 border-white/30 text-white px-8 py-4 rounded-xl font-semibold text-lg backdrop-blur-sm hover:bg-white/10 hover:border-white/50 transition-all duration-300"
@@ -113,66 +113,65 @@ export default function Hero() {
                         [92, 98, 90, 95],
                         [95, 100, 93, 98],
                       ]
-                      
+
                       // Find global min and max for proper normalization
                       const allPrices = candles.flat()
                       const globalMin = Math.min(...allPrices)
                       const globalMax = Math.max(...allPrices)
                       const priceRange = globalMax - globalMin
-                      
+
                       // Normalize price to chart height percentage
                       const normalize = (price: number) => {
                         return ((price - globalMin) / priceRange) * 100
                       }
-                      
+
                       return (
                         <div className="absolute inset-0 flex items-end justify-between gap-0.5">
                           {candles.map((candle, i) => {
                             const [open, high, low, close] = candle
                             const isBullish = close > open
-                            
+
                             const highPos = normalize(high)
                             const lowPos = normalize(low)
                             const openPos = normalize(open)
                             const closePos = normalize(close)
-                            
+
                             const candleTop = Math.max(openPos, closePos)
                             const candleBottom = Math.min(openPos, closePos)
                             const candleHeight = Math.max(candleTop - candleBottom, 2)
-                            
+
                             return (
                               <div key={i} className="flex-1 flex items-center justify-center relative h-full max-w-[8%]">
                                 <div className="relative w-full h-full flex flex-col items-center justify-end">
                                   {/* Top wick (high to candle top) */}
                                   {highPos > candleTop && (
-                                    <div 
+                                    <div
                                       className={`absolute w-0.5 ${isBullish ? 'bg-green-500' : 'bg-red-500'}`}
-                                      style={{ 
+                                      style={{
                                         bottom: `${candleTop}%`,
                                         height: `${highPos - candleTop}%`
                                       }}
                                     />
                                   )}
-                                  
+
                                   {/* Candle body */}
                                   <div
-                                    className={`absolute w-3/4 rounded-sm shadow-sm ${
-                                      isBullish 
-                                        ? 'bg-green-500 border border-green-600' 
+                                    className={`absolute w-3/4 rounded-sm shadow-sm ${isBullish
+                                        ? 'bg-green-500 border border-green-600'
                                         : 'bg-red-500 border border-red-600'
-                                    }`}
-                                    style={{ 
+                                      }`}
+                                    style={{
                                       bottom: `${candleBottom}%`,
                                       height: `${candleHeight}%`,
                                       minHeight: '3px'
                                     }}
                                   />
-                                  
+
                                   {/* Bottom wick (candle bottom to low) */}
                                   {lowPos < candleBottom && (
-                                    <div 
+                                    <div
                                       className={`absolute w-0.5 ${isBullish ? 'bg-green-500' : 'bg-red-500'}`}
-                                      style={{ 
+                                      style={{
                                         bottom: `${lowPos}%`,
                                         height: `${candleBottom - lowPos}%`
                                       }}
@@ -215,7 +214,7 @@ export default function Hero() {
 
             {/* Background Card */}
             <div className="absolute top-8 left-8 -z-10 bg-gray-800/50 backdrop-blur-xl rounded-3xl shadow-2xl p-8 transform -rotate-3 w-full h-full"></div>
-            
+
             {/* Floating Elements */}
             <div className="absolute -top-4 -right-4 w-24 h-24 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20"></div>
             <div className="absolute -bottom-4 -left-4 w-32 h-32 bg-white/5 backdrop-blur-sm rounded-full border border-white/10"></div>

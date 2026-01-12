@@ -75,6 +75,61 @@ export default function BreakoutStocksPage() {
       try {
         console.time('[BREAKOUT] Total fetch time')
 
+        // TRY NEW API FIRST (fast!)
+        try {
+          console.time('[BREAKOUT] Fetch from new breakout snapshots API')
+          const newApiRes = await fetch('/api/breakouts', { cache: 'no-store' })
+
+          if (newApiRes.ok) {
+            const newApiData = await newApiRes.json()
+            console.timeEnd('[BREAKOUT] Fetch from new breakout snapshots API')
+
+            if (newApiData.success && (newApiData.breakouts.length > 0 || newApiData.breakdowns.length > 0)) {
+              console.log('✅ Using NEW breakout snapshots API (instant!)')
+
+              // Map to existing format
+              const mappedBreakouts: BreakoutStock[] = newApiData.breakouts.map((s: any) => ({
+                symbol: s.symbol,
+                name: s.symbol,
+                ltp: s.current_price,
+                dayChange: s.current_price - s.prev_day_close,
+                dayChangePerc: s.breakout_percentage,
+                volume: s.volume,
+                prevDayHigh: s.prev_day_high,
+                prevDayLow: s.prev_day_low,
+                prevDayClose: s.prev_day_close,
+                prevDayOpen: s.prev_day_open || s.prev_day_close,
+                isBreakout: true,
+              }))
+
+              const mappedBreakdowns: BreakoutStock[] = newApiData.breakdowns.map((s: any) => ({
+                symbol: s.symbol,
+                name: s.symbol,
+                ltp: s.current_price,
+                dayChange: s.current_price - s.prev_day_close,
+                dayChangePerc: Math.abs(s.breakdown_percentage),
+                volume: s.volume,
+                prevDayHigh: s.prev_day_high,
+                prevDayLow: s.prev_day_low,
+                prevDayClose: s.prev_day_close,
+                prevDayOpen: s.prev_day_open || s.prev_day_close,
+                isBreakout: false,
+              }))
+
+              setGainers(mappedBreakouts)
+              setLosers(mappedBreakdowns)
+              setUsingDatabase(true)
+              setIsLoading(false)
+              isLoadingRef.current = false
+              console.timeEnd('[BREAKOUT] Total fetch time')
+              return // Exit early - we got the data!
+            }
+          }
+        } catch (newApiError) {
+          console.log('New API not available, falling back to old method')
+        }
+
+        // FALLBACK TO OLD METHOD if new API didn't work
         // STEP 1: Try to fetch yesterday's high-low data from database
         console.time('[BREAKOUT] Fetch daily high-low from DB')
         const dailyHighLowRes = await fetch('/api/daily-high-low')
@@ -362,7 +417,22 @@ export default function BreakoutStocksPage() {
                             className="hover:bg-green-50 cursor-pointer transition-colors duration-150"
                           >
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
+                              <div className="flex items-center gap-2">
+                                {/* Previous Day Sentiment Circle */}
+                                {(() => {
+                                  const isGreen = stock.prevDayClose > stock.prevDayOpen;
+                                  const isRed = stock.prevDayClose < stock.prevDayOpen;
+                                  if (!isGreen && !isRed) return null;
+
+                                  return (
+                                    <div
+                                      className={`w-2 h-2 rounded-full flex-shrink-0 ${isGreen ? 'bg-green-500' : 'bg-red-500'}`}
+                                      title={`Yesterday close (₹${stock.prevDayClose.toFixed(2)}) ${isGreen ? '>' : '<'} open (₹${stock.prevDayOpen.toFixed(2)})`}
+                                    ></div>
+                                  );
+                                })()}
+                                <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
+                              </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="text-sm font-semibold text-gray-900">
@@ -451,7 +521,22 @@ export default function BreakoutStocksPage() {
                             className="hover:bg-red-50 cursor-pointer transition-colors duration-150"
                           >
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
+                              <div className="flex items-center gap-2">
+                                {/* Previous Day Sentiment Circle */}
+                                {(() => {
+                                  const isGreen = stock.prevDayClose > stock.prevDayOpen;
+                                  const isRed = stock.prevDayClose < stock.prevDayOpen;
+                                  if (!isGreen && !isRed) return null;
+
+                                  return (
+                                    <div
+                                      className={`w-2 h-2 rounded-full flex-shrink-0 ${isGreen ? 'bg-green-500' : 'bg-red-500'}`}
+                                      title={`Yesterday close (₹${stock.prevDayClose.toFixed(2)}) ${isGreen ? '>' : '<'} open (₹${stock.prevDayOpen.toFixed(2)})`}
+                                    ></div>
+                                  );
+                                })()}
+                                <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
+                              </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="text-sm font-semibold text-gray-900">

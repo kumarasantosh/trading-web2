@@ -1,11 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import LoginModal from './LoginModal'
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false)
-  const [isLoginOpen, setIsLoginOpen] = useState(false)
 
   useEffect(() => {
     const handleScroll = () => {
@@ -25,11 +23,10 @@ export default function Header() {
   return (
     <>
       <header
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          isScrolled
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled
             ? 'bg-white/95 backdrop-blur-xl shadow-lg py-3'
             : 'bg-transparent py-5'
-        }`}
+          }`}
       >
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
@@ -38,9 +35,8 @@ export default function Header() {
               <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center shadow-lg">
                 <span className="text-white font-bold text-lg">T</span>
               </div>
-              <span className={`text-xl sm:text-2xl font-bold transition-colors ${
-                isScrolled ? 'text-black' : 'text-white'
-              }`}>
+              <span className={`text-xl sm:text-2xl font-bold transition-colors ${isScrolled ? 'text-black' : 'text-white'
+                }`}>
                 Trading Toolkit
               </span>
             </div>
@@ -49,44 +45,40 @@ export default function Header() {
             <nav className="hidden md:flex items-center space-x-8">
               <a
                 href="/momentum"
-                className={`transition-colors font-medium ${
-                  isScrolled 
-                    ? 'text-gray-700 hover:text-black' 
+                className={`transition-colors font-medium ${isScrolled
+                    ? 'text-gray-700 hover:text-black'
                     : 'text-white/80 hover:text-white'
-                }`}
+                  }`}
               >
                 Momentum
               </a>
               <button
                 onClick={() => scrollToSection('explore')}
-                className={`transition-colors font-medium ${
-                  isScrolled 
-                    ? 'text-gray-700 hover:text-black' 
+                className={`transition-colors font-medium ${isScrolled
+                    ? 'text-gray-700 hover:text-black'
                     : 'text-white/80 hover:text-white'
-                }`}
+                  }`}
               >
                 Explore
               </button>
               <button
                 onClick={() => scrollToSection('testimonials')}
-                className={`transition-colors font-medium ${
-                  isScrolled 
-                    ? 'text-gray-700 hover:text-black' 
+                className={`transition-colors font-medium ${isScrolled
+                    ? 'text-gray-700 hover:text-black'
                     : 'text-white/80 hover:text-white'
-                }`}
+                  }`}
               >
                 Testimonials
               </button>
-              <button
-                onClick={() => setIsLoginOpen(true)}
-                className={`transition-colors font-medium ${
-                  isScrolled 
-                    ? 'text-gray-700 hover:text-black' 
+              <a
+                href="/sign-in"
+                className={`transition-colors font-medium ${isScrolled
+                    ? 'text-gray-700 hover:text-black'
                     : 'text-white/80 hover:text-white'
-                }`}
+                  }`}
               >
                 Login
-              </button>
+              </a>
               <button
                 onClick={() => scrollToSection('subscribe')}
                 className="bg-black text-white px-6 py-3 rounded-xl hover:bg-gray-900 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl hover:scale-105"
@@ -149,15 +141,13 @@ export default function Header() {
             >
               Testimonials
             </button>
-            <button
-              onClick={() => {
-                setIsLoginOpen(true)
-                document.getElementById('mobile-nav')?.classList.add('hidden')
-              }}
+            <a
+              href="/sign-in"
+              onClick={() => document.getElementById('mobile-nav')?.classList.add('hidden')}
               className="block w-full text-left text-black hover:text-gray-600 transition-colors font-medium py-2"
             >
               Login
-            </button>
+            </a>
             <button
               onClick={() => {
                 scrollToSection('subscribe')
@@ -170,8 +160,6 @@ export default function Header() {
           </nav>
         </div>
       </header>
-
-      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
     </>
   )
 }

@@ -26,18 +26,18 @@ export async function GET(request: NextRequest) {
         const now = new Date();
         const utcHours = now.getUTCHours();
         const utcMinutes = now.getUTCMinutes();
-        
+
         // Convert to IST (UTC + 5:30)
         // Create a new date object to handle day overflow properly
         const istDate = new Date(now.getTime() + (5.5 * 60 * 60 * 1000)); // Add 5:30 hours
         let istHours = istDate.getUTCHours();
         let istMinutes = istDate.getUTCMinutes();
-        
+
         // Check if within market hours: 9:15 AM to 3:30 PM IST
-        const isWithinMarketHours = 
+        const isWithinMarketHours =
             (istHours > 9 || (istHours === 9 && istMinutes >= 15)) &&
             (istHours < 15 || (istHours === 15 && istMinutes <= 30));
-        
+
         if (!isWithinMarketHours) {
             console.log(`[CRON] Outside market hours (current IST: ${istHours}:${istMinutes.toString().padStart(2, '0')}), skipping capture`);
             return NextResponse.json({
@@ -83,11 +83,11 @@ export async function GET(request: NextRequest) {
                     allCookies = setCookieHeader.split(',').map(c => c.trim().split(';')[0]).join('; ');
                 }
             }
-            
+
             // Step 2: Visit the actual option chain page to establish session
             const optionChainPageUrl = `https://www.nseindia.com/get-quote/optionchain/${symbol}/${symbol}-50`;
             let pageCookieHeaders: string[] = [];
-            
+
             try {
                 const pageResponse = await fetch(optionChainPageUrl, {
                     headers: {
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
                         'Cookie': allCookies,
                     },
                 });
-                
+
                 // Update cookies from page visit
                 pageCookieHeaders = pageResponse.headers.getSetCookie?.() || [];
                 if (pageCookieHeaders.length > 0) {
@@ -108,10 +108,10 @@ export async function GET(request: NextRequest) {
             } catch (pageError) {
                 console.warn('[CRON] Failed to visit option chain page, continuing anyway:', pageError);
             }
-            
+
             // Small delay to ensure session is established
             await new Promise(resolve => setTimeout(resolve, 1500));
-            
+
             return { allCookies, optionChainPageUrl };
         };
 
@@ -141,7 +141,7 @@ export async function GET(request: NextRequest) {
         }
 
         const dropdownData = await dropdownResponse.json();
-        
+
         // Extract expiry dates
         let expiries: string[] = [];
         if (dropdownData && Array.isArray(dropdownData)) {
@@ -163,7 +163,7 @@ export async function GET(request: NextRequest) {
 
         // Fetch option chain data from NSE using the actual expiry date
         const nseUrl = `https://www.nseindia.com/api/NextApi/apiClient/GetQuoteApi?functionName=getOptionChainData&symbol=${symbol}&params=expiryDate=${expiryDate}`;
-        
+
         const response = await fetch(nseUrl, {
             headers: {
                 'Accept': '*/*',
@@ -210,10 +210,10 @@ export async function GET(request: NextRequest) {
         if (Array.isArray(dataArray) && dataArray.length > 0) {
             dataArray.forEach((item: any) => {
                 if (!item) return;
-                
+
                 const ceData = item.CE || {};
                 const peData = item.PE || {};
-                
+
                 const callOI = Number(ceData.openInterest || 0);
                 const putOI = Number(peData.openInterest || 0);
 
@@ -227,20 +227,21 @@ export async function GET(request: NextRequest) {
 
         console.log(`[CRON] Calculated OI totals: Put OI=${totalPutOI}, Call OI=${totalCallOI}, PCR=${pcr.toFixed(4)}`);
 
-        // Convert expiry date from DD-MMM-YYYY to DD-MM-YYYY for storage
+        // Convert expiry date from DD-MMM-YYYY to YYYY-MM-DD for PostgreSQL storage
         const monthMap: { [key: string]: string } = {
             'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
             'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
             'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
         };
-        
+
         let expiryDateForStorage = expiryDate;
         const mmmFormatMatch = expiryDate.match(/^(\d{2})-([A-Za-z]{3})-(\d{4})$/);
         if (mmmFormatMatch) {
             const [, day, month, year] = mmmFormatMatch;
             const monthNum = monthMap[month.toLowerCase()];
             if (monthNum) {
-                expiryDateForStorage = `${day}-${monthNum}-${year}`;
+                // PostgreSQL expects YYYY-MM-DD format
+                expiryDateForStorage = `${year}-${monthNum}-${day}`;
             }
         }
 
