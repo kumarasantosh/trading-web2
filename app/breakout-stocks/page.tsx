@@ -26,6 +26,8 @@ interface DailyHighLow {
   sector: string
   today_high: number
   today_low: number
+  today_open?: number
+  today_close?: number
 }
 
 export default function BreakoutStocksPage() {
@@ -97,8 +99,8 @@ export default function BreakoutStocksPage() {
                 volume: 0,
                 prevDayHigh: parseFloat(s.yesterday_high),
                 prevDayLow: parseFloat(s.yesterday_low || s.yesterday_high),
-                prevDayClose: parseFloat(s.yesterday_high), // Using yesterday_high as close approximation
-                prevDayOpen: parseFloat(s.yesterday_high),
+                prevDayClose: s.today_close || parseFloat(s.yesterday_high),
+                prevDayOpen: s.today_open || parseFloat(s.yesterday_high),
                 isBreakout: true,
               }))
 
@@ -111,8 +113,8 @@ export default function BreakoutStocksPage() {
                 volume: 0,
                 prevDayHigh: parseFloat(s.yesterday_low), // For breakdowns, we care about yesterday_low
                 prevDayLow: parseFloat(s.yesterday_low),
-                prevDayClose: parseFloat(s.yesterday_low),
-                prevDayOpen: parseFloat(s.yesterday_low),
+                prevDayClose: s.today_close || parseFloat(s.yesterday_low),
+                prevDayOpen: s.today_open || parseFloat(s.yesterday_low),
                 isBreakout: false,
               }))
 
@@ -214,8 +216,8 @@ export default function BreakoutStocksPage() {
                 volume: 0,
                 prevDayHigh: prevDayHigh,
                 prevDayLow: prevDayLow,
-                prevDayClose: stock.close,
-                prevDayOpen: stock.open,
+                prevDayClose: highLowData.today_close || stock.close,
+                prevDayOpen: highLowData.today_open || stock.open,
               }
 
               // Check for BREAKOUT (LTP > yesterday's high)

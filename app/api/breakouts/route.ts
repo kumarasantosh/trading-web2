@@ -33,12 +33,38 @@ export async function GET() {
             console.log('[BREAKOUTS-API] breakdown_stocks table might not exist')
         }
 
-        // Since the cron job now clears tables and batch inserts, 
-        // the DB state is always the "latest" real-time state.
-        // We can trust the DB tables directly.
+        // Fetch daily_high_low data for sentiment indicators
+        const { data: dailyHighLowData, error: dailyHighLowError } = await supabaseAdmin
+            .from('daily_high_low')
+            .select('symbol, today_open, today_close')
 
-        const finalBreakouts = breakoutsData || []
-        const finalBreakdowns = breakdownsData || []
+        if (dailyHighLowError) {
+            console.error('[BREAKOUTS-API] Error fetching daily_high_low:', dailyHighLowError)
+        }
+
+        // Create a map for quick lookup
+        const highLowMap = new Map()
+        if (dailyHighLowData) {
+            dailyHighLowData.forEach((item: any) => {
+                highLowMap.set(item.symbol, {
+                    today_open: item.today_open,
+                    today_close: item.today_close
+                })
+            })
+        }
+
+        // Merge the data
+        const finalBreakouts = (breakoutsData || []).map((item: any) => ({
+            ...item,
+            today_open: highLowMap.get(item.symbol)?.today_open,
+            today_close: highLowMap.get(item.symbol)?.today_close,
+        }))
+
+        const finalBreakdowns = (breakdownsData || []).map((item: any) => ({
+            ...item,
+            today_open: highLowMap.get(item.symbol)?.today_open,
+            today_close: highLowMap.get(item.symbol)?.today_close,
+        }))
 
         // Get the most recent update timestamp
         const latestUpdate = finalBreakouts?.[0]?.detected_at || finalBreakdowns?.[0]?.detected_at || new Date().toISOString()

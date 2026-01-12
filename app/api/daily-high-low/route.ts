@@ -13,7 +13,7 @@ export async function GET() {
         // Fetch all daily high-low data from database
         const { data, error } = await supabaseAdmin
             .from('daily_high_low')
-            .select('symbol, sector, today_high, today_low, captured_date')
+            .select('symbol, sector, today_high, today_low, today_open, today_close, captured_date')
             .order('symbol', { ascending: true })
 
         if (error) {

@@ -8,6 +8,10 @@ import yfinance as yf
 import os
 from datetime import datetime, timedelta
 from supabase import create_client, Client
+from dotenv import load_dotenv
+
+# Load environment variables from .env.local
+load_dotenv('.env.local')
 
 # Supabase configuration
 SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
@@ -128,9 +132,11 @@ def main():
                 "sector": sector,
                 "today_high": data["high"],
                 "today_low": data["low"],
+                "today_open": data["open"],
+                "today_close": data["close"],
                 "captured_date": data["date"],
             })
-            print(f"✅ High: ₹{data['high']:.2f}, Low: ₹{data['low']:.2f}")
+            print(f"✅ High: ₹{data['high']:.2f}, Low: ₹{data['low']:.2f}, Open: ₹{data['open']:.2f}, Close: ₹{data['close']:.2f}")
             success_count += 1
         else:
             error_count += 1
@@ -138,13 +144,15 @@ def main():
     print(f"\n📈 Fetched {success_count} stocks successfully, {error_count} errors")
     
     if records:
-        print(f"\n💾 Inserting {len(records)} records into database...")
+        print(f"\n💾 Updating {len(records)} records in database...")
         
-        # Clear existing data
-        supabase.table("daily_high_low").delete().neq("symbol", "").execute()
-        print("🧹 Cleared old data")
+        # Delete existing records for today's date to ensure clean update
+        today_date = records[0]["captured_date"] if records else None
+        if today_date:
+            print(f"🧹 Clearing existing data for {today_date}...")
+            supabase.table("daily_high_low").delete().eq("captured_date", today_date).execute()
         
-        # Insert new data
+        # Insert fresh data
         result = supabase.table("daily_high_low").insert(records).execute()
         
         if result.data:

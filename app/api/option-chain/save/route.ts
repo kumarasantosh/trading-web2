@@ -84,7 +84,13 @@ export async function GET(request: NextRequest) {
             .order('captured_at', { ascending: true });
 
         if (expiryDate) {
-            query = query.eq('expiry_date', expiryDate);
+            let normalizedExpiry = expiryDate;
+            const ddmmYYYYMatch = expiryDate.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+            if (ddmmYYYYMatch) {
+                const [, day, month, year] = ddmmYYYYMatch;
+                normalizedExpiry = `${year}-${month}-${day}`;
+            }
+            query = query.eq('expiry_date', normalizedExpiry);
         }
 
         const { data, error } = await query;
