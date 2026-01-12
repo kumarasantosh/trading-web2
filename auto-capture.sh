@@ -44,7 +44,7 @@ echo -e "${BLUE}   - Breakout snapshots: every 3 minutes (9:15 AM - 3:30 PM IST)
 echo -e "${BLUE}   - Option chain OI data: every 3 minutes (9:15 AM - 3:30 PM IST)${NC}"
 echo -e "${BLUE}   - Breakout/Breakdown check: every 1 minute (9:15 AM - 3:30 PM IST)${NC}"
 echo -e "${BLUE}   - PCR calculation: every 1 minute (9:15 AM - 3:30 PM IST)${NC}"
-echo -e "${BLUE}   - Daily High-Low capture: at 3:35 PM IST (EOD)${NC}"
+echo -e "${BLUE}   - Daily High-Low (yfinance): at startup${NC}"
 echo -e "${YELLOW}Press Ctrl+C to stop${NC}\n"
 
 # Counter for successful captures
@@ -55,6 +55,7 @@ PCR_CAPTURE_COUNT=0
 STOCK_SNAPSHOT_COUNT=0
 BREAKOUT_SNAPSHOT_COUNT=0
 DAILY_HIGH_LOW_CAPTURED=false
+PYTHON_SCRIPT_RUN=false
 
 # Function to call API endpoint with retry logic
 call_api() {
@@ -105,6 +106,32 @@ cleanup_intraday_data() {
 # Initial cleanup
 cleanup_intraday_data
 
+# Run Python script to populate daily_high_low with yesterday's data from yfinance
+populate_daily_high_low() {
+    echo -e "${BLUE}🐍 Running Python script to fetch yesterday's OHLC data from yfinance...${NC}"
+    
+    # Check if python3 is available
+    if ! command -v python3 &> /dev/null; then
+        echo -e "${RED}❌ python3 not found. Please install Python 3.${NC}"
+        return 1
+    fi
+    
+    # Run the Python script
+    python3 populate_daily_high_low.py
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ Python script completed successfully${NC}"
+        PYTHON_SCRIPT_RUN=true
+        return 0
+    else
+        echo -e "${RED}❌ Python script failed${NC}"
+        return 1
+    fi
+}
+
+# Run the Python script at startup
+populate_daily_high_low
+
 # Function to capture market data (sectors & stocks)
 capture_market_data() {
     echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')] Capturing market data (sectors)...${NC}"
@@ -122,22 +149,7 @@ capture_market_data() {
     fi
 }
 
-# Function to capture daily high-low data (runs at 3:35 PM IST)
-capture_daily_high_low() {
-    echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')] Capturing daily high-low (EOD)...${NC}"
-    
-    response=$(call_api "$DAILY_HIGH_LOW_API_URL" "Daily High-Low")
-    if [ $? -eq 0 ] && [ -n "$response" ]; then
-        stocks_captured=$(echo "$response" | grep -o '"stocks_captured":[0-9]*' | cut -d':' -f2)
-        stocks_inserted=$(echo "$response" | grep -o '"stocks_inserted":[0-9]*' | cut -d':' -f2)
-        echo -e "${GREEN}✅ Daily High-Low: ${stocks_inserted} stocks saved (fetched: ${stocks_captured})${NC}"
-        DAILY_HIGH_LOW_CAPTURED=true
-        return 0
-    else
-        echo -e "${RED}❌ Daily High-Low capture failed${NC}"
-        return 1
-    fi
-}
+
 
 # Function to calculate PCR (runs every 1 minute during market hours)
 calculate_pcr() {
@@ -314,7 +326,7 @@ update_breakout_snapshots() {
 }
 
 # Trap Ctrl+C to show summary
-trap 'echo -e "\n${YELLOW}Stopping auto-capture...${NC}"; echo -e "${GREEN}Market data captures: ${MARKET_CAPTURE_COUNT}${NC}"; echo -e "${GREEN}Stock snapshot updates: ${STOCK_SNAPSHOT_COUNT}${NC}"; echo -e "${GREEN}Breakout snapshot updates: ${BREAKOUT_SNAPSHOT_COUNT}${NC}"; echo -e "${GREEN}OI data captures: ${OI_CAPTURE_COUNT}${NC}"; echo -e "${GREEN}Breakout checks: ${BREAKOUT_CHECK_COUNT}${NC}"; echo -e "${GREEN}PCR calculations: ${PCR_CAPTURE_COUNT}${NC}"; echo -e "${GREEN}Daily high-low captured: ${DAILY_HIGH_LOW_CAPTURED}${NC}"; exit 0' INT
+trap 'echo -e "\n${YELLOW}Stopping auto-capture...${NC}"; echo -e "${GREEN}Market data captures: ${MARKET_CAPTURE_COUNT}${NC}"; echo -e "${GREEN}Stock snapshot updates: ${STOCK_SNAPSHOT_COUNT}${NC}"; echo -e "${GREEN}Breakout snapshot updates: ${BREAKOUT_SNAPSHOT_COUNT}${NC}"; echo -e "${GREEN}OI data captures: ${OI_CAPTURE_COUNT}${NC}"; echo -e "${GREEN}Breakout checks: ${BREAKOUT_CHECK_COUNT}${NC}"; echo -e "${GREEN}PCR calculations: ${PCR_CAPTURE_COUNT}${NC}"; echo -e "${GREEN}Python script run: ${PYTHON_SCRIPT_RUN}${NC}"; exit 0' INT
 
 # Track last capture times
 LAST_MARKET_CAPTURE=0
@@ -380,17 +392,6 @@ while true; do
     #     LAST_BREAKOUT_SNAPSHOT=$(date +%s)
     # fi
     
-    # Check if it's 3:35 PM IST for daily high-low capture (only once per day)
-    if [ "$DAILY_HIGH_LOW_CAPTURED" = false ]; then
-        # Get current IST time
-        IST_HOUR=$(TZ='Asia/Kolkata' date '+%H')
-        IST_MINUTE=$(TZ='Asia/Kolkata' date '+%M')
-        
-        # Check if it's between 3:35 PM and 3:40 PM IST (15:35 - 15:40)
-        if [ "$IST_HOUR" -eq 15 ] && [ "$IST_MINUTE" -ge 35 ] && [ "$IST_MINUTE" -lt 40 ]; then
-            capture_daily_high_low
-        fi
-    fi
     
     # Wait 30 seconds before checking again (faster check for more precise timing)
     sleep 30

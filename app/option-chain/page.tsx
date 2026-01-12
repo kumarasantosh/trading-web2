@@ -1039,10 +1039,6 @@ export default function OptionChainPage() {
                                                         <span className="text-xs text-gray-500 font-medium">PCR</span>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">Intraday</span>
-                                                    <span className="text-xs font-medium text-gray-400">Today</span>
-                                                </div>
                                             </div>
                                         </div>
                                     )}
@@ -1067,7 +1063,7 @@ export default function OptionChainPage() {
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <div className="text-xs text-gray-500 font-medium mb-1">Intraday Trend</div>
+                                            <div className="text-xs text-gray-500 font-medium mb-1">Trend</div>
                                             <div className="flex items-center gap-2">
                                                 <div className="flex items-center gap-1">
                                                     <div className="w-3 h-3 rounded-full bg-orange-500"></div>
@@ -1127,10 +1123,6 @@ export default function OptionChainPage() {
                                                 <div className="w-2 h-2 rounded-full bg-orange-500"></div>
                                                 <span className="text-xs text-gray-500 font-medium">PCR</span>
                                             </div>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">Intraday</span>
-                                            <span className="text-xs font-medium text-gray-400">Today</span>
                                         </div>
                                     </div>
                                 </div>

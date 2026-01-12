@@ -170,9 +170,8 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
       return isAfter330PM || isBeforeMarketOpen
     }
 
-    // Use longer interval when market is closed (using DB) - 60 seconds
-    // Use shorter interval during market hours (live data) - 10 seconds
-    const refreshInterval = checkMarketHours() ? 60000 : 10000
+    // Always use 10 second refresh interval for real-time updates
+    const refreshInterval = 10000
     const interval = setInterval(loadMarketData, refreshInterval)
     return () => clearInterval(interval)
   }, [])
