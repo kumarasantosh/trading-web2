@@ -47,7 +47,7 @@ export default function TopLosersList({ onStockClick }: TopLosersListProps) {
             if (!isBackground) setIsLoading(true)
 
             try {
-                // Fetch from new stock snapshots API
+                // 1. Fetch the LIST of top losers from DB (Source of Truth for "Who is a Top Loser")
                 const response = await fetch('/api/top-movers', {
                     cache: 'no-store',
                 })
@@ -59,19 +59,65 @@ export default function TopLosersList({ onStockClick }: TopLosersListProps) {
                 const data = await response.json()
 
                 if (data.success) {
-                    // Map new API response to match old format
-                    const mappedLosers = (data.losers || []).map((stock: any) => ({
+                    // Map initial data from DB
+                    const dbLosers = (data.losers || []).map((stock: any) => ({
                         symbol: stock.symbol,
                         name: stock.symbol,
                         ltp: stock.last_price,
                         dayChange: stock.last_price - stock.open_price,
                         dayChangePerc: stock.percent_change,
                         open: stock.open_price,
+                        prevClose: stock.prev_close || stock.open_price // Fallback
                     }))
 
                     // Filter to only mapped sectors
-                    const filteredLosers = mappedLosers.filter((stock: Stock) => mappedStocksSet.has(stock.symbol))
-                    setLosers(filteredLosers)
+                    const filteredLosers = dbLosers.filter((stock: Stock) => mappedStocksSet.has(stock.symbol))
+
+                    // 2. Fetch LIVE LTP for these specific stocks from Groww
+                    if (filteredLosers.length > 0) {
+                        try {
+                            const { fetchStockData } = await import('@/services/momentumApi')
+                            const symbols = filteredLosers.map((s: Stock) => s.symbol)
+                            const liveData = await fetchStockData(symbols)
+
+                            // Create a map for fast lookup
+                            const liveMap = new Map(liveData.map(item => [item.symbol, item]))
+
+                            // Merge live data
+                            const mergedLosers = filteredLosers.map((dbStock: Stock) => {
+                                const liveStock = liveMap.get(dbStock.symbol)
+                                if (liveStock && liveStock.ltp > 0) {
+                                    // Use live LTP and Open if available
+                                    const liveLtp = liveStock.ltp
+                                    const liveOpen = liveStock.open || dbStock.open || 0
+
+                                    // Recalculate change vs OPEN (consistent with DB logic)
+                                    const basePrice = liveOpen > 0 ? liveOpen : liveLtp
+                                    const change = liveLtp - basePrice
+                                    const changePerc = basePrice > 0 ? (change / basePrice) * 100 : 0
+
+                                    return {
+                                        ...dbStock,
+                                        ltp: liveLtp,
+                                        open: liveOpen,
+                                        dayChange: change,
+                                        dayChangePerc: changePerc
+                                    }
+                                }
+                                return dbStock
+                            })
+
+                            // Re-sort based on new live percentage (Asc for Losers: -5% comes before -2%)
+                            mergedLosers.sort((a: Stock, b: Stock) => a.dayChangePerc - b.dayChangePerc)
+
+                            setLosers(mergedLosers)
+                        } catch (liveError) {
+                            console.error('Failed to fetch live updates:', liveError)
+                            setLosers(filteredLosers) // Fallback to DB data
+                        }
+                    } else {
+                        setLosers(filteredLosers)
+                    }
 
                     // Fetch Yahoo data for previous day info
                     const symbolsToFetch = filteredLosers
