@@ -20,6 +20,9 @@ jobs:
     timeout-minutes: 5
     
     steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        
       - name: ⏰ Check schedule and determine tasks
         id: schedule
         run: |
@@ -113,11 +116,18 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             --max-time 30 -v
 
-      - name: 🏁 Capture daily high-low (EOD)
-        if: steps.schedule.outputs.run_eod == 'true'
+      - name: 🐍 Populate daily high-low from yfinance (Start of Day)
+        if: steps.schedule.outputs.run_cleanup == 'true'
         continue-on-error: true
         run: |
-          echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🏁 Capturing daily high-low (End of Day)..."
-          curl -X GET "${{ env.VERCEL_URL }}/api/cron/save-daily-high-low" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            --max-time 60 -v
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🐍 Running Python script to fetch yesterday's OHLC data from yfinance..."
+          
+          # Install required Python packages
+          pip install yfinance python-dotenv supabase --quiet
+          
+          # Set environment variables from secrets
+          export NEXT_PUBLIC_SUPABASE_URL="${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
+          export SUPABASE_SERVICE_ROLE_KEY="${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
+          
+          # Run the Python script
+          python3 populate_daily_high_low.py
