@@ -1,0 +1,164 @@
+[2026-01-12T06:23:14.965Z] API Request Received 
+[2026-01-12T06:23:14.966Z] Starting fetch for symbol: NIFTY 
+[2026-01-12T06:23:15.119Z] Session Established {
+  "cookieCount": 4,
+  "cookiesSnippet": "AKA_A2=A; ak_bmsc=7E0FA99CBC7ACEBBD52B0BD4D8A59892"
+}
+[2026-01-12T06:23:15.120Z] Fetching Data URL: https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY 
+[2026-01-12T06:23:15.217Z] Response Body Length: 2 
+[2026-01-12T06:23:15.217Z] Invalid Data Structure (Missing records.data) {
+  "keys": []
+}
+[2026-01-12T06:23:59.195Z] API Request Received 
+[2026-01-12T06:23:59.195Z] Starting fetch for symbol: NIFTY 
+[2026-01-12T06:23:59.422Z] Session Established {
+  "cookieCount": 5,
+  "cookiesSnippet": "nsit=hLuDZNAQaatw7hPzPS3PiUob; AKA_A2=A; ak_bmsc=C"
+}
+[2026-01-12T06:23:59.423Z] Fetching Data URL: https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY 
+[2026-01-12T06:23:59.509Z] Response Body Length: 2 
+[2026-01-12T06:23:59.510Z] Invalid Data Structure (Missing records.data) {
+  "keys": []
+}
+[2026-01-12T06:24:24.191Z] API Request Received 
+[2026-01-12T06:24:24.191Z] Starting fetch for symbol: NIFTY 50 
+[2026-01-12T06:24:25.558Z] Session Established {
+  "cookieCount": 5,
+  "cookiesSnippet": "nsit=-k7UczfvuCO_8St2Uq1fFHmM; AKA_A2=A; ak_bmsc=5"
+}
+[2026-01-12T06:24:25.558Z] Fetching Data URL: https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY 50 
+[2026-01-12T06:24:25.867Z] Response Body Length: 2 
+[2026-01-12T06:24:25.867Z] Invalid Data Structure (Missing records.data) {
+  "keys": []
+}
+[2026-01-12T06:24:25.883Z] API Request Received 
+[2026-01-12T06:24:25.884Z] Starting fetch for symbol: NIFTY BANK 
+[2026-01-12T06:24:26.125Z] Session Established {
+  "cookieCount": 5,
+  "cookiesSnippet": "nsit=xcndnSHrH7kXknU6HKyfRBZa; AKA_A2=A; ak_bmsc=3"
+}
+[2026-01-12T06:24:26.126Z] Fetching Data URL: https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY BANK 
+[2026-01-12T06:24:26.411Z] Response Body Length: 2 
+[2026-01-12T06:24:26.412Z] Invalid Data Structure (Missing records.data) {
+  "keys": []
+}
+[2026-01-12T06:24:26.437Z] API Request Received 
+[2026-01-12T06:24:26.438Z] Starting fetch for symbol: NIFTY FIN SERVICE 
+[2026-01-12T06:24:26.674Z] Session Established {
+  "cookieCount": 5,
+  "cookiesSnippet": "nsit=P0K6UpxqWegZYgCg5hvTJLEr; AKA_A2=A; ak_bmsc=5"
+}
+[2026-01-12T06:24:26.674Z] Fetching Data URL: https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY FIN SERVICE 
+[2026-01-12T06:24:26.908Z] Response Body Length: 2 
+[2026-01-12T06:24:26.909Z] Invalid Data Structure (Missing records.data) {
+  "keys": []
+}
+[2026-01-12T06:25:44.860Z] API Request Received 
+[2026-01-12T06:25:44.861Z] [Groww] Starting fetch for NIFTY 
+[2026-01-12T06:25:44.861Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NIFTY 
+[2026-01-12T06:25:44.920Z] [Groww] Response Status: 404 
+[2026-01-12T06:25:44.921Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:25:44.921Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=Nifty 
+[2026-01-12T06:25:44.969Z] [Groww] Response Status: 404 
+[2026-01-12T06:25:44.970Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:25:44.970Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NSE_INDEX%7CNifty%2050 
+[2026-01-12T06:25:45.021Z] [Groww] Response Status: 404 
+[2026-01-12T06:25:45.022Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:25:45.022Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NIFTY%2050 
+[2026-01-12T06:25:45.072Z] [Groww] Response Status: 404 
+[2026-01-12T06:25:45.073Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:25:45.073Z] Groww failed, trying NSE... 
+[2026-01-12T06:25:45.579Z] [NSE] Fetching: https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY 
+[2026-01-12T06:25:45.720Z] [NSE] Empty Data 
+[2026-01-12T06:26:23.014Z] API Request Received 
+[2026-01-12T06:26:23.015Z] [Groww] Starting fetch for NIFTY 50 
+[2026-01-12T06:26:23.015Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NIFTY%2050 
+[2026-01-12T06:26:23.076Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:23.077Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:23.077Z] Groww failed, trying NSE... 
+[2026-01-12T06:26:23.301Z] [NSE] Fetching: https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY 50 
+[2026-01-12T06:26:23.610Z] [NSE] Empty Data 
+[2026-01-12T06:26:23.636Z] API Request Received 
+[2026-01-12T06:26:23.637Z] [Groww] Starting fetch for NIFTY BANK 
+[2026-01-12T06:26:23.637Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NIFTY%20BANK 
+[2026-01-12T06:26:23.690Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:23.691Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:23.691Z] Groww failed, trying NSE... 
+[2026-01-12T06:26:23.921Z] [NSE] Fetching: https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY BANK 
+[2026-01-12T06:26:24.255Z] [NSE] Empty Data 
+[2026-01-12T06:26:24.355Z] API Request Received 
+[2026-01-12T06:26:24.355Z] [Groww] Starting fetch for NIFTY FIN SERVICE 
+[2026-01-12T06:26:24.355Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NIFTY%20FIN%20SERVICE 
+[2026-01-12T06:26:24.403Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:24.404Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:24.404Z] Groww failed, trying NSE... 
+[2026-01-12T06:26:24.625Z] [NSE] Fetching: https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY FIN SERVICE 
+[2026-01-12T06:26:24.909Z] [NSE] Empty Data 
+[2026-01-12T06:26:25.364Z] API Request Received 
+[2026-01-12T06:26:25.364Z] [Groww] Starting fetch for NIFTY 
+[2026-01-12T06:26:25.364Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NIFTY 
+[2026-01-12T06:26:25.409Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:25.409Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:25.409Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=Nifty 
+[2026-01-12T06:26:25.452Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:25.453Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:25.453Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NSE_INDEX%7CNifty%2050 
+[2026-01-12T06:26:25.499Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:25.500Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:25.500Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NIFTY%2050 
+[2026-01-12T06:26:25.551Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:25.551Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:25.551Z] Groww failed, trying NSE... 
+[2026-01-12T06:26:25.741Z] [NSE] Fetching: https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY 
+[2026-01-12T06:26:25.778Z] [NSE] Empty Data 
+[2026-01-12T06:26:26.076Z] API Request Received 
+[2026-01-12T06:26:26.076Z] [Groww] Starting fetch for NIFTY 
+[2026-01-12T06:26:26.076Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NIFTY 
+[2026-01-12T06:26:26.135Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:26.136Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:26.136Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=Nifty 
+[2026-01-12T06:26:26.185Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:26.185Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:26.185Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NSE_INDEX%7CNifty%2050 
+[2026-01-12T06:26:26.239Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:26.240Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:26.240Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NIFTY%2050 
+[2026-01-12T06:26:26.290Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:26.291Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:26.291Z] Groww failed, trying NSE... 
+[2026-01-12T06:26:26.424Z] [NSE] Fetching: https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY 
+[2026-01-12T06:26:26.459Z] [NSE] Empty Data 
+[2026-01-12T06:26:27.654Z] API Request Received 
+[2026-01-12T06:26:27.654Z] [Groww] Starting fetch for NIFTY 
+[2026-01-12T06:26:27.654Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NIFTY 
+[2026-01-12T06:26:27.705Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:27.706Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:27.706Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=Nifty 
+[2026-01-12T06:26:27.758Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:27.759Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:27.759Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NSE_INDEX%7CNifty%2050 
+[2026-01-12T06:26:27.838Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:27.839Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:27.839Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NIFTY%2050 
+[2026-01-12T06:26:27.909Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:27.911Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:27.911Z] Groww failed, trying NSE... 
+[2026-01-12T06:26:28.122Z] [NSE] Fetching: https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY 
+[2026-01-12T06:26:28.156Z] [NSE] Empty Data 
+[2026-01-12T06:26:28.200Z] API Request Received 
+[2026-01-12T06:26:28.200Z] [Groww] Starting fetch for NIFTY 
+[2026-01-12T06:26:28.200Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NIFTY 
+[2026-01-12T06:26:28.244Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:28.245Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:28.245Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=Nifty 
+[2026-01-12T06:26:28.290Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:28.290Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:28.290Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NSE_INDEX%7CNifty%2050 
+[2026-01-12T06:26:28.334Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:28.334Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:28.334Z] [Groww] Trying URL: https://groww.in/v1/api/option_chain_service/v1/option_chain?underlying_key=NIFTY%2050 
+[2026-01-12T06:26:28.383Z] [Groww] Response Status: 404 
+[2026-01-12T06:26:28.383Z] [Groww] Error Body: 404 page not found 
+[2026-01-12T06:26:28.383Z] Groww failed, trying NSE... 
+[2026-01-12T06:26:28.588Z] [NSE] Fetching: https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY 
+[2026-01-12T06:26:28.623Z] [NSE] Empty Data 

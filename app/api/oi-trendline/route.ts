@@ -17,28 +17,31 @@ export async function GET(request: NextRequest) {
         const expiryDate = searchParams.get('expiryDate');
         const date = searchParams.get('date'); // Date in YYYY-MM-DD format
 
-        if (!date) {
-            return NextResponse.json(
-                { error: 'Missing required parameter: date (YYYY-MM-DD)' },
-                { status: 400 }
-            );
-        }
-
-        // Calculate market hours in UTC
-        // Market hours: 9:15 AM - 3:30 PM IST
-        // IST is UTC+5:30
-        // 9:15 AM IST = 3:45 AM UTC
-        // 3:30 PM IST = 10:00 AM UTC
-        const startTime = `${date}T03:45:00.000Z`; // 9:15 AM IST
-        const endTime = `${date}T10:00:00.000Z`; // 3:30 PM IST
-
+        // If no date is provided, default to today
         let query = supabaseAdmin
             .from('oi_trendline')
             .select('*')
             .eq('symbol', symbol)
-            .gte('captured_at', startTime)
-            .lte('captured_at', endTime)
             .order('captured_at', { ascending: true });
+
+        if (date) {
+            // Market hours: 9:15 AM - 3:30 PM IST (3:45 AM - 10:00 AM UTC)
+            const startTime = `${date}T03:45:00.000Z`;
+            query = query.gte('captured_at', startTime);
+
+            // If it's today, don't limit the end time to show live data
+            const today = new Date().toISOString().split('T')[0];
+            if (date !== today) {
+                const endTime = `${date}T10:00:00.000Z`;
+                query = query.lte('captured_at', endTime);
+            }
+        } else {
+            // No date provided, default to today's market data (since 9:15 AM IST)
+            const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
+            const startTime = `${todayStr}T03:45:00.000Z`;
+            query = query.gte('captured_at', startTime);
+        }
 
         if (expiryDate) {
             query = query.eq('expiry_date', expiryDate);

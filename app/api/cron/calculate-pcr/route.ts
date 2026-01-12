@@ -56,11 +56,13 @@ export async function GET(request: NextRequest) {
         }
 
         // Round to nearest minute for consistent timestamps
-        const capturedAt = new Date(istTime)
+        // Storage should be in UTC
+        const capturedAt = new Date(now)
         capturedAt.setSeconds(0, 0)
+        capturedAt.setMilliseconds(0)
         const capturedAtISO = capturedAt.toISOString()
 
-        console.log(`[PCR] Calculating PCR at ${capturedAtISO}`)
+        console.log(`[PCR] Calculating PCR at ${capturedAtISO} (IST: ${istTime.toISOString()})`)
 
         const indices = ['NIFTY', 'BANKNIFTY', 'FINNIFTY']
         const pcrResults: any[] = []
@@ -119,9 +121,9 @@ async function calculatePCR(indexName: string, capturedAt: string) {
     try {
         // Map index names to Groww symbols
         const symbolMap: Record<string, string> = {
-            'NIFTY': 'NIFTY 50',
-            'BANKNIFTY': 'NIFTY BANK',
-            'FINNIFTY': 'NIFTY FIN SERVICE',
+            'NIFTY': 'NIFTY',
+            'BANKNIFTY': 'BANKNIFTY',
+            'FINNIFTY': 'FINNIFTY',
         }
 
         const growwSymbol = symbolMap[indexName]

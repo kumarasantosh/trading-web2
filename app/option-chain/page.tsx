@@ -26,6 +26,7 @@ interface PcrData {
     time: string
     timestamp: number
     pcr: number
+    spot?: number
 }
 
 export default function OptionChainPage() {
@@ -86,7 +87,7 @@ export default function OptionChainPage() {
     }, [])
 
     // Update PCR chart data
-    const updatePcrChart = useCallback((pcrValue: number, timestamp: Date) => {
+    const updatePcrChart = useCallback((pcrValue: number, spotValue: number, timestamp: Date) => {
         // Check if we need to reset for new trading day
         if (shouldResetTrendLine(timestamp)) {
             console.log('[PCR Chart] Resetting for new trading day')
@@ -98,14 +99,14 @@ export default function OptionChainPage() {
             timeZone: 'Asia/Kolkata',
             hour: '2-digit',
             minute: '2-digit',
-            second: '2-digit',
             hour12: false
         })
 
         const newPcrPoint: PcrData = {
             time: timeStr,
             timestamp: timestamp.getTime(),
-            pcr: pcrValue
+            pcr: pcrValue,
+            spot: spotValue
         }
 
         // Add to history
@@ -118,6 +119,64 @@ export default function OptionChainPage() {
 
         setPcrData([...pcrHistoryRef.current])
     }, [shouldResetTrendLine])
+
+    // Fetch trendline data for the full day
+    const fetchTrendlineData = useCallback(async () => {
+        try {
+            const response = await fetch(`/api/pcr-trendline?symbol=${symbol}`)
+            if (!response.ok) {
+                console.error('Failed to fetch trendline data')
+                return
+            }
+
+            const result = await response.json()
+            if (result.success && Array.isArray(result.data)) {
+                const mappedData = result.data.map((item: any) => {
+                    const timestamp = new Date(item.time)
+                    // Extract HH:mm from ISO string (e.g. 2026-01-12T12:56:00.000Z -> 12:56)
+                    // If stored correctly as UTC (07:26), this would show 07:26.
+                    // If stored shifted (12:56), this shows 12:56.
+                    // To handle both, we should ideally use the local time from the Date object 
+                    // BUT without the shift if it was already shifted.
+
+                    // Let's use a more robust way:
+                    const istTime = timestamp.toLocaleTimeString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    })
+
+                    // If the time is after 15:30 IST but before 21:00 IST, it's likely a double-shifted record
+                    // In that case, we subtract 5.30 hours to show the intended time.
+                    // This is a heuristic for existing bad data.
+                    const [h, m] = istTime.split(':').map(Number)
+                    const totalMinutes = h * 60 + m
+                    let displayTime = istTime
+
+                    if (totalMinutes > 15 * 60 + 30 && totalMinutes < 21 * 60) {
+                        const correctedMinutes = totalMinutes - (5 * 60 + 30)
+                        const ch = Math.floor(correctedMinutes / 60)
+                        const cm = correctedMinutes % 60
+                        displayTime = `${ch.toString().padStart(2, '0')}:${cm.toString().padStart(2, '0')}`
+                    }
+
+                    return {
+                        time: displayTime,
+                        timestamp: timestamp.getTime(),
+                        pcr: item.pcr,
+                        spot: item.spot
+                    }
+                })
+
+                console.log(`[PCR Chart] Loaded ${mappedData.length} points from pcr-trendline API`)
+                setPcrData(mappedData)
+                pcrHistoryRef.current = mappedData
+            }
+        } catch (error) {
+            console.error('Error fetching trendline data:', error)
+        }
+    }, [symbol])
 
     // Calculate net seller volume delta
     // delta_t = (Total Put Sellers Volume_t) - (Total Call Sellers Volume_t)
@@ -270,7 +329,7 @@ export default function OptionChainPage() {
 
             // Update PCR chart
             console.log('[OptionChain] Updating PCR chart with value:', calculatedPCR)
-            updatePcrChart(calculatedPCR, dataTime)
+            updatePcrChart(calculatedPCR, underlyingValue, dataTime)
 
 
 
@@ -419,6 +478,9 @@ export default function OptionChainPage() {
                     fetchOptionChainData()
                 }
             }, 300000) // 5 minutes
+
+            // Support full historical trendline fetch
+            fetchTrendlineData()
         }
 
         return () => {
@@ -427,7 +489,7 @@ export default function OptionChainPage() {
                 intervalRef.current = null
             }
         }
-    }, [fetchOptionChainData, isReplayMode])
+    }, [fetchOptionChainData, fetchTrendlineData, isReplayMode])
 
     // Reset expiry when symbol changes
     useEffect(() => {
@@ -907,96 +969,79 @@ export default function OptionChainPage() {
 
                                     {/* PCR Chart - Show in 1x4 or 4x4 layout */}
                                     {(chartType === '1x4' || chartType === '4x4') && pcrData.length > 0 && (
-                                        <div className="bg-gray-800 rounded-2xl border border-gray-700 shadow-xl p-6">
-                                            <div className="mb-4 flex items-center justify-between">
-                                                <h2 className="text-xl font-extrabold text-white">Put Call Ratio (PCR)</h2>
-                                                {dataCaptureTime && (
-                                                    <div className="text-xs text-gray-400">
-                                                        {dataCaptureTime.toLocaleString('en-IN', {
-                                                            timeZone: 'Asia/Kolkata',
-                                                            day: '2-digit',
-                                                            month: 'short',
-                                                            year: 'numeric',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit',
-                                                            second: '2-digit',
-                                                            hour12: true
-                                                        })}
-                                                        {isReplayMode && (
-                                                            <span className="ml-2 text-blue-400 font-medium">(Historical)</span>
-                                                        )}
+                                        <div className="bg-white rounded-2xl border border-gray-200 shadow-xl p-6">
+                                            <div className="flex items-center justify-between mb-6">
+                                                <div className="flex items-center gap-8">
+                                                    <div>
+                                                        <div className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">PCR</div>
+                                                        <div className="text-xl font-bold text-gray-900">{pcr.toFixed(4)}</div>
                                                     </div>
-                                                )}
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-xs text-gray-500 font-medium mb-1">PCR Trend</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="flex items-center gap-1">
+                                                            <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                                                            <span className="text-xs font-semibold text-gray-700">PCR</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
+
                                             <ResponsiveContainer width="100%" height={500}>
                                                 <LineChart
                                                     data={pcrData}
-                                                    margin={{ top: 20, right: 30, left: 60, bottom: 80 }}
+                                                    margin={{ top: 20, right: 30, left: 10, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff" opacity={0.3} />
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                                                     <XAxis
                                                         dataKey="time"
-                                                        tick={{ fontSize: 11, fill: '#ffffff' }}
-                                                        angle={-45}
-                                                        textAnchor="end"
-                                                        height={80}
-                                                        stroke="#ffffff"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        tick={{ fontSize: 11, fill: '#9ca3af' }}
+                                                        minTickGap={60}
                                                     />
                                                     <YAxis
-                                                        label={{ value: 'PCR', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 12, fill: '#ffffff' } }}
-                                                        tick={{ fontSize: 11, fill: '#ffffff' }}
-                                                        stroke="#ffffff"
-                                                        tickFormatter={(value) => {
-                                                            return value.toFixed(2)
-                                                        }}
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        tick={{ fontSize: 11, fill: '#9ca3af' }}
                                                         domain={['auto', 'auto']}
+                                                        tickFormatter={(val) => val.toFixed(2)}
                                                     />
                                                     <Tooltip
                                                         contentStyle={{
-                                                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                                                            border: '1px solid #ffffff',
-                                                            borderRadius: '4px',
-                                                            color: '#ffffff'
+                                                            borderRadius: '12px',
+                                                            border: 'none',
+                                                            boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                                                            padding: '12px'
                                                         }}
-                                                        formatter={(value: number) => {
-                                                            return [`${value.toFixed(3)}`, 'PCR']
+                                                        formatter={(value: number, name: string) => {
+                                                            return [value.toFixed(4), name]
                                                         }}
-                                                        labelFormatter={(label) => `Time: ${label}`}
-                                                        labelStyle={{ color: '#ffffff' }}
+                                                        labelStyle={{ color: '#111827', fontWeight: '600', marginBottom: '4px' }}
                                                     />
-                                                    <Legend
-                                                        wrapperStyle={{ color: '#ffffff', paddingTop: '10px' }}
-                                                        iconType="line"
-                                                    />
-                                                    <ReferenceLine y={1.0} stroke="#ffffff" strokeDasharray="3 3" opacity={0.5} label={{ value: 'Neutral (1.0)', position: 'right', fill: '#ffffff', fontSize: 11 }} />
-                                                    <ReferenceLine y={0.8} stroke="#ef4444" strokeDasharray="2 2" opacity={0.4} label={{ value: 'Bearish (0.8)', position: 'right', fill: '#ef4444', fontSize: 10 }} />
-                                                    <ReferenceLine y={1.2} stroke="#10b981" strokeDasharray="2 2" opacity={0.4} label={{ value: 'Bullish (1.2)', position: 'right', fill: '#10b981', fontSize: 10 }} />
                                                     <Line
                                                         type="monotone"
                                                         dataKey="pcr"
-                                                        stroke="#3b82f6"
-                                                        strokeWidth={3}
+                                                        stroke="#f97316"
+                                                        strokeWidth={2.5}
                                                         dot={false}
                                                         name="PCR"
+                                                        activeDot={{ r: 6, strokeWidth: 0 }}
                                                     />
                                                 </LineChart>
                                             </ResponsiveContainer>
-                                            <div className="mt-4 text-xs text-gray-400 space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-4 h-1 bg-blue-500"></div>
-                                                    <span>PCR: Put Call Ratio</span>
+
+                                            <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
+                                                <div className="flex gap-4">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                                                        <span className="text-xs text-gray-500 font-medium">PCR</span>
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-4 h-0.5 bg-white opacity-50"></div>
-                                                    <span>Neutral: PCR = 1.0</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-4 h-0.5 bg-green-500 opacity-50"></div>
-                                                    <span>Bullish: PCR &gt; 1.2</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-4 h-0.5 bg-red-500 opacity-50"></div>
-                                                    <span>Bearish: PCR &lt; 0.8</span>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">Intraday</span>
+                                                    <span className="text-xs font-medium text-gray-400">Today</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -1013,96 +1058,79 @@ export default function OptionChainPage() {
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
                             {/* PCR Chart */}
                             {pcrData.length > 0 && (
-                                <div className="bg-gray-800 rounded-2xl border border-gray-700 shadow-xl p-6">
-                                    <div className="mb-4 flex items-center justify-between">
-                                        <h2 className="text-xl font-extrabold text-white">Put Call Ratio (PCR)</h2>
-                                        {dataCaptureTime && (
-                                            <div className="text-xs text-gray-400">
-                                                {dataCaptureTime.toLocaleString('en-IN', {
-                                                    timeZone: 'Asia/Kolkata',
-                                                    day: '2-digit',
-                                                    month: 'short',
-                                                    year: 'numeric',
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                    second: '2-digit',
-                                                    hour12: true
-                                                })}
-                                                {isReplayMode && (
-                                                    <span className="ml-2 text-blue-400 font-medium">(Historical)</span>
-                                                )}
+                                <div className="bg-white rounded-2xl border border-gray-200 shadow-xl p-6">
+                                    <div className="flex items-center justify-between mb-6">
+                                        <div className="flex items-center gap-8">
+                                            <div>
+                                                <div className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">PCR</div>
+                                                <div className="text-xl font-bold text-gray-900">{pcr.toFixed(4)}</div>
                                             </div>
-                                        )}
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-xs text-gray-500 font-medium mb-1">Intraday Trend</div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex items-center gap-1">
+                                                    <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                                                    <span className="text-xs font-semibold text-gray-700">PCR</span>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
+
                                     <ResponsiveContainer width="100%" height={500}>
                                         <LineChart
                                             data={pcrData}
-                                            margin={{ top: 20, right: 30, left: 60, bottom: 80 }}
+                                            margin={{ top: 20, right: 30, left: 10, bottom: 20 }}
                                         >
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff" opacity={0.3} />
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                                             <XAxis
                                                 dataKey="time"
-                                                tick={{ fontSize: 11, fill: '#ffffff' }}
-                                                angle={-45}
-                                                textAnchor="end"
-                                                height={80}
-                                                stroke="#ffffff"
+                                                axisLine={false}
+                                                tickLine={false}
+                                                tick={{ fontSize: 11, fill: '#9ca3af' }}
+                                                minTickGap={30}
                                             />
                                             <YAxis
-                                                label={{ value: 'PCR', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 12, fill: '#ffffff' } }}
-                                                tick={{ fontSize: 11, fill: '#ffffff' }}
-                                                stroke="#ffffff"
-                                                tickFormatter={(value) => {
-                                                    return value.toFixed(2)
-                                                }}
+                                                axisLine={false}
+                                                tickLine={false}
+                                                tick={{ fontSize: 11, fill: '#9ca3af' }}
                                                 domain={['auto', 'auto']}
+                                                tickFormatter={(val) => val.toFixed(2)}
                                             />
                                             <Tooltip
                                                 contentStyle={{
-                                                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                                                    border: '1px solid #ffffff',
-                                                    borderRadius: '4px',
-                                                    color: '#ffffff'
+                                                    borderRadius: '12px',
+                                                    border: 'none',
+                                                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                                                    padding: '12px'
                                                 }}
-                                                formatter={(value: number) => {
-                                                    return [`${value.toFixed(3)}`, 'PCR']
+                                                formatter={(value: number, name: string) => {
+                                                    return [value.toFixed(4), name]
                                                 }}
-                                                labelFormatter={(label) => `Time: ${label}`}
-                                                labelStyle={{ color: '#ffffff' }}
+                                                labelStyle={{ color: '#111827', fontWeight: '600', marginBottom: '4px' }}
                                             />
-                                            <Legend
-                                                wrapperStyle={{ color: '#ffffff', paddingTop: '10px' }}
-                                                iconType="line"
-                                            />
-                                            <ReferenceLine y={1.0} stroke="#ffffff" strokeDasharray="3 3" opacity={0.5} label={{ value: 'Neutral (1.0)', position: 'right', fill: '#ffffff', fontSize: 11 }} />
-                                            <ReferenceLine y={0.8} stroke="#ef4444" strokeDasharray="2 2" opacity={0.4} label={{ value: 'Bearish (0.8)', position: 'right', fill: '#ef4444', fontSize: 10 }} />
-                                            <ReferenceLine y={1.2} stroke="#10b981" strokeDasharray="2 2" opacity={0.4} label={{ value: 'Bullish (1.2)', position: 'right', fill: '#10b981', fontSize: 10 }} />
                                             <Line
                                                 type="monotone"
                                                 dataKey="pcr"
-                                                stroke="#3b82f6"
-                                                strokeWidth={3}
+                                                stroke="#f97316"
+                                                strokeWidth={2.5}
                                                 dot={false}
                                                 name="PCR"
+                                                activeDot={{ r: 6, strokeWidth: 0 }}
                                             />
                                         </LineChart>
                                     </ResponsiveContainer>
-                                    <div className="mt-4 text-xs text-gray-400 space-y-1">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-4 h-1 bg-blue-500"></div>
-                                            <span>PCR: Put Call Ratio (Put OI / Call OI)</span>
+
+                                    <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
+                                        <div className="flex gap-4">
+                                            <div className="flex items-center gap-1.5">
+                                                <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                                                <span className="text-xs text-gray-500 font-medium">PCR</span>
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-4 h-0.5 bg-white opacity-50"></div>
-                                            <span>Neutral: PCR = 1.0 (Equal Put and Call OI)</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-4 h-0.5 bg-green-500 opacity-50"></div>
-                                            <span>Bullish: PCR &gt; 1.2 (More Put OI, bearish sentiment)</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-4 h-0.5 bg-red-500 opacity-50"></div>
-                                            <span>Bearish: PCR &lt; 0.8 (More Call OI, bullish sentiment)</span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">Intraday</span>
+                                            <span className="text-xs font-medium text-gray-400">Today</span>
                                         </div>
                                     </div>
                                 </div>
