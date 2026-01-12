@@ -55,15 +55,15 @@ export default function SectorPerformance({
       console.log('[SectorPerformance] ❌ Skipping live fetch - in replay mode')
       return
     }
-    
-      // Fetching live data
-    
+
+    // Fetching live data
+
     try {
-          setIsLoadingData(true)
+      setIsLoadingData(true)
       setNoDataForTime(false)
       const { fetchSectorData } = await import('@/services/momentumApi')
       const data = await fetchSectorData()
-      
+
       // CRITICAL: Double-check we're still not in replay mode after async fetch
       // This prevents live data from showing when user switched to historical view
       if (isReplayModeRef.current) {
@@ -71,8 +71,8 @@ export default function SectorPerformance({
         setIsLoadingData(false)
         return
       }
-      
-            // Setting live sector data
+
+      // Setting live sector data
       // Transform to SectorData format with required properties
       const transformedData: SectorData[] = data.map((item: any) => ({
         ...item,
@@ -96,28 +96,28 @@ export default function SectorPerformance({
       setIsLoadingData(true)
       setNoDataForTime(false)
       setSectorData([]) // Clear data immediately
-      
+
       // Calculate time range around the selected time (±3 minutes)
       // API will only return data if it's within ±2.5 minutes of the target
       const start = new Date(time)
       start.setMinutes(start.getMinutes() - 3)
       const end = new Date(time)
       end.setMinutes(end.getMinutes() + 3)
-      
+
       console.log('[SectorPerformance] Fetching historical data for time:', time.toISOString())
       console.log('[SectorPerformance] Query range:', start.toISOString(), 'to', end.toISOString())
 
-          const response = await fetch(
+      const response = await fetch(
         `/api/snapshots?type=sector&start=${start.toISOString()}&end=${end.toISOString()}`
-          )
+      )
 
       if (!response.ok) {
         console.error('[SectorPerformance] API response not OK:', response.status)
         setNoDataForTime(true)
-              setSectorData([])
-              setIsLoadingData(false)
-              return
-            }
+        setSectorData([])
+        setIsLoadingData(false)
+        return
+      }
 
       const result = await response.json()
       console.log('[SectorPerformance] API response:', { snapshotCount: result.snapshots?.length || 0 })
@@ -132,25 +132,25 @@ export default function SectorPerformance({
         return
       }
 
-            // Transform snapshot data to SectorData format
-            const transformedData: SectorData[] = snapshots.map((snap: any) => ({
-              name: snap.sector_name,
-              previousClose: snap.previous_close,
-              changePercent: snap.change_percent,
-              open: snap.open_price,
-              last: snap.last_price,
-              variation: snap.variation,
-              oneWeekAgoVal: snap.one_week_ago_val,
-              oneMonthAgoVal: snap.one_month_ago_val,
-              oneYearAgoVal: snap.one_year_ago_val,
-              previousHigh: snap.previous_high || snap.last_price || 0,
-              previousLow: snap.previous_low || snap.last_price || 0,
-            }))
+      // Transform snapshot data to SectorData format
+      const transformedData: SectorData[] = snapshots.map((snap: any) => ({
+        name: snap.sector_name,
+        previousClose: snap.previous_close,
+        changePercent: snap.change_percent,
+        open: snap.open_price,
+        last: snap.last_price,
+        variation: snap.variation,
+        oneWeekAgoVal: snap.one_week_ago_val,
+        oneMonthAgoVal: snap.one_month_ago_val,
+        oneYearAgoVal: snap.one_year_ago_val,
+        previousHigh: snap.previous_high || snap.last_price || 0,
+        previousLow: snap.previous_low || snap.last_price || 0,
+      }))
 
-            const sortedData = transformedData.sort((a, b) => b.changePercent - a.changePercent)
+      const sortedData = transformedData.sort((a, b) => b.changePercent - a.changePercent)
       console.log('[SectorPerformance] Setting sector data:', sortedData.length, 'sectors')
       console.log('[SectorPerformance] Sample data:', sortedData.slice(0, 3).map(s => ({ name: s.name, last: s.last, change: s.changePercent })))
-      
+
       // Get the actual captured_at time from snapshots
       // The API returns snapshots with captured_at, get the most common one (they should all be the same)
       if (snapshots.length > 0) {
@@ -163,31 +163,31 @@ export default function SectorPerformance({
           })
           const mostCommonTime = Array.from(timeCounts.entries())
             .sort((a, b) => b[1] - a[1])[0]?.[0]
-          
+
           if (mostCommonTime) {
             setDataCaptureTime(new Date(mostCommonTime))
             console.log('[SectorPerformance] Data capture time:', mostCommonTime)
           }
         }
       }
-      
-          setSectorData(sortedData)
+
+      setSectorData(sortedData)
       setNoDataForTime(false)
-      } catch (error) {
+    } catch (error) {
       console.error('Error fetching historical data:', error)
       setNoDataForTime(true)
-          setSectorData([])
-      } finally {
-        setIsLoadingData(false)
-      }
+      setSectorData([])
+    } finally {
+      setIsLoadingData(false)
+    }
   }, [])
 
   useEffect(() => {
     console.log('[SectorPerformance] useEffect triggered:', { isReplayMode, replayTime: replayTime?.toISOString() })
-    
+
     // Clear any interval from previous render
     let interval: NodeJS.Timeout | null = null
-    
+
     if (isReplayMode && replayTime) {
       // REPLAY MODE - Fetching historical data
       // CRITICAL: Clear any existing data immediately when entering replay mode
@@ -208,7 +208,7 @@ export default function SectorPerformance({
         }
       }, 60000)
     }
-    
+
     return () => {
       if (interval) {
         clearInterval(interval)
@@ -244,9 +244,9 @@ export default function SectorPerformance({
 
   // DEBUG: Log state on every render (only in development)
   if (process.env.NODE_ENV === 'development') {
-    console.log('[SectorPerformance] RENDER STATE:', { 
-      isReplayMode, 
-      noDataForTime, 
+    console.log('[SectorPerformance] RENDER STATE:', {
+      isReplayMode,
+      noDataForTime,
       sectorDataLength: sectorData.length,
       isLoadingData,
       replayTime: replayTime?.toISOString()
@@ -257,22 +257,22 @@ export default function SectorPerformance({
   // Only show data that was explicitly fetched for the selected historical time
   // We use a ref to track if we're currently in a valid historical data state
   const hasValidHistoricalData = isReplayMode && sectorData.length > 0 && !noDataForTime && !isLoadingData
-  
+
   // In live mode, show data if available
   const hasLiveData = !isReplayMode && sectorData.length > 0
-  
+
   const shouldShowData = hasValidHistoricalData || hasLiveData
-  
+
   const sortedSectorData = shouldShowData
     ? [...sectorData].sort((a, b) => {
-    const changeA = getChangePercent(a)
-    const changeB = getChangePercent(b)
-    if (sortOrder === 'desc') {
-      return changeB - changeA
-    } else {
-      return changeA - changeB
-    }
-  })
+      const changeA = getChangePercent(a)
+      const changeB = getChangePercent(b)
+      if (sortOrder === 'desc') {
+        return changeB - changeA
+      } else {
+        return changeA - changeB
+      }
+    })
     : []
 
   // Calculate min and max for better bar distribution using selected range
@@ -370,7 +370,7 @@ export default function SectorPerformance({
           <div className="flex flex-col items-center justify-center py-12">
             <div className="text-4xl mb-4">📊</div>
             <div className="text-sm text-gray-500 text-center max-w-md">
-              No sector data was captured for {replayTime?.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}. 
+              No sector data was captured for {replayTime?.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.
               Data is only available for times when snapshots were saved.
             </div>
           </div>
@@ -382,78 +382,78 @@ export default function SectorPerformance({
           </div>
         ) : (
           sortedSectorData.map((sector, index) => {
-          const changePercent = getChangePercent(sector)
-          const isPositive = changePercent >= 0
-          // Calculate bar width as percentage of the range
-          const barWidth = Math.min((Math.abs(changePercent) / range) * 100, 100)
-          const isClickable = hasSectorStocks(sector.name)
-          const isSelected = selectedSector === sector.name
+            const changePercent = getChangePercent(sector)
+            const isPositive = changePercent >= 0
+            // Calculate bar width as percentage of the range
+            const barWidth = Math.min((Math.abs(changePercent) / range) * 100, 100)
+            const isClickable = hasSectorStocks(sector.name)
+            const isSelected = selectedSector === sector.name
 
-          return (
-            <div
-              key={index}
-              onClick={() => isClickable && onSectorClick(sector.name)}
-              className={`relative flex flex-row sm:grid sm:grid-cols-[minmax(120px,200px)_1fr] gap-2 items-center p-2 sm:p-1 rounded-lg transition-all duration-200 group ${isClickable ? 'cursor-pointer hover:bg-blue-50 hover:shadow-md' : 'hover:bg-gray-50'
-                } ${isSelected ? 'bg-blue-100 shadow-md ring-2 ring-blue-400' : ''}`}
-            >
-              {/* Hover Tooltip - positioned just before center line */}
-              <div className="hidden sm:block absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-full mr-2 z-50 bg-gray-900 text-white text-xs px-4 py-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
-                <div className="font-bold mb-1 text-xs">{isPositive ? '+' : ''}{changePercent.toFixed(2)}%</div>
-                <div className="space-y-0.5 text-[10px]">
-                  <div>Prev: {sector.previousClose.toFixed(2)}</div>
-                  <div>Open: {sector.open.toFixed(2)}</div>
-                  <div>Last: {sector.last.toFixed(2)}</div>
-                  <div>Diff: {isPositive ? '+' : ''}{(sector.last - sector.open).toFixed(2)}</div>
-                  <div>{isPositive ? '+' : ''}{sector.variation.toFixed(2)}</div>
-                </div>
-              </div>
-
-              {/* Sector Name - Responsive width */}
-              <div className={`text-left text-xs sm:text-sm font-semibold truncate flex-shrink-0 sm:w-auto max-h-8 transition-colors ${isSelected ? 'text-blue-700' : 'text-gray-800 group-hover:text-black'
-                }`}>
-                {sector.name}
-                {isClickable && (
-                  <span className="ml-2 text-xs text-blue-600">●</span>
-                )}
-              </div>
-
-              {/* Bar Container with Center Line - Full width on mobile */}
-              <div className="relative w-full flex-1 min-w-0">
-                <div className="flex items-center h-8 sm:h-8">
-                  {/* Left side (for negative bars) - exactly 50% */}
-                  <div className="w-1/2 flex justify-end">
-                    {!isPositive && (
-                      <div
-                        className="h-full bg-red-500 rounded-l-lg flex items-center justify-start px-1 sm:px-2 transition-all duration-500"
-                        style={{ width: `${barWidth}%`, minWidth: '50px' }}
-                      >
-                        <span className="text-[10px] sm:text-xs font-bold text-white whitespace-nowrap">
-                          {changePercent.toFixed(2)}%
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Center line */}
-                  <div className="w-0.5 h-full bg-gray-400"></div>
-
-                  {/* Right side (for positive bars) - exactly 50% */}
-                  <div className="w-1/2">
-                    {isPositive && (
-                      <div
-                        className="h-full bg-green-500 rounded-r-lg flex items-center justify-end px-1 sm:px-2 transition-all duration-500"
-                        style={{ width: `${barWidth}%`, minWidth: '50px' }}
-                      >
-                        <span className="text-[10px] sm:text-xs font-bold text-white whitespace-nowrap">
-                          +{changePercent.toFixed(2)}%
-                        </span>
-                      </div>
-                    )}
+            return (
+              <div
+                key={index}
+                onClick={() => isClickable && onSectorClick(sector.name)}
+                className={`relative flex flex-row sm:grid sm:grid-cols-[minmax(120px,200px)_1fr] gap-2 items-center p-2 sm:p-1 rounded-lg transition-all duration-200 group ${isClickable ? 'cursor-pointer hover:bg-blue-50 hover:shadow-md' : 'hover:bg-gray-50'
+                  } ${isSelected ? 'bg-blue-100 shadow-md ring-2 ring-blue-400' : ''}`}
+              >
+                {/* Hover Tooltip - positioned just before center line */}
+                <div className="hidden sm:block absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-full mr-2 z-50 bg-gray-900 text-white text-xs px-4 py-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+                  <div className="font-bold mb-1 text-xs">{isPositive ? '+' : ''}{changePercent.toFixed(2)}%</div>
+                  <div className="space-y-0.5 text-[10px]">
+                    <div>Prev: {sector.previousClose.toFixed(2)}</div>
+                    <div>Open: {sector.open.toFixed(2)}</div>
+                    <div>Last: {sector.last.toFixed(2)}</div>
+                    <div>Diff: {isPositive ? '+' : ''}{(sector.last - sector.open).toFixed(2)}</div>
+                    <div>{isPositive ? '+' : ''}{sector.variation.toFixed(2)}</div>
                   </div>
                 </div>
-              </div>
 
-              {/* Additional Data
+                {/* Sector Name - Responsive width */}
+                <div className={`text-left text-xs sm:text-sm font-semibold truncate flex-shrink-0 sm:w-auto max-h-8 transition-colors ${isSelected ? 'text-blue-700' : 'text-gray-800 group-hover:text-black'
+                  }`}>
+                  {sector.name}
+                  {isClickable && (
+                    <span className="ml-2 text-xs text-blue-600">●</span>
+                  )}
+                </div>
+
+                {/* Bar Container with Center Line - Full width on mobile */}
+                <div className="relative w-full flex-1 min-w-0">
+                  <div className="flex items-center h-8 sm:h-8">
+                    {/* Left side (for negative bars) - exactly 50% */}
+                    <div className="w-1/2 flex justify-end">
+                      {!isPositive && (
+                        <div
+                          className="h-full bg-red-500 rounded-l-lg flex items-center justify-start px-1 sm:px-2 transition-all duration-500"
+                          style={{ width: `${barWidth}%`, minWidth: '50px' }}
+                        >
+                          <span className="text-[10px] sm:text-xs font-bold text-white whitespace-nowrap">
+                            {changePercent.toFixed(2)}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Center line */}
+                    <div className="w-0.5 h-full bg-gray-400"></div>
+
+                    {/* Right side (for positive bars) - exactly 50% */}
+                    <div className="w-1/2">
+                      {isPositive && (
+                        <div
+                          className="h-full bg-green-500 rounded-r-lg flex items-center justify-end px-1 sm:px-2 transition-all duration-500"
+                          style={{ width: `${barWidth}%`, minWidth: '50px' }}
+                        >
+                          <span className="text-[10px] sm:text-xs font-bold text-white whitespace-nowrap">
+                            +{changePercent.toFixed(2)}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Data
               <div className="flex items-center space-x-2 text-xs whitespace-nowrap">
                 <div className="text-gray-500">
                   Prev: {sector.previousClose.toFixed(2)}
@@ -471,9 +471,9 @@ export default function SectorPerformance({
                   {sector.variation >= 0 ? '+' : ''}{sector.variation.toFixed(2)}
                 </div>
               </div> */}
-            </div>
-          )
-        })
+              </div>
+            )
+          })
         )}
       </div>
     </div>
