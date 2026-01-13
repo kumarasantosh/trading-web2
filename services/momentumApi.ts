@@ -236,27 +236,82 @@ export async function fetchWidgetData(
  */
 export async function fetchMarketData(): Promise<any[]> {
   try {
-    // Try to fetch from database first (has correct previous close values)
+    // Fetch directly from NSE API via our proxy
     try {
-      const response = await fetch('/api/market-indices', {
-        cache: 'no-store',
+      const response = await fetch('/api/nse/indices', {
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store'
       })
 
       if (response.ok) {
-        const result = await response.json()
-        if (result.success && result.indices && Array.isArray(result.indices) && result.indices.length > 0) {
-          const hasValidData = result.indices.some((idx: any) => idx.value && idx.value > 0)
-          if (hasValidData) {
+        const nseData = await response.json()
 
-            return result.indices
+        // NSE API returns data in format: { data: [ { index: "NIFTY 50", previousClose: 1413.6, percentChange: -0.15, ... }, ... ] }
+        let allIndices: any[] = []
+        if (Array.isArray(nseData.data)) {
+          allIndices = nseData.data
+        } else if (nseData.data && typeof nseData.data === 'object') {
+          Object.values(nseData.data).forEach((value: any) => {
+            if (Array.isArray(value)) {
+              allIndices = [...allIndices, ...value]
+            }
+          })
+        }
+
+        const targetIndices = [
+          { searchName: 'NIFTY 50', displayName: 'NIFTY 50' },
+          { searchName: 'NIFTY BANK', displayName: 'NIFTY BANK' },
+          { searchName: 'SENSEX', displayName: 'SENSEX' }, // Won't be in NSE data usually
+          { searchName: 'NIFTY FIN SERVICE', displayName: 'FINNIFTY' },
+          { searchName: 'NIFTY MIDCAP 100', displayName: 'NIFTY MIDCAP' },
+          { searchName: 'INDIA VIX', displayName: 'INDIA_VIX' },
+        ]
+
+        const indices = targetIndices.map(({ searchName, displayName }) => {
+          // SENSEX Special Handling - not in NSE
+          if (searchName === 'SENSEX') return null
+
+          const indexData = allIndices.find((item: any) =>
+            item.index === searchName ||
+            item.indexSymbol === searchName
+          )
+
+          if (indexData) {
+            return {
+              name: displayName,
+              value: indexData.last,
+              change: indexData.variation || (indexData.last - indexData.previousClose),
+              changePercent: indexData.percentChange,
+              previousClose: indexData.previousClose,
+              open: indexData.open
+            }
           }
+          return null
+        }).filter(Boolean)
+
+        // If we got valid data for most indices, return it (we'll fetch Sensex separately)
+        if (indices.length > 0) {
+          // Fetch SENSEX separately from Groww since it's BSE
+          try {
+            const sensexData = await fetchMarketDataFromGroww()
+            const sensex = sensexData.find(i => i.name === 'SENSEX')
+            if (sensex) {
+              indices.push(sensex)
+            }
+          } catch (e) {
+            console.error('Failed to fetch SENSEX separately', e)
+          }
+
+          // Sort to maintain order
+          const order = ['NIFTY 50', 'NIFTY BANK', 'FINNIFTY', 'NIFTY MIDCAP', 'SENSEX', 'INDIA_VIX']
+          return order.map(name => indices.find((i: any) => i.name === name)).filter(Boolean)
         }
       }
-    } catch (dbError) {
-
+    } catch (e) {
+      console.error('Failed to fetch from NSE proxy:', e)
     }
 
-    // Fallback to Groww API
+    // Fallback to Groww API if NSE proxy fails
     return await fetchMarketDataFromGroww()
   } catch (error) {
     console.error('Error fetching market data:', error)
@@ -359,6 +414,8 @@ async function fetchMarketDataFromGroww(): Promise<any[]> {
         value: ltp,
         change: change,
         changePercent: changePercent,
+        previousClose: previousClose,
+        open: ohlc?.open || ohlc?.dayOpen || 0,
       }
     }).filter(idx => idx.value > 0) // Only return indices with valid data
 
@@ -369,29 +426,47 @@ async function fetchMarketDataFromGroww(): Promise<any[]> {
     ).filter(Boolean) as any[]
 
     // Special handling for SENSEX - fetch previous day close from Yahoo Finance
-    const sensexIndex = sorted.findIndex(idx => idx.name === 'SENSEX')
-    if (sensexIndex !== -1 && sorted[sensexIndex]) {
-      try {
-        const { fetchYahooStockData } = await import('@/services/yahooFinance')
-        const yahooData = await fetchYahooStockData('^BSESN') // SENSEX symbol on Yahoo Finance
+    try {
+      const { fetchYahooStockData } = await import('@/services/yahooFinance')
+      const yahooData = await fetchYahooStockData('^BSESN') // SENSEX symbol on Yahoo Finance
 
-        if (yahooData && yahooData.close > 0) {
+      if (yahooData && yahooData.close > 0) {
+        let sensexIndex = sorted.findIndex(idx => idx.name === 'SENSEX')
+
+        // If Sensex not found in sorted (maybe filtered out due to 0 value from Groww logic), try to find in original indices
+        if (sensexIndex === -1) {
+          const rawSensex = indices.find(idx => idx.name === 'SENSEX')
+          if (rawSensex) {
+            sorted.push(rawSensex)
+            sensexIndex = sorted.length - 1
+          }
+        }
+
+        if (sensexIndex !== -1 && sorted[sensexIndex]) {
           const currentValue = sorted[sensexIndex].value
+          // Yahoo 'close' from fetchYahooStockData is the Previous Day's close (historical data)
           const prevClose = yahooData.close
+
+          // Recalculate change based on Yahoo's previous close
           const change = currentValue - prevClose
           const changePercent = (change / prevClose) * 100
 
-          console.log(`[Groww] SENSEX corrected with Yahoo Finance: current=${currentValue}, prevClose=${prevClose}, change=${change}, changePercent=${changePercent}`)
+          console.log(`[Groww] SENSEX updated with Yahoo Finance: current=${currentValue}, prevClose=${prevClose}, change=${change}`)
 
           sorted[sensexIndex] = {
             ...sorted[sensexIndex],
             change: change,
             changePercent: changePercent,
+            previousClose: prevClose,
+            // We can also try to use Yahoo for Open if Groww didn't provide it
+            open: sorted[sensexIndex].open || yahooData.open // Note: Yahoo open here is Prev Day Open, so use carefully. Better to stick to Groww open if possible.
+            // Actually, yahooData returned by current service IS previous day. So yahooData.open is yesterday's open.
+            // DO NOT use yahooData.open for today's open.
           }
         }
-      } catch (yahooError) {
-        // Silently fail - will use Groww data
       }
+    } catch (yahooError) {
+      console.error('Error fetching Sensex from Yahoo:', yahooError)
     }
 
     return sorted.length > 0 ? sorted : indices

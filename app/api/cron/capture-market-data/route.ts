@@ -341,6 +341,8 @@ async function captureMarketIndices() {
                             change_percent: indexData.percentChange !== undefined ? indexData.percentChange :
                                 (indexData.previousClose && indexData.last ?
                                     ((indexData.last - indexData.previousClose) / indexData.previousClose) * 100 : 0),
+                            previous_close: indexData.previousClose || 0,
+                            open_price: indexData.open || 0,
                         })
                     }
                 })
@@ -408,6 +410,8 @@ async function captureMarketIndices() {
                                 value: Number(value),
                                 change: Number(change),
                                 change_percent: Number(changePercent),
+                                previous_close: Number(previousClose),
+                                open_price: sensexData.open || sensexData.Open || 0,
                             })
                             console.log('[CRON] ✅ SENSEX added from BSE API')
                         }

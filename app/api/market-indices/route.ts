@@ -33,6 +33,8 @@ export async function GET(request: NextRequest) {
             value: item.value || 0,
             change: item.change || 0,
             changePercent: item.change_percent || 0,
+            previousClose: item.previous_close || undefined,
+            open: item.open_price || undefined,
         }))
 
         return NextResponse.json({

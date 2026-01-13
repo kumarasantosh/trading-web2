@@ -54,6 +54,8 @@ export default function OptionChainPage() {
     // PCR chart state
     const [pcrData, setPcrData] = useState<PcrData[]>([])
     const pcrHistoryRef = useRef<PcrData[]>([])
+    const [oiTotals, setOiTotals] = useState<{ callOI: number, putOI: number }>({ callOI: 0, putOI: 0 })
+    const [maxPain, setMaxPain] = useState<number>(0)
 
     const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -290,6 +292,41 @@ export default function OptionChainPage() {
             // Calculate PCR (Put Call Ratio)
             const calculatedPCR = totalCallOI > 0 ? totalPutOI / totalCallOI : 0
             setPcr(calculatedPCR)
+            setPcr(calculatedPCR)
+            setOiTotals({ callOI: totalCallOI, putOI: totalPutOI })
+
+            // Calculate Max Pain
+            let minPain = Infinity
+            let maxPainStrike = 0
+
+            if (processedData.length > 0) {
+                processedData.forEach(candidate => {
+                    const expirationPrice = candidate.strikePrice
+                    let totalPain = 0
+
+                    processedData.forEach(option => {
+                        const strike = option.strikePrice
+                        const callOI = option.callOI
+                        const putOI = option.putOI
+
+                        // Call Pain: if expires at expirationPrice, Call writer pays max(0, expirationPrice - strike)
+                        if (expirationPrice > strike) {
+                            totalPain += (expirationPrice - strike) * callOI
+                        }
+
+                        // Put Pain: if expires at expirationPrice, Put writer pays max(0, strike - expirationPrice)
+                        if (expirationPrice < strike) {
+                            totalPain += (strike - expirationPrice) * putOI
+                        }
+                    })
+
+                    if (totalPain < minPain) {
+                        minPain = totalPain
+                        maxPainStrike = expirationPrice
+                    }
+                })
+            }
+            setMaxPain(maxPainStrike)
 
             // Sort by strike price and filter around spot
             processedData.sort((a, b) => a.strikePrice - b.strikePrice)
@@ -1042,6 +1079,63 @@ export default function OptionChainPage() {
                                             </div>
                                         </div>
                                     )}
+
+                                    {/* Total OI Chart - Show in 1x4 or 4x4 layout */}
+                                    {(chartType === '1x4' || chartType === '4x4') && (oiTotals.putOI > 0 || oiTotals.callOI > 0) && (
+                                        <div className="bg-white/95 backdrop-blur-sm rounded-2xl border border-gray-200/50 shadow-xl p-6">
+                                            <div className="mb-4 flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <h2 className="text-xl font-extrabold text-gray-900">PUT VS CALL</h2>
+                                                    <span className="text-sm font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-md">
+                                                        Max Pain: <span className="text-black">{maxPain}</span>
+                                                    </span>
+                                                </div>
+                                                {dataCaptureTime && (
+                                                    <div className="text-xs text-gray-600">
+                                                        {dataCaptureTime.toLocaleString('en-IN', {
+                                                            timeZone: 'Asia/Kolkata',
+                                                            day: '2-digit',
+                                                            month: 'short',
+                                                            year: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit',
+                                                            second: '2-digit',
+                                                            hour12: true
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex justify-between items-center mb-4 text-sm font-medium">
+                                                <div className="text-teal-600">Put: {formatLakhs(oiTotals.putOI)}</div>
+                                                <div className="text-red-500">Call: {formatLakhs(oiTotals.callOI)}</div>
+                                            </div>
+                                            <ResponsiveContainer width="100%" height={400}>
+                                                <BarChart
+                                                    data={[{ name: 'Total', putOI: oiTotals.putOI, callOI: oiTotals.callOI }]}
+                                                    margin={{ top: 20, right: 30, left: 40, bottom: 20 }}
+                                                >
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                                                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#666' }} />
+                                                    <YAxis
+                                                        tick={{ fontSize: 11, fill: '#666' }}
+                                                        tickFormatter={(value) => {
+                                                            const lakhs = Math.abs(value) / 100000
+                                                            return `${lakhs.toFixed(0)}L`
+                                                        }}
+                                                    />
+                                                    <Tooltip
+                                                        formatter={(value: number, name: string) => {
+                                                            const lakhs = Math.abs(value) / 100000
+                                                            return [`${lakhs.toFixed(2)}L`, name]
+                                                        }}
+                                                    />
+                                                    <Legend />
+                                                    <Bar dataKey="putOI" fill="#14b8a6" name="Total Put OI" barSize={60} />
+                                                    <Bar dataKey="callOI" fill="#ef4444" name="Total Call OI" barSize={60} />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    )}
                                 </div>
                             )
                         }
@@ -1127,6 +1221,63 @@ export default function OptionChainPage() {
                                     </div>
                                 </div>
                             )}
+
+                            {/* Total OI Chart - Beside PCR Chart */}
+                            {(oiTotals.putOI > 0 || oiTotals.callOI > 0) && (
+                                <div className="bg-white rounded-2xl border border-gray-200 shadow-xl p-6">
+                                    <div className="mb-4 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <h2 className="text-xl font-extrabold text-gray-900">PUT VS CALL</h2>
+                                            <span className="text-sm font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-md">
+                                                Max Pain: <span className="text-black">{maxPain}</span>
+                                            </span>
+                                        </div>
+                                        {dataCaptureTime && (
+                                            <div className="text-xs text-gray-600">
+                                                {dataCaptureTime.toLocaleString('en-IN', {
+                                                    timeZone: 'Asia/Kolkata',
+                                                    day: '2-digit',
+                                                    month: 'short',
+                                                    year: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                    second: '2-digit',
+                                                    hour12: true
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex justify-between items-center mb-6 text-sm font-medium">
+                                        <div className="text-teal-600">Put: {formatLakhs(oiTotals.putOI)}</div>
+                                        <div className="text-red-500">Call: {formatLakhs(oiTotals.callOI)}</div>
+                                    </div>
+                                    <ResponsiveContainer width="100%" height={500}>
+                                        <BarChart
+                                            data={[{ name: 'Total', putOI: oiTotals.putOI, callOI: oiTotals.callOI }]}
+                                            margin={{ top: 20, right: 30, left: 40, bottom: 20 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                                            <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#666' }} />
+                                            <YAxis
+                                                tick={{ fontSize: 11, fill: '#666' }}
+                                                tickFormatter={(value) => {
+                                                    const lakhs = Math.abs(value) / 100000
+                                                    return `${lakhs.toFixed(0)}L`
+                                                }}
+                                            />
+                                            <Tooltip
+                                                formatter={(value: number, name: string) => {
+                                                    const lakhs = Math.abs(value) / 100000
+                                                    return [`${lakhs.toFixed(2)}L`, name]
+                                                }}
+                                            />
+                                            <Legend />
+                                            <Bar dataKey="putOI" fill="#14b8a6" name="Total Put OI" barSize={80} />
+                                            <Bar dataKey="callOI" fill="#ef4444" name="Total Call OI" barSize={80} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -1143,6 +1294,6 @@ export default function OptionChainPage() {
                 </div>
             </div>
             <Footer />
-        </div>
+        </div >
     )
 }

@@ -10,6 +10,8 @@ interface MarketIndex {
   value: number
   change: number
   changePercent: number
+  previousClose?: number
+  open?: number
 }
 
 interface TopNavigationProps {
@@ -80,66 +82,10 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
   useEffect(() => {
     const loadMarketData = async () => {
       try {
-        // Check if it's after 3:30 PM IST (15:30 IST = 10:00 UTC)
-        const now = new Date()
-        const utcHour = now.getUTCHours()
-        const utcMinutes = now.getUTCMinutes()
-        // 3:30 PM IST = 10:00 AM UTC (IST = UTC + 5:30)
-        // Market closes at 3:30 PM IST, so after 10:00 UTC we should use DB
-        const isAfter330PM = utcHour > 10 || (utcHour === 10 && utcMinutes >= 0)
-
-        // Also check if it's before market open (9:15 AM IST = 3:45 AM UTC)
-        // If before market hours, also use DB
-        const isBeforeMarketOpen = utcHour < 3 || (utcHour === 3 && utcMinutes < 45)
-
-        // Use DB if after market close OR before market open
-        const shouldUseDB = isAfter330PM || isBeforeMarketOpen
-
-
-
-        if (shouldUseDB) {
-          // After market close or before market open - try to use saved data from database first
-
-          try {
-            const response = await fetch('/api/market-indices', {
-              cache: 'no-store',
-            })
-
-            if (response.ok) {
-              const result = await response.json()
-              // Check if we have valid data (not null, not empty array)
-              if (result.success && result.indices && Array.isArray(result.indices) && result.indices.length > 0) {
-                // Verify the data has actual values (not all zeros)
-                const hasValidData = result.indices.some((idx: any) => idx.value && idx.value > 0)
-                if (hasValidData) {
-
-                  // Filter out SMALLCAP indices
-                  const filteredIndices = result.indices.filter((idx: any) =>
-                    !idx.name.toUpperCase().includes('SMALLCAP')
-                  )
-                  setMarketIndices(filteredIndices)
-                  setDataSource('database')
-                  return
-                } else {
-
-                }
-              } else {
-
-              }
-            } else {
-
-            }
-          } catch (error) {
-            console.error('[TopNavigation] Error fetching from database:', error)
-          }
-          // If saved data not available or invalid, fall through to live fetch
-
-        }
-
-        // During market hours (9:15 AM - 3:30 PM IST) or if saved data unavailable - fetch live data
-
+        // Always fetch market data using the unified service which prioritizes NSE API
         const { fetchMarketData } = await import('@/services/momentumApi')
         const data = await fetchMarketData()
+
         // Filter out SMALLCAP indices
         const filteredData = data.filter((idx: any) =>
           !idx.name.toUpperCase().includes('SMALLCAP')
@@ -158,16 +104,6 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
     }
 
     loadMarketData()
-
-    // Determine refresh interval based on market hours
-    const checkMarketHours = () => {
-      const now = new Date()
-      const utcHour = now.getUTCHours()
-      const utcMinutes = now.getUTCMinutes()
-      const isAfter330PM = utcHour > 10 || (utcHour === 10 && utcMinutes >= 0)
-      const isBeforeMarketOpen = utcHour < 3 || (utcHour === 3 && utcMinutes < 45)
-      return isAfter330PM || isBeforeMarketOpen
-    }
 
     // Always use 10 second refresh interval for real-time updates
     const refreshInterval = 10000
@@ -289,23 +225,35 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
         <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isMarketIndicesOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
           <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-2 sm:px-4 py-2 sm:py-3">
             <div className="flex flex-nowrap sm:flex-wrap gap-1.5 sm:gap-2 overflow-x-auto thin-scrollbar pb-1">
-              {marketIndices.map((index) => (
-                <div key={index.name} className="flex flex-col items-start bg-white/60 backdrop-blur-sm px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-gray-200/50 hover:bg-white hover:shadow-md transition-all duration-200 min-w-fit flex-shrink-0">
-                  <div className="text-[9px] sm:text-[10px] font-semibold text-gray-600 uppercase tracking-wide truncate w-full">{index.name}</div>
-                  <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 w-full">
-                    <div className="text-xs sm:text-sm font-bold text-black truncate">{index.value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
-                    <div className={`flex items-center flex-wrap gap-0.5 sm:space-x-1 ${index.change >= 0 ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                      <span className="text-[10px] sm:text-xs font-bold">{index.change >= 0 ? '▲' : '▼'}</span>
-                      <span className="text-[10px] sm:text-xs font-bold">{Math.abs(index.change).toFixed(2)}</span>
-                      <span className={`text-[9px] sm:text-[10px] font-semibold px-1 sm:px-1.5 py-0.5 rounded ${index.change >= 0 ? 'bg-green-50' : 'bg-red-50'
-                        }`}>
-                        ({index.changePercent >= 0 ? '+' : ''}{index.changePercent.toFixed(2)}%)
-                      </span>
+              {marketIndices.map((index) => {
+                const prevCloseChange = index.previousClose ? index.previousClose - index.value : index.change
+                const openToLastChange = index.open ? index.value - index.open : 0
+                return (
+                  <div key={index.name} className="flex flex-col items-start bg-white/60 backdrop-blur-sm px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-gray-200/50 hover:bg-white hover:shadow-md transition-all duration-200 min-w-fit flex-shrink-0">
+                    <div className="text-[9px] sm:text-[10px] font-semibold text-gray-600 uppercase tracking-wide truncate w-full">{index.name}</div>
+
+                    <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 w-full">
+                      {/* Value */}
+                      <div className="text-xs sm:text-sm font-bold text-black truncate">{index.value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+
+                      {/* (previousClose - last) - shows absolute value */}
+                      <div className={`flex items-center gap-0.5 ${prevCloseChange >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        <span className="text-[9px] sm:text-[10px] font-bold">{prevCloseChange >= 0 ? '▼' : '▲'}</span>
+                        <span className="text-[9px] sm:text-[10px] font-semibold">({Math.abs(prevCloseChange).toFixed(2)})</span>
+                      </div>
+
+                      {/* Open - Last */}
+                      {index.open && (
+                        <div className={`flex items-center gap-0.5 text-[9px] sm:text-[10px] ${openToLastChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          <span className="font-medium text-gray-400 mx-0.5">-</span>
+                          <span className="font-bold">{openToLastChange >= 0 ? '▲' : '▼'}</span>
+                          <span className="font-medium">{Math.abs(openToLastChange).toFixed(2)}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>
