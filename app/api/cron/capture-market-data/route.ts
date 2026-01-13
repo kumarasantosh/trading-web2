@@ -201,30 +201,34 @@ async function captureStockData(capturedAt: string) {
         // Fetch data for each stock
         for (const stock of stocksToTrack) {
             try {
-                const url = `https://groww.in/v1/api/stocks_data/v1/tr_live_prices/exchange/NSE/segment/CASH/${stock.symbol}/latest`
+                const url = `https://api.groww.in/v1/live-data/quote?exchange=NSE&segment=CASH&trading_symbol=${stock.symbol}`
 
                 const response = await fetch(url, {
                     headers: {
-                        'authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
-                        'cookie': process.env.GROWW_COOKIES || '',
-                        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-                    }
+                        'Authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
+                        'X-API-VERSION': '1.0',
+                        'Accept': 'application/json',
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                    },
+                    cache: 'no-store',
                 })
 
                 if (response.ok) {
                     const data = await response.json()
+                    const payload = data.payload
+                    const ohlc = payload?.ohlc
 
                     snapshots.push({
                         captured_at: capturedAt,
                         symbol: stock.symbol,
                         sector: stock.sector,
-                        ltp: data.ltp || 0,
-                        open_price: data.open || 0,
-                        close_price: data.close || 0,
-                        change_percent: data.dayChangePerc || 0,
-                        high: data.high || null,
-                        low: data.low || null,
-                        volume: data.volume || null,
+                        ltp: payload?.last_price || 0,
+                        open_price: ohlc?.open || 0,
+                        close_price: ohlc?.close || 0,
+                        change_percent: payload?.day_change_perc || 0,
+                        high: ohlc?.high || null,
+                        low: ohlc?.low || null,
+                        volume: payload?.volume || null,
                     })
                 }
 

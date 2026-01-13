@@ -52,7 +52,9 @@ export default function TopMovers() {
     }, [])
 
     const handleStockClick = (symbol: string) => {
-        window.open(`https://in.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(symbol)}`, '_blank')
+        // Decode first in case it's already encoded, then encode for URL
+        const decodedSymbol = decodeURIComponent(symbol)
+        window.open(`https://in.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(decodedSymbol)}`, '_blank')
     }
 
     const renderStockRow = (stock: Stock, index: number, isGainer: boolean) => {
@@ -67,7 +69,7 @@ export default function TopMovers() {
                     <span className="text-xs font-bold text-gray-400 w-5 sm:w-6 flex-shrink-0">{index + 1}</span>
                     <div className="min-w-0 flex-1">
                         <div className="font-semibold text-xs sm:text-sm text-gray-900 flex items-center gap-1">
-                            {stock.symbol}
+                            {decodeURIComponent(stock.symbol)}
                         </div>
                         <div className="text-[10px] sm:text-xs text-gray-500">
                             Open: ₹{stock.open_price.toFixed(2)}

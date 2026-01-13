@@ -54,28 +54,31 @@ export async function GET(request: NextRequest) {
         // STEP 1: Try Groww API for all stocks
         for (const symbol of Array.from(allStocks)) {
             try {
-                // Fetch OHLC data from Groww API
-                const url = `https://groww.in/v1/api/stocks_data/v1/tr_live_prices/exchange/NSE/segment/CASH/${symbol}/latest`
+                // Fetch OHLC data from Groww API (new endpoint)
+                const url = `https://api.groww.in/v1/live-data/quote?exchange=NSE&segment=CASH&trading_symbol=${symbol}`
 
                 const response = await fetch(url, {
                     headers: {
-                        'authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
-                        'cookie': process.env.GROWW_COOKIES || '',
-                        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                        'Authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
+                        'X-API-VERSION': '1.0',
+                        'Accept': 'application/json',
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
                     },
                     cache: 'no-store',
                 })
 
                 if (response.ok) {
                     const data = await response.json()
+                    const payload = data.payload
+                    const ohlc = payload?.ohlc
 
                     // Only add if we have valid high and low values
-                    if (data.high && data.low) {
+                    if (ohlc?.high && ohlc?.low) {
                         highLowData.push({
                             symbol: symbol,
                             sector: stockToSectorMap.get(symbol) || 'Unknown',
-                            today_high: data.high,
-                            today_low: data.low,
+                            today_high: ohlc.high,
+                            today_low: ohlc.low,
                             captured_date: todayDate,
                         })
                         successCount++
