@@ -128,62 +128,97 @@ export async function GET(request: NextRequest) {
         const breakdownsToInsert: any[] = []
         const errors: string[] = []
 
-        // Check each stock for breakout/breakdown
-        for (const stock of highLowData) {
-            try {
-                // Fetch current LTP from Groww API (new endpoint)
-                const url = `https://api.groww.in/v1/live-data/quote?exchange=NSE&segment=CASH&trading_symbol=${stock.symbol}`
+        // Process stocks in parallel batches to avoid timeout
+        const BATCH_SIZE = 20 // Process 20 stocks at a time
+        const batches = []
+        for (let i = 0; i < highLowData.length; i += BATCH_SIZE) {
+            batches.push(highLowData.slice(i, i + BATCH_SIZE))
+        }
 
-                const response = await fetch(url, {
-                    headers: {
-                        'Authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
-                        'X-API-VERSION': '1.0',
-                        'Accept': 'application/json',
-                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-                    },
-                    cache: 'no-store',
-                })
+        console.log(`[BREAKOUT-CHECK] Processing ${batches.length} batches of ${BATCH_SIZE} stocks`)
 
-                if (response.ok) {
-                    const data = await response.json()
-                    const ltp = data.payload?.last_price || 0
+        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+            const batch = batches[batchIndex]
+            console.log(`[BREAKOUT-CHECK] Batch ${batchIndex + 1}/${batches.length}`)
 
-                    if (ltp > 0) {
-                        // Check for BREAKOUT (LTP > yesterday's high)
-                        if (ltp > stock.today_high) {
-                            const breakoutPercent = ((ltp - stock.today_high) / stock.today_high) * 100
-                            breakoutsToInsert.push({
-                                symbol: stock.symbol,
-                                sector: stock.sector,
-                                ltp: ltp,
-                                yesterday_high: stock.today_high,
-                                breakout_percent: breakoutPercent,
-                                breakout_date: todayDate,
-                            })
-                            console.log(`[BREAKOUT-CHECK] ✅ ${stock.symbol} breakout: ${ltp} > ${stock.today_high} (+${breakoutPercent.toFixed(2)}%)`)
-                        }
+            // Process all stocks in this batch in parallel
+            const batchPromises = batch.map(async (stock: any) => {
+                try {
+                    // Fetch current LTP from Groww API (new endpoint)
+                    const url = `https://api.groww.in/v1/live-data/quote?exchange=NSE&segment=CASH&trading_symbol=${stock.symbol}`
 
-                        // Check for BREAKDOWN (LTP < yesterday's low)
-                        if (ltp < stock.today_low) {
-                            const breakdownPercent = ((stock.today_low - ltp) / stock.today_low) * 100
-                            breakdownsToInsert.push({
-                                symbol: stock.symbol,
-                                sector: stock.sector,
-                                ltp: ltp,
-                                yesterday_low: stock.today_low,
-                                breakdown_percent: breakdownPercent,
-                                breakdown_date: todayDate,
-                            })
-                            console.log(`[BREAKOUT-CHECK] ⬇️ ${stock.symbol} breakdown: ${ltp} < ${stock.today_low} (-${breakdownPercent.toFixed(2)}%)`)
+                    const response = await fetch(url, {
+                        headers: {
+                            'Authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
+                            'X-API-VERSION': '1.0',
+                            'Accept': 'application/json',
+                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                        },
+                        cache: 'no-store',
+                    })
+
+                    if (response.ok) {
+                        const data = await response.json()
+                        const ltp = data.payload?.last_price || 0
+
+                        if (ltp > 0) {
+                            // Check for BREAKOUT (LTP > yesterday's high)
+                            if (ltp > stock.today_high) {
+                                const breakoutPercent = ((ltp - stock.today_high) / stock.today_high) * 100
+                                return {
+                                    type: 'breakout',
+                                    data: {
+                                        symbol: stock.symbol,
+                                        sector: stock.sector,
+                                        ltp: ltp,
+                                        yesterday_high: stock.today_high,
+                                        breakout_percent: breakoutPercent,
+                                        breakout_date: todayDate,
+                                    }
+                                }
+                            }
+
+                            // Check for BREAKDOWN (LTP < yesterday's low)
+                            if (ltp < stock.today_low) {
+                                const breakdownPercent = ((stock.today_low - ltp) / stock.today_low) * 100
+                                return {
+                                    type: 'breakdown',
+                                    data: {
+                                        symbol: stock.symbol,
+                                        sector: stock.sector,
+                                        ltp: ltp,
+                                        yesterday_low: stock.today_low,
+                                        breakdown_percent: breakdownPercent,
+                                        breakdown_date: todayDate,
+                                    }
+                                }
+                            }
                         }
                     }
+                    return null
+                } catch (error) {
+                    errors.push(`${stock.symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+                    return null
                 }
+            })
 
-                // Small delay to avoid rate limiting (reduced to 10ms for faster collection)
-                await new Promise(resolve => setTimeout(resolve, 10))
+            // Wait for all stocks in this batch to complete
+            const results = await Promise.all(batchPromises)
 
-            } catch (error) {
-                errors.push(`${stock.symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+            // Collect results
+            results.forEach(result => {
+                if (result) {
+                    if (result.type === 'breakout') {
+                        breakoutsToInsert.push(result.data)
+                    } else if (result.type === 'breakdown') {
+                        breakdownsToInsert.push(result.data)
+                    }
+                }
+            })
+
+            // Small delay between batches to avoid rate limiting
+            if (batchIndex < batches.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 100))
             }
         }
 
