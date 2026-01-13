@@ -164,10 +164,31 @@ export async function GET(request: NextRequest) {
                             ltp = data.payload?.last_price || 0
                         }
                     } catch (growwError) {
-                        console.log(`[BREAKOUT-CHECK] Groww API failed for ${stock.symbol}, trying NSE fallback`)
+                        console.log(`[BREAKOUT-CHECK] New Groww API failed for ${stock.symbol}, trying old Groww API`)
                     }
 
-                    // FALLBACK TO NSE API IF GROWW FAILED
+                    // FALLBACK 2: OLD GROWW API (no auth required)
+                    if (ltp === 0) {
+                        try {
+                            const oldGrowwUrl = `https://groww.in/v1/api/stocks_data/v1/tr_live_prices/exchange/NSE/segment/CASH/${stock.symbol}/latest`
+                            const oldGrowwResponse = await fetch(oldGrowwUrl, {
+                                headers: {
+                                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                                },
+                                cache: 'no-store',
+                            })
+
+                            if (oldGrowwResponse.ok) {
+                                const oldData = await oldGrowwResponse.json()
+                                ltp = oldData.ltp || oldData.last || 0
+                                console.log(`[BREAKOUT-CHECK] ✅ ${stock.symbol} using old Groww API: ${ltp}`)
+                            }
+                        } catch (oldGrowwError) {
+                            console.log(`[BREAKOUT-CHECK] Old Groww API also failed for ${stock.symbol}, trying NSE`)
+                        }
+                    }
+
+                    // FALLBACK 3: NSE API (final fallback)
                     if (ltp === 0) {
                         try {
                             const nseUrl = `https://www.nseindia.com/api/quote-equity?symbol=${stock.symbol}`
@@ -186,7 +207,7 @@ export async function GET(request: NextRequest) {
                                 console.log(`[BREAKOUT-CHECK] ✅ ${stock.symbol} using NSE fallback: ${ltp}`)
                             }
                         } catch (nseError) {
-                            console.log(`[BREAKOUT-CHECK] Both APIs failed for ${stock.symbol}`)
+                            console.log(`[BREAKOUT-CHECK] All APIs failed for ${stock.symbol}`)
                         }
                     }
 
