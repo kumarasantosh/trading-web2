@@ -144,53 +144,81 @@ export async function GET(request: NextRequest) {
             // Process all stocks in this batch in parallel
             const batchPromises = batch.map(async (stock: any) => {
                 try {
-                    // Fetch current LTP from Groww API (new endpoint)
-                    const url = `https://api.groww.in/v1/live-data/quote?exchange=NSE&segment=CASH&trading_symbol=${stock.symbol}`
+                    let ltp = 0
 
-                    const response = await fetch(url, {
-                        headers: {
-                            'Authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
-                            'X-API-VERSION': '1.0',
-                            'Accept': 'application/json',
-                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-                        },
-                        cache: 'no-store',
-                    })
+                    // TRY GROWW API FIRST
+                    try {
+                        const growwUrl = `https://api.groww.in/v1/live-data/quote?exchange=NSE&segment=CASH&trading_symbol=${stock.symbol}`
+                        const growwResponse = await fetch(growwUrl, {
+                            headers: {
+                                'Authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
+                                'X-API-VERSION': '1.0',
+                                'Accept': 'application/json',
+                                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                            },
+                            cache: 'no-store',
+                        })
 
-                    if (response.ok) {
-                        const data = await response.json()
-                        const ltp = data.payload?.last_price || 0
+                        if (growwResponse.ok) {
+                            const data = await growwResponse.json()
+                            ltp = data.payload?.last_price || 0
+                        }
+                    } catch (growwError) {
+                        console.log(`[BREAKOUT-CHECK] Groww API failed for ${stock.symbol}, trying NSE fallback`)
+                    }
 
-                        if (ltp > 0) {
-                            // Check for BREAKOUT (LTP > yesterday's high)
-                            if (ltp > stock.today_high) {
-                                const breakoutPercent = ((ltp - stock.today_high) / stock.today_high) * 100
-                                return {
-                                    type: 'breakout',
-                                    data: {
-                                        symbol: stock.symbol,
-                                        sector: stock.sector,
-                                        ltp: ltp,
-                                        yesterday_high: stock.today_high,
-                                        breakout_percent: breakoutPercent,
-                                        breakout_date: todayDate,
-                                    }
+                    // FALLBACK TO NSE API IF GROWW FAILED
+                    if (ltp === 0) {
+                        try {
+                            const nseUrl = `https://www.nseindia.com/api/quote-equity?symbol=${stock.symbol}`
+                            const nseResponse = await fetch(nseUrl, {
+                                headers: {
+                                    'Accept': 'application/json',
+                                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                                    'Accept-Language': 'en-US,en;q=0.9',
+                                },
+                                cache: 'no-store',
+                            })
+
+                            if (nseResponse.ok) {
+                                const nseData = await nseResponse.json()
+                                ltp = nseData.priceInfo?.lastPrice || 0
+                                console.log(`[BREAKOUT-CHECK] ✅ ${stock.symbol} using NSE fallback: ${ltp}`)
+                            }
+                        } catch (nseError) {
+                            console.log(`[BREAKOUT-CHECK] Both APIs failed for ${stock.symbol}`)
+                        }
+                    }
+
+                    if (ltp > 0) {
+                        // Check for BREAKOUT (LTP > yesterday's high)
+                        if (ltp > stock.today_high) {
+                            const breakoutPercent = ((ltp - stock.today_high) / stock.today_high) * 100
+                            return {
+                                type: 'breakout',
+                                data: {
+                                    symbol: stock.symbol,
+                                    sector: stock.sector,
+                                    ltp: ltp,
+                                    yesterday_high: stock.today_high,
+                                    breakout_percent: breakoutPercent,
+                                    breakout_date: todayDate,
                                 }
                             }
+                        }
 
-                            // Check for BREAKDOWN (LTP < yesterday's low)
-                            if (ltp < stock.today_low) {
-                                const breakdownPercent = ((stock.today_low - ltp) / stock.today_low) * 100
-                                return {
-                                    type: 'breakdown',
-                                    data: {
-                                        symbol: stock.symbol,
-                                        sector: stock.sector,
-                                        ltp: ltp,
-                                        yesterday_low: stock.today_low,
-                                        breakdown_percent: breakdownPercent,
-                                        breakdown_date: todayDate,
-                                    }
+                        // Check for BREAKDOWN (LTP < yesterday's low)
+                        if (ltp < stock.today_low) {
+                            const breakdownPercent = ((stock.today_low - ltp) / stock.today_low) * 100
+                            return {
+                                type: 'breakdown',
+                                data: {
+                                    symbol: stock.symbol,
+                                    sector: stock.sector,
+                                    ltp: ltp,
+                                    yesterday_low: stock.today_low,
+                                    breakdown_percent: breakdownPercent,
+                                    breakdown_date: todayDate,
                                 }
                             }
                         }
