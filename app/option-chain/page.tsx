@@ -492,6 +492,17 @@ export default function OptionChainPage() {
         return () => clearTimeout(timeoutId)
     }, [fetchExpiryDates])
 
+    // Check if market is closed (after 15:30 IST)
+    const isAfterMarketHours = useCallback(() => {
+        const now = new Date()
+        const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+        const hours = istTime.getHours()
+        const minutes = istTime.getMinutes()
+        const totalMinutes = hours * 60 + minutes
+        // Market hours are 9:15 to 15:30 IST
+        return totalMinutes > (15 * 60 + 30) || totalMinutes < (9 * 60 + 15)
+    }, [])
+
     // Initialize and auto-refresh every 5 minutes
     useEffect(() => {
         // Clear any interval from previous render
@@ -505,19 +516,29 @@ export default function OptionChainPage() {
             // Don't fetch live data in replay mode
             // Data will be fetched by handleTimeChange when slider moves
         } else {
-            // LIVE MODE - Fetching live data
-            // Fetch immediately for live mode (user expects to see data)
-            fetchOptionChainData()
+            // Check if after market hours
+            const afterMarket = isAfterMarketHours()
+            console.log('[OptionChain] After market hours:', afterMarket)
 
-            // Auto-refresh every 5 minutes (300000 ms) when not in replay mode
-            intervalRef.current = setInterval(() => {
-                if (!isReplayModeRef.current) {
-                    fetchOptionChainData()
-                }
-            }, 300000) // 5 minutes
+            if (afterMarket) {
+                // AFTER MARKET HOURS - Fetch only saved data from DB
+                console.log('[OptionChain] Market closed - fetching saved data from DB')
+                fetchTrendlineData()
+            } else {
+                // LIVE MODE - Fetching live data
+                // Fetch immediately for live mode (user expects to see data)
+                fetchOptionChainData()
 
-            // Support full historical trendline fetch
-            fetchTrendlineData()
+                // Auto-refresh every 5 minutes (300000 ms) when not in replay mode
+                intervalRef.current = setInterval(() => {
+                    if (!isReplayModeRef.current && !isAfterMarketHours()) {
+                        fetchOptionChainData()
+                    }
+                }, 300000) // 5 minutes
+
+                // Support full historical trendline fetch
+                fetchTrendlineData()
+            }
         }
 
         return () => {
@@ -526,7 +547,7 @@ export default function OptionChainPage() {
                 intervalRef.current = null
             }
         }
-    }, [fetchOptionChainData, fetchTrendlineData, isReplayMode])
+    }, [fetchOptionChainData, fetchTrendlineData, isReplayMode, isAfterMarketHours])
 
     // Reset expiry when symbol changes
     useEffect(() => {

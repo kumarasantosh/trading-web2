@@ -281,20 +281,24 @@ export async function GET(request: NextRequest) {
         let breakdownCount = 0
 
         if (breakoutsToInsert.length > 0) {
-            const { error: insertError } = await supabaseAdmin.from('breakout_stocks').insert(breakoutsToInsert)
+            const { error: insertError } = await supabaseAdmin
+                .from('breakout_stocks')
+                .upsert(breakoutsToInsert, { onConflict: 'symbol,breakout_date' })
             if (insertError) {
-                console.error('[BREAKOUT-CHECK] Error batch inserting breakouts:', insertError)
-                errors.push(`Batch insert breakouts: ${insertError.message}`)
+                console.error('[BREAKOUT-CHECK] Error batch upserting breakouts:', insertError)
+                errors.push(`Batch upsert breakouts: ${insertError.message}`)
             } else {
                 breakoutCount = breakoutsToInsert.length
             }
         }
 
         if (breakdownsToInsert.length > 0) {
-            const { error: insertError } = await supabaseAdmin.from('breakdown_stocks').insert(breakdownsToInsert)
+            const { error: insertError } = await supabaseAdmin
+                .from('breakdown_stocks')
+                .upsert(breakdownsToInsert, { onConflict: 'symbol,breakdown_date' })
             if (insertError) {
-                console.error('[BREAKOUT-CHECK] Error batch inserting breakdowns:', insertError)
-                errors.push(`Batch insert breakdowns: ${insertError.message}`)
+                console.error('[BREAKOUT-CHECK] Error batch upserting breakdowns:', insertError)
+                errors.push(`Batch upsert breakdowns: ${insertError.message}`)
             } else {
                 breakdownCount = breakdownsToInsert.length
             }

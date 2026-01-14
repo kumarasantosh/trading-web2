@@ -146,11 +146,10 @@ def main():
     if records:
         print(f"\n💾 Updating {len(records)} records in database...")
         
-        # Delete existing records for today's date to ensure clean update
-        today_date = records[0]["captured_date"] if records else None
-        if today_date:
-            print(f"🧹 Clearing existing data for {today_date}...")
-            supabase.table("daily_high_low").delete().eq("captured_date", today_date).execute()
+        # Clear ALL existing data to ensure a fresh start each day
+        print(f"🧹 Clearing ALL existing daily_high_low data...")
+        # Use not_null filter on symbol to match all rows (symbol is never null)
+        supabase.table("daily_high_low").delete().not_.is_("symbol", "null").execute()
         
         # Insert fresh data
         result = supabase.table("daily_high_low").insert(records).execute()
