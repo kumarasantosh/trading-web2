@@ -118,16 +118,19 @@ export async function GET(request: NextRequest) {
                         today_low: quote.regularMarketDayLow || 0,
                     };
 
-                    // Store in Supabase using upsert
-                    const { error: upsertError } = await supabaseAdmin
+                    // Delete existing record for this symbol first
+                    await supabaseAdmin
                         .from('daily_high_low')
-                        .upsert(data, {
-                            onConflict: 'symbol',
-                            ignoreDuplicates: false
-                        });
+                        .delete()
+                        .eq('symbol', cleanSymbol);
 
-                    if (upsertError) {
-                        errors.push(`${cleanSymbol}: ${upsertError.message}`);
+                    // Insert new record
+                    const { error: insertError } = await supabaseAdmin
+                        .from('daily_high_low')
+                        .insert(data);
+
+                    if (insertError) {
+                        errors.push(`${cleanSymbol}: ${insertError.message}`);
                     } else {
                         results.push(data);
                     }
