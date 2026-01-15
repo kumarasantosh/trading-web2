@@ -21,11 +21,6 @@ export default function Hero() {
           {/* Left Content */}
           <div className="text-center lg:text-left space-y-8">
             <div className="space-y-6">
-              <div className="inline-block">
-                <span className="px-4 py-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full text-white text-sm font-medium">
-                  India's #1 Trading Platform
-                </span>
-              </div>
               <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-white leading-tight">
                 India's Best
                 <br />
@@ -35,7 +30,7 @@ export default function Hero() {
               </h1>
               <p className="text-xl sm:text-2xl text-gray-300 max-w-2xl leading-relaxed">
                 Empower your trading journey with real-time data, advanced analytics,
-                and professional-grade tools designed for modern investors.
+                and professional-grade tools designed for modern trader.
               </p>
             </div>
 
@@ -157,8 +152,8 @@ export default function Hero() {
                                   {/* Candle body */}
                                   <div
                                     className={`absolute w-3/4 rounded-sm shadow-sm ${isBullish
-                                        ? 'bg-green-500 border border-green-600'
-                                        : 'bg-red-500 border border-red-600'
+                                      ? 'bg-green-500 border border-green-600'
+                                      : 'bg-red-500 border border-red-600'
                                       }`}
                                     style={{
                                       bottom: `${candleBottom}%`,

@@ -3,8 +3,15 @@
 import { useState, useEffect } from 'react'
 import { UserButton, SignInButton, SignedIn, SignedOut } from '@clerk/nextjs'
 
-export default function Header() {
+interface HeaderProps {
+  forceDarkText?: boolean
+}
+
+export default function Header({ forceDarkText = false }: HeaderProps) {
   const [isScrolled, setIsScrolled] = useState(false)
+
+  // Use dark text if forced or scrolled
+  const useDarkText = forceDarkText || isScrolled
 
   useEffect(() => {
     const handleScroll = () => {
@@ -24,7 +31,7 @@ export default function Header() {
   return (
     <>
       <header
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled || forceDarkText
           ? 'bg-white/95 backdrop-blur-xl shadow-lg py-3'
           : 'bg-transparent py-5'
           }`}
@@ -33,12 +40,9 @@ export default function Header() {
           <div className="flex items-center justify-between">
             {/* Logo */}
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-lg">T</span>
-              </div>
-              <span className={`text-xl sm:text-2xl font-bold transition-colors ${isScrolled ? 'text-black' : 'text-white'
+              <span className={`text-xl sm:text-2xl font-bold transition-colors ${useDarkText ? 'text-black' : 'text-white'
                 }`}>
-                Trading Toolkit
+                ectrade
               </span>
             </div>
 
@@ -46,7 +50,7 @@ export default function Header() {
             <nav className="hidden md:flex items-center space-x-8">
               <a
                 href="/momentum"
-                className={`transition-colors font-medium ${isScrolled
+                className={`transition-colors font-medium ${useDarkText
                   ? 'text-gray-700 hover:text-black'
                   : 'text-white/80 hover:text-white'
                   }`}
@@ -55,7 +59,7 @@ export default function Header() {
               </a>
               <button
                 onClick={() => scrollToSection('explore')}
-                className={`transition-colors font-medium ${isScrolled
+                className={`transition-colors font-medium ${useDarkText
                   ? 'text-gray-700 hover:text-black'
                   : 'text-white/80 hover:text-white'
                   }`}
@@ -64,7 +68,7 @@ export default function Header() {
               </button>
               <button
                 onClick={() => scrollToSection('testimonials')}
-                className={`transition-colors font-medium ${isScrolled
+                className={`transition-colors font-medium ${useDarkText
                   ? 'text-gray-700 hover:text-black'
                   : 'text-white/80 hover:text-white'
                   }`}
@@ -74,7 +78,7 @@ export default function Header() {
               <SignedOut>
                 <a
                   href="/sign-in"
-                  className={`transition-colors font-medium ${isScrolled
+                  className={`transition-colors font-medium ${useDarkText
                     ? 'text-gray-700 hover:text-black'
                     : 'text-white/80 hover:text-white'
                     }`}
