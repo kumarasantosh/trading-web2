@@ -116,6 +116,7 @@ export async function GET(request: NextRequest) {
                         sector: 'General', // Can be enhanced with sector mapping
                         today_high: quote.regularMarketDayHigh || 0,
                         today_low: quote.regularMarketDayLow || 0,
+                        captured_date: dateStr, // Required NOT NULL column
                     };
 
                     // Delete existing record for this symbol first
