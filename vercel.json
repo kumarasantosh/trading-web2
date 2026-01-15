@@ -1,6 +1,10 @@
 {
     "crons": [
         {
+            "path": "/api/cron/refresh-groww-token",
+            "schedule": "30 2 * * *"
+        },
+        {
             "path": "/api/cron/cleanup-intraday",
             "schedule": "30 3 * * *"
         },
