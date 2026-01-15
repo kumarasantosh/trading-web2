@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { getGrowwAccessToken } from '@/lib/groww-token';
 
 export default async function handler(
     req: NextApiRequest,
@@ -14,6 +15,9 @@ export default async function handler(
         return res.status(400).json({ error: 'Missing required parameters' });
     }
 
+    // Auto-generate token if needed
+    const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
+
     try {
         const url = `https://groww.in/v1/api/stocks_data/v1/tr_live_prices/exchange/${exchange}/segment/${segment}/${trading_symbol}/latest`;
 
@@ -21,7 +25,7 @@ export default async function handler(
             method: 'GET',
             headers: {
                 'accept': 'application/json, text/plain, */*',
-                'authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
+                'authorization': `Bearer ${growwToken}`,
                 'cookie': process.env.GROWW_COOKIES || '',
                 'referer': 'https://groww.in/stocks/user/explore',
                 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',

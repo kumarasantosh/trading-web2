@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { getGrowwAccessToken } from '@/lib/groww-token';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -8,6 +9,11 @@ export default async function handler(
 ) {
     // Disable caching to ensure fresh data
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    // Auto-generate token if needed
+    const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
 
@@ -96,7 +102,7 @@ export default async function handler(
                     method: 'GET',
                     headers: {
                         'accept': 'application/json, text/plain, */*',
-                        'authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
+                        'authorization': `Bearer ${growwToken}`,
                         'cookie': process.env.GROWW_COOKIES || '',
                         'referer': 'https://groww.in/indices',
                         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
@@ -144,7 +150,7 @@ export default async function handler(
                     method: 'GET',
                     headers: {
                         'accept': 'application/json, text/plain, */*',
-                        'authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
+                        'authorization': `Bearer ${growwToken}`,
                         'cookie': process.env.GROWW_COOKIES || '',
                         'referer': 'https://groww.in/stocks/user/explore',
                         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
@@ -170,7 +176,7 @@ export default async function handler(
                         method: 'GET',
                         headers: {
                             'accept': 'application/json, text/plain, */*',
-                            'authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
+                            'authorization': `Bearer ${growwToken}`,
                             'cookie': process.env.GROWW_COOKIES || '',
                             'referer': 'https://groww.in/stocks/user/explore',
                             'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
