@@ -92,17 +92,22 @@ export async function GET(request: NextRequest) {
                     totalCallOI += strikeData.CE?.openInterest || 0;
                 });
 
-                // Store snapshot
+                // Calculate PCR
+                const pcr = totalCallOI > 0 ? totalPutOI / totalCallOI : 0;
+
+                // Store snapshot in oi_trendline (aggregated data)
                 const snapshot = {
-                    symbol: indexName, // DB column is 'symbol' not 'index_name'
-                    spot_price: spotPrice,
+                    symbol: indexName,
+                    expiry_date: data.expiryDate, // Required by oi_trendline
+                    nifty_spot: spotPrice,        // Column is nifty_spot, not spot_price
                     total_put_oi: totalPutOI,
                     total_call_oi: totalCallOI,
+                    pcr: pcr,
                     captured_at: capturedAtISO,
                 };
 
                 const { error: insertError } = await supabaseAdmin
-                    .from('option_chain_snapshots')
+                    .from('oi_trendline')         // Correct table for aggregated stats
                     .insert(snapshot);
 
                 if (insertError) {
