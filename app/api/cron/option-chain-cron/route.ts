@@ -33,13 +33,21 @@ export async function GET(request: NextRequest) {
         const marketOpenTime = 9 * 60 + 15;  // 9:15 AM
         const marketCloseTime = 15 * 60 + 30; // 3:30 PM
 
-        if (currentTimeInMinutes < marketOpenTime || currentTimeInMinutes > marketCloseTime) {
-            console.log('[OPTION-CHAIN-CRON] Skipping - Outside market hours');
-            return NextResponse.json({
-                success: true,
-                message: 'Outside market hours',
-                captured: 0,
-            });
+        // Check if forced execution (bypass market hours)
+        const { searchParams } = new URL(request.url);
+        const force = searchParams.get('force') === 'true';
+
+        if (!force) {
+            if (currentTimeInMinutes < marketOpenTime || currentTimeInMinutes > marketCloseTime) {
+                console.log('[OPTION-CHAIN-CRON] Skipping - Outside market hours');
+                return NextResponse.json({
+                    success: true,
+                    message: 'Outside market hours',
+                    captured: 0,
+                });
+            }
+        } else {
+            console.log('[OPTION-CHAIN-CRON] Forced execution - Bypassing market hours check');
         }
 
         // Round to nearest 3 minutes for consistent timestamps
@@ -57,9 +65,19 @@ export async function GET(request: NextRequest) {
 
         for (const indexName of indices) {
             try {
-                const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL && process.env.NEXT_PUBLIC_BASE_URL !== '/')
-                    ? process.env.NEXT_PUBLIC_BASE_URL
-                    : 'http://localhost:3000';
+                // improved baseUrl logic
+                let baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+
+                if (!baseUrl || baseUrl === '/') {
+                    if (process.env.VERCEL_URL) {
+                        baseUrl = `https://${process.env.VERCEL_URL}`;
+                    } else {
+                        baseUrl = 'http://localhost:3000';
+                    }
+                }
+
+                // Remove trailing slash if present
+                baseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 
                 const apiUrl = `${baseUrl}/api/option-chain?symbol=${encodeURIComponent(indexName)}`;
                 console.log(`[OPTION-CHAIN-CRON] Fetching: ${apiUrl}`);
