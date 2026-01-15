@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { SECTOR_STOCKS } from '@/constants/sector-stocks-mapping'
+import { getGrowwAccessToken } from '@/lib/groww-token'
 
 // Force dynamic rendering since we use request headers
 export const dynamic = 'force-dynamic';
@@ -52,6 +53,10 @@ export async function GET(request: NextRequest) {
         let successCount = 0
 
         // STEP 1: Try Groww API for all stocks
+
+        // Auto-generate token if needed
+        const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
+
         for (const symbol of Array.from(allStocks)) {
             try {
                 // Fetch OHLC data from Groww API (new endpoint)
@@ -59,7 +64,7 @@ export async function GET(request: NextRequest) {
 
                 const response = await fetch(url, {
                     headers: {
-                        'Authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
+                        'Authorization': `Bearer ${growwToken}`,
                         'X-API-VERSION': '1.0',
                         'Accept': 'application/json',
                         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',

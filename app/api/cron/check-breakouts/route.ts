@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { getGrowwAccessToken } from '@/lib/groww-token'
 
 // Force dynamic rendering since we use request headers
 export const dynamic = 'force-dynamic';
@@ -63,6 +64,9 @@ export async function GET(request: NextRequest) {
 
         const todayDate = istTime.toISOString().split('T')[0] // YYYY-MM-DD format
         console.log(`[BREAKOUT-CHECK] Checking breakouts/breakdowns for ${todayDate}`)
+
+        // Auto-generate token if needed
+        const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
 
         // Clear ALL breakout/breakdown records to show real-time state (non-cumulative)
         console.log('[BREAKOUT-CHECK] Clearing ALL breakout/breakdown records for real-time mode...')
@@ -152,7 +156,7 @@ export async function GET(request: NextRequest) {
                         const growwUrl = `https://api.groww.in/v1/live-data/quote?exchange=NSE&segment=CASH&trading_symbol=${stock.symbol}`
                         const growwResponse = await fetch(growwUrl, {
                             headers: {
-                                'Authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
+                                'Authorization': `Bearer ${growwToken}`,
                                 'X-API-VERSION': '1.0',
                                 'Accept': 'application/json',
                                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',

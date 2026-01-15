@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { getGrowwAccessToken } from '@/lib/groww-token'
 
 // Force dynamic rendering since we use request headers
 export const dynamic = 'force-dynamic';
@@ -171,6 +172,9 @@ async function captureStockData(capturedAt: string) {
     const errors: string[] = []
     let count = 0
 
+    // Auto-generate token if needed
+    const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
+
     try {
         // Define stocks to track (can be expanded)
         const stocksToTrack = [
@@ -205,7 +209,7 @@ async function captureStockData(capturedAt: string) {
 
                 const response = await fetch(url, {
                     headers: {
-                        'Authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
+                        'Authorization': `Bearer ${growwToken}`,
                         'X-API-VERSION': '1.0',
                         'Accept': 'application/json',
                         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { SECTOR_STOCKS } from '@/constants/sector-stocks-mapping'
+import { getGrowwAccessToken } from '@/lib/groww-token'
 
 /**
  * Background job to update breakout snapshots
@@ -48,6 +49,9 @@ export async function GET(request: Request) {
         // }
 
         console.log(`[BREAKOUT-SNAPSHOTS] Starting update at ${istTime.toISOString()}`)
+
+        // Auto-generate token if needed
+        const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
 
         // Get all unique stock symbols
         const allStocks = new Set<string>()
@@ -118,7 +122,7 @@ export async function GET(request: Request) {
                     const response = await fetch(quoteUrl, {
                         headers: {
                             'Accept': 'application/json',
-                            'Authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
+                            'Authorization': `Bearer ${growwToken}`,
                             'X-API-VERSION': '1.0',
                         },
                         cache: 'no-store',

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { SECTOR_STOCKS } from '@/constants/sector-stocks-mapping'
+import { getGrowwAccessToken } from '@/lib/groww-token'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -64,6 +65,9 @@ export async function GET(request: NextRequest) {
 
         console.log(`[STOCK-SNAPSHOTS] Starting update at ${istTime.toISOString()}`)
 
+        // Auto-generate token if needed
+        const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
+
         // Get all unique stock symbols
         const allStocks = new Set<string>()
         Object.values(SECTOR_STOCKS).forEach(stocks => {
@@ -101,7 +105,7 @@ export async function GET(request: NextRequest) {
                     const response = await fetch(quoteUrl, {
                         headers: {
                             'Accept': 'application/json',
-                            'Authorization': `Bearer ${process.env.GROWW_API_TOKEN || ''}`,
+                            'Authorization': `Bearer ${growwToken}`,
                             'X-API-VERSION': '1.0',
                         },
                         cache: 'no-store',
