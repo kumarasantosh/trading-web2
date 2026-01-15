@@ -1,0 +1,37 @@
+{
+    "crons": [
+        {
+            "path": "/api/cron/cleanup-intraday",
+            "schedule": "30 3 * * *"
+        },
+        {
+            "path": "/api/cron/populate-daily-high-low",
+            "schedule": "0 3 * * *"
+        },
+        {
+            "path": "/api/cron/capture-market-data",
+            "schedule": "*/1 3-10 * * *"
+        },
+        {
+            "path": "/api/cron/option-chain-cron",
+            "schedule": "*/3 3-10 * * *"
+        },
+        {
+            "path": "/api/cron/check-breakouts",
+            "schedule": "*/1 3-10 * * *"
+        },
+        {
+            "path": "/api/cron/calculate-pcr",
+            "schedule": "*/1 3-10 * * *"
+        },
+        {
+            "path": "/api/cron/update-stock-snapshots",
+            "schedule": "*/3 3-10 * * *"
+        }
+    ],
+    "functions": {
+        "app/api/cron/**/*.ts": {
+            "maxDuration": 300
+        }
+    }
+}

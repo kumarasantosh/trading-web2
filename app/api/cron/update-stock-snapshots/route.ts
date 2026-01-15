@@ -4,6 +4,7 @@ import { SECTOR_STOCKS } from '@/constants/sector-stocks-mapping'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
+export const maxDuration = 300
 
 /**
  * Cron job API route that updates stock snapshots every 3 minutes

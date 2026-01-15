@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 // Force dynamic rendering since we use request headers
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 /**
  * Cron job API route that checks for breakout/breakdown stocks during market hours

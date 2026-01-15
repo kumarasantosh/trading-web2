@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 /**
  * Cron job API route that calculates and stores PCR every 1 minute
