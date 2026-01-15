@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { fetchOptionChainData } from '@/services/optionChain'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -132,22 +133,13 @@ async function calculatePCR(indexName: string, capturedAt: string) {
             throw new Error(`Unknown index: ${indexName}`)
         }
 
-        // Fetch option chain data
-        const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL && process.env.NEXT_PUBLIC_BASE_URL !== '/')
-            ? process.env.NEXT_PUBLIC_BASE_URL
-            : 'http://localhost:3000'
-        const apiUrl = `${baseUrl}/api/option-chain?symbol=${encodeURIComponent(growwSymbol)}`
-        console.log(`[PCR] Fetching option chain from: ${apiUrl}`)
+        // Fetch option chain data (Direct service call)
+        console.log(`[PCR] Fetching option chain for ${growwSymbol}`)
 
-        const response = await fetch(apiUrl, {
-            cache: 'no-store',
-        })
-
-        if (!response.ok) {
-            throw new Error(`Option chain API returned ${response.status}`)
+        const data = await fetchOptionChainData(growwSymbol)
+        if (!data.success) {
+            throw new Error(`Option chain service returned error: ${data.error}`)
         }
-
-        const data = await response.json()
 
         if (!data.success || !data.optionChain) {
             throw new Error('Invalid option chain data')

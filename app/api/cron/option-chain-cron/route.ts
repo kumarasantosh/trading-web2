@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase'
+import { fetchOptionChainData } from '@/services/optionChain';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -65,32 +66,14 @@ export async function GET(request: NextRequest) {
 
         for (const indexName of indices) {
             try {
-                // improved baseUrl logic
-                let baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+                // Direct service call
+                console.log(`[OPTION-CHAIN-CRON] Fetching data for ${indexName}`);
 
-                if (!baseUrl || baseUrl === '/') {
-                    if (process.env.VERCEL_URL) {
-                        baseUrl = `https://${process.env.VERCEL_URL}`;
-                    } else {
-                        baseUrl = 'http://localhost:3000';
-                    }
+                const data = await fetchOptionChainData(indexName);
+
+                if (!data.success) {
+                    throw new Error(`Option chain service returned error: ${data.error}`);
                 }
-
-                // Remove trailing slash if present
-                baseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-
-                const apiUrl = `${baseUrl}/api/option-chain?symbol=${encodeURIComponent(indexName)}`;
-                console.log(`[OPTION-CHAIN-CRON] Fetching: ${apiUrl}`);
-
-                const response = await fetch(apiUrl, {
-                    cache: 'no-store',
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Option chain API returned ${response.status}`);
-                }
-
-                const data = await response.json();
 
                 if (!data.success || !data.optionChain) {
                     throw new Error('Invalid option chain data');
