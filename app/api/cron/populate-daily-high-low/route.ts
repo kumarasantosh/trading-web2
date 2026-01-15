@@ -113,13 +113,9 @@ export async function GET(request: NextRequest) {
 
                     const data = {
                         symbol: cleanSymbol,
-                        date: dateStr,
                         sector: 'General', // Can be enhanced with sector mapping
                         today_high: quote.regularMarketDayHigh || 0,
                         today_low: quote.regularMarketDayLow || 0,
-                        open_price: quote.regularMarketOpen || 0,
-                        close_price: quote.regularMarketPreviousClose || 0,
-                        volume: quote.regularMarketVolume || 0,
                     };
 
                     // Store in Supabase using upsert
