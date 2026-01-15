@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
 import { supabaseAdmin } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
+
+// Instantiate yahoo-finance2 (required for v3)
+const yahooFinance = new YahooFinance();
 
 // Add ALL your stock symbols here
 const SYMBOLS = [
