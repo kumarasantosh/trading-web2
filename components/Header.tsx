@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { UserButton, SignInButton, SignedIn, SignedOut } from '@clerk/nextjs'
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false)
@@ -24,8 +25,8 @@ export default function Header() {
     <>
       <header
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled
-            ? 'bg-white/95 backdrop-blur-xl shadow-lg py-3'
-            : 'bg-transparent py-5'
+          ? 'bg-white/95 backdrop-blur-xl shadow-lg py-3'
+          : 'bg-transparent py-5'
           }`}
       >
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -46,8 +47,8 @@ export default function Header() {
               <a
                 href="/momentum"
                 className={`transition-colors font-medium ${isScrolled
-                    ? 'text-gray-700 hover:text-black'
-                    : 'text-white/80 hover:text-white'
+                  ? 'text-gray-700 hover:text-black'
+                  : 'text-white/80 hover:text-white'
                   }`}
               >
                 Momentum
@@ -55,8 +56,8 @@ export default function Header() {
               <button
                 onClick={() => scrollToSection('explore')}
                 className={`transition-colors font-medium ${isScrolled
-                    ? 'text-gray-700 hover:text-black'
-                    : 'text-white/80 hover:text-white'
+                  ? 'text-gray-700 hover:text-black'
+                  : 'text-white/80 hover:text-white'
                   }`}
               >
                 Explore
@@ -64,21 +65,26 @@ export default function Header() {
               <button
                 onClick={() => scrollToSection('testimonials')}
                 className={`transition-colors font-medium ${isScrolled
-                    ? 'text-gray-700 hover:text-black'
-                    : 'text-white/80 hover:text-white'
+                  ? 'text-gray-700 hover:text-black'
+                  : 'text-white/80 hover:text-white'
                   }`}
               >
                 Testimonials
               </button>
-              <a
-                href="/sign-in"
-                className={`transition-colors font-medium ${isScrolled
+              <SignedOut>
+                <a
+                  href="/sign-in"
+                  className={`transition-colors font-medium ${isScrolled
                     ? 'text-gray-700 hover:text-black'
                     : 'text-white/80 hover:text-white'
-                  }`}
-              >
-                Login
-              </a>
+                    }`}
+                >
+                  Login
+                </a>
+              </SignedOut>
+              <SignedIn>
+                <UserButton afterSignOutUrl="/" />
+              </SignedIn>
               <button
                 onClick={() => scrollToSection('subscribe')}
                 className="bg-black text-white px-6 py-3 rounded-xl hover:bg-gray-900 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl hover:scale-105"
@@ -141,13 +147,20 @@ export default function Header() {
             >
               Testimonials
             </button>
-            <a
-              href="/sign-in"
-              onClick={() => document.getElementById('mobile-nav')?.classList.add('hidden')}
-              className="block w-full text-left text-black hover:text-gray-600 transition-colors font-medium py-2"
-            >
-              Login
-            </a>
+            <SignedOut>
+              <a
+                href="/sign-in"
+                onClick={() => document.getElementById('mobile-nav')?.classList.add('hidden')}
+                className="block w-full text-left text-black hover:text-gray-600 transition-colors font-medium py-2"
+              >
+                Login
+              </a>
+            </SignedOut>
+            <SignedIn>
+              <div className="py-2">
+                <UserButton afterSignOutUrl="/" />
+              </div>
+            </SignedIn>
             <button
               onClick={() => {
                 scrollToSection('subscribe')

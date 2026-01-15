@@ -114,7 +114,6 @@ async function captureSectorData(capturedAt: string) {
             'NIFTY PVT BANK': 'Private Bank',
             'NIFTY PSU BANK': 'PSU Bank',
             'NIFTY CONSUMPTION': 'Consumer Durables',
-            'NIFTY INFRASTRUCTURE': 'Infrastructure',
         }
 
         const snapshots = []

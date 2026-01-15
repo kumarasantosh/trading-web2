@@ -583,7 +583,6 @@ export async function fetchSectorData(): Promise<{ name: string; previousClose: 
     { name: 'Financial Services', nseIndex: 'NIFTY FINANCIAL SERVICES' },
     { name: 'Private Bank', nseIndex: 'NIFTY PRIVATE BANK' },
     { name: 'PSU Bank', nseIndex: 'NIFTY PSU BANK' },
-    { name: 'Infrastructure', nseIndex: 'NIFTY INFRASTRUCTURE' },
     { name: 'Consumer Durables', nseIndex: 'NIFTY CONSUMER DURABLES' },
     { name: 'Nifty MidSelect', nseIndex: 'NIFTY MIDCAP SELECT' },
     { name: 'Oil & Gas', nseIndex: 'NIFTY OIL & GAS' },
