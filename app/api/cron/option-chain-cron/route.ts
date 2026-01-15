@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
 
                 // Store snapshot
                 const snapshot = {
-                    index_name: indexName,
+                    symbol: indexName, // DB column is 'symbol' not 'index_name'
                     spot_price: spotPrice,
                     total_put_oi: totalPutOI,
                     total_call_oi: totalCallOI,
