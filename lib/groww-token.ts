@@ -130,4 +130,40 @@ async function generateNewToken(): Promise<string | null> {
  */
 export function clearGrowwTokenCache(): void {
     memoryCache = null;
+    console.log('[GROWW-TOKEN] Cache cleared');
+}
+
+/**
+ * Force refresh token from Supabase, bypassing all caches
+ */
+export async function forceRefreshFromSupabase(): Promise<string | null> {
+    console.log('[GROWW-TOKEN] Force refreshing from Supabase...');
+    memoryCache = null; // Clear cache first
+
+    try {
+        const { data, error } = await supabaseAdmin
+            .from('api_tokens')
+            .select('token, expiry')
+            .eq('id', 'groww_api_token')
+            .single();
+
+        if (error) {
+            console.log('[GROWW-TOKEN] Supabase error:', error.message);
+            return null;
+        }
+
+        if (data?.token) {
+            const expiryTime = new Date(data.expiry).getTime();
+            console.log(`[GROWW-TOKEN] Force loaded token from Supabase, expires: ${data.expiry}`);
+
+            // Update cache
+            memoryCache = { token: data.token, expiry: expiryTime };
+            return data.token;
+        }
+
+        return null;
+    } catch (e) {
+        console.log('[GROWW-TOKEN] Force refresh failed:', e);
+        return null;
+    }
 }

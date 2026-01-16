@@ -66,8 +66,16 @@ export async function GET(request: NextRequest) {
 
         console.log(`[STOCK-SNAPSHOTS] Starting update at ${istTime.toISOString()}`)
 
-        // Auto-generate token if needed
-        const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
+        // Force refresh token from Supabase to avoid stale cache
+        const { forceRefreshFromSupabase } = await import('@/lib/groww-token');
+        let growwToken = await forceRefreshFromSupabase();
+
+        // Fallback to regular method if force refresh fails
+        if (!growwToken) {
+            console.log('[STOCK-SNAPSHOTS] Force refresh failed, using fallback');
+            growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
+        }
+
         console.log(`[STOCK-SNAPSHOTS] Token source: ${growwToken ? (growwToken.substring(0, 20) + '...') : 'MISSING'}`)
 
 
