@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
         console.log(`[STOCK-SNAPSHOTS] Fetching data for ${symbols.length} stocks`)
 
         // Fetch stock data using individual quote API (parallel batches)
-        const BATCH_SIZE = 5 // Reduced to avoid 429 Rate Limiting
+        const BATCH_SIZE = 3 // Further reduced to avoid 429 Rate Limiting
         const snapshots: Array<{
             symbol: string
             open_price: number
@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
 
             // Add delay between batches to avoid rate limiting
             if (i + BATCH_SIZE < symbols.length) {
-                await new Promise(resolve => setTimeout(resolve, 1000)) // 1 second delay
+                await new Promise(resolve => setTimeout(resolve, 2000)) // 2 second delay
             }
         }
 
