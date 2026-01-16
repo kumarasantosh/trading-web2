@@ -15,8 +15,10 @@ export async function GET(request: NextRequest) {
         const date = searchParams.get('date'); // Date in YYYY-MM-DD format
 
         // IST to UTC market hours: 09:15 IST (03:45 UTC) to 15:30 IST (10:00 UTC)
+        // Convert server time to IST to determine "today" correctly
         const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
+        const istDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+        const todayStr = istDate.toISOString().split('T')[0];
         const effectiveDate = date || todayStr;
 
         const startTime = `${effectiveDate}T03:45:00.000Z`;
