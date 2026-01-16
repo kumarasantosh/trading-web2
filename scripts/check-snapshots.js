@@ -12,36 +12,36 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 async function checkSnapshots() {
-    console.log('Checking option_chain_snapshots table...');
+    console.log('Checking breakout_snapshots table...');
 
-    // Get counts for today
-    const today = new Date().toISOString().split('T')[0];
-
-    const { data, error, count } = await supabase
-        .from('option_chain_snapshots')
-        .select('*', { count: 'exact', head: true })
-        .gte('captured_at', today);
+    const { data, error } = await supabase
+        .from('breakout_snapshots')
+        .select('symbol, updated_at, is_breakout, is_breakdown');
 
     if (error) {
         console.error('Error querying snapshots:', error);
         return;
     }
 
-    console.log(`Found ${count} snapshots for today (${today}).`);
+    console.log(`Found ${data.length} total snapshots.`);
 
-    // Get recent entries
-    const { data: recent, error: recentError } = await supabase
-        .from('option_chain_snapshots')
-        .select('symbol, expiry_date, captured_at')
-        .order('captured_at', { ascending: false })
-        .limit(5);
+    const now = new Date();
+    const timestamps = data.map(d => new Date(d.updated_at));
+    const minTime = new Date(Math.min(...timestamps));
+    const maxTime = new Date(Math.max(...timestamps));
 
-    if (recentError) {
-        console.log('Error fetching recent:', recentError);
-    } else {
-        console.log('Most recent snapshots:');
-        console.table(recent);
-    }
+    console.log(`Current Time (JS): ${now.toISOString()}`);
+    console.log(`Min updated_at: ${minTime.toISOString()}`);
+    console.log(`Max updated_at: ${maxTime.toISOString()}`);
+
+    const freshCount = data.filter(d => (now - new Date(d.updated_at)) < 15 * 60 * 1000).length;
+    console.log(`Fresher than 15 mins: ${freshCount}`);
+
+    const breakdowns = data.filter(s => s.is_breakdown);
+    console.log(`Total Breakdowns: ${breakdowns.length}`);
+
+    const freshBreakdowns = breakdowns.filter(d => (now - new Date(d.updated_at)) < 15 * 60 * 1000);
+    console.log(`Fresh Breakdowns (last 15m): ${freshBreakdowns.length}`);
 }
 
 checkSnapshots();

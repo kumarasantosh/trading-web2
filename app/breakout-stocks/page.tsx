@@ -49,8 +49,6 @@ export default function BreakoutStocksPage() {
           console.timeEnd('[BREAKOUT] Fetch from new breakout snapshots API')
 
           if (newApiData.success) {
-            console.log('✅ Using database breakout snapshots')
-
             // Map to existing format
             const mappedBreakouts: BreakoutStock[] = (newApiData.breakouts || []).map((s: any) => ({
               symbol: s.symbol,

@@ -71,41 +71,22 @@ export async function GET(request: NextRequest) {
         // Clear ALL breakout/breakdown records to show real-time state (non-cumulative)
         console.log('[BREAKOUT-CHECK] Clearing ALL breakout/breakdown records for real-time mode...')
 
-        const { error: deleteBreakoutsError } = await supabaseAdmin
-            .from('breakout_stocks')
-            .delete()
-            .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all rows (valid UUID comparison)
+        const { error: del1 } = await supabaseAdmin.from('breakout_stocks').delete().neq('symbol', '')
+        const { error: del2 } = await supabaseAdmin.from('breakdown_stocks').delete().neq('symbol', '')
+        const { error: del3 } = await supabaseAdmin.from('breakout_snapshots').delete().neq('symbol', '')
 
-        if (deleteBreakoutsError) {
-            console.error('[BREAKOUT-CHECK] Error deleting breakouts:', deleteBreakoutsError)
-        }
-
-        const { error: deleteBreakdownsError } = await supabaseAdmin
-            .from('breakdown_stocks')
-            .delete()
-            .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all rows (valid UUID comparison)
-
-        if (deleteBreakdownsError) {
-            console.error('[BREAKOUT-CHECK] Error deleting breakdowns:', deleteBreakdownsError)
+        if (del1 || del2 || del3) {
+            console.error('[BREAKOUT-CHECK] Error clearing tables:', { del1, del2, del3 })
         }
 
         console.log('[BREAKOUT-CHECK] Old records cleared')
 
         // Fetch yesterday's high-low data from database
         console.log('[BREAKOUT-CHECK] Attempting to fetch from daily_high_low table...')
-        console.log('[BREAKOUT-CHECK] Using supabaseAdmin client')
 
         const { data: highLowData, error: fetchError } = await supabaseAdmin
             .from('daily_high_low')
-            .select('symbol, sector, today_high, today_low')
-
-        console.log('[BREAKOUT-CHECK] Query completed')
-        console.log('[BREAKOUT-CHECK] Error:', fetchError ? JSON.stringify(fetchError) : 'null')
-        console.log('[BREAKOUT-CHECK] Data length:', highLowData?.length || 0)
-
-        if (highLowData && highLowData.length > 0) {
-            console.log('[BREAKOUT-CHECK] Sample data:', JSON.stringify(highLowData[0]))
-        }
+            .select('symbol, sector, today_high, today_low, today_open, today_close')
 
         if (fetchError) {
             console.error('[BREAKOUT-CHECK] Error fetching high-low data:', fetchError)
@@ -131,6 +112,7 @@ export async function GET(request: NextRequest) {
 
         const breakoutsToInsert: any[] = []
         const breakdownsToInsert: any[] = []
+        const snapshotsToInsert: any[] = []
         const errors: string[] = []
 
         // Process stocks in parallel batches to avoid timeout
@@ -224,11 +206,29 @@ export async function GET(request: NextRequest) {
                                 type: 'breakout',
                                 data: {
                                     symbol: stock.symbol,
-                                    sector: stock.sector,
-                                    ltp: ltp,
-                                    yesterday_high: stock.today_high,
-                                    breakout_percent: breakoutPercent,
-                                    breakout_date: todayDate,
+                                    breakout_stocks: {
+                                        symbol: stock.symbol,
+                                        sector: stock.sector,
+                                        ltp: ltp,
+                                        yesterday_high: stock.today_high,
+                                        breakout_percent: breakoutPercent,
+                                        breakout_date: todayDate,
+                                        yesterday_open: stock.today_open || stock.today_high,
+                                        yesterday_close: stock.today_close || stock.today_high,
+                                    },
+                                    snapshot: {
+                                        symbol: stock.symbol,
+                                        current_price: ltp,
+                                        prev_day_high: stock.today_high,
+                                        prev_day_low: stock.today_low,
+                                        prev_day_close: stock.today_close || stock.today_high,
+                                        prev_day_open: stock.today_open || stock.today_high,
+                                        breakout_percentage: breakoutPercent,
+                                        breakdown_percentage: 0,
+                                        is_breakout: true,
+                                        is_breakdown: false,
+                                        updated_at: new Date().toISOString()
+                                    }
                                 }
                             }
                         }
@@ -240,11 +240,29 @@ export async function GET(request: NextRequest) {
                                 type: 'breakdown',
                                 data: {
                                     symbol: stock.symbol,
-                                    sector: stock.sector,
-                                    ltp: ltp,
-                                    yesterday_low: stock.today_low,
-                                    breakdown_percent: breakdownPercent,
-                                    breakdown_date: todayDate,
+                                    breakdown_stocks: {
+                                        symbol: stock.symbol,
+                                        sector: stock.sector,
+                                        ltp: ltp,
+                                        yesterday_low: stock.today_low,
+                                        breakdown_percent: breakdownPercent,
+                                        breakdown_date: todayDate,
+                                        yesterday_open: stock.today_open || stock.today_low,
+                                        yesterday_close: stock.today_close || stock.today_low,
+                                    },
+                                    snapshot: {
+                                        symbol: stock.symbol,
+                                        current_price: ltp,
+                                        prev_day_high: stock.today_high,
+                                        prev_day_low: stock.today_low,
+                                        prev_day_close: stock.today_close || stock.today_low,
+                                        prev_day_open: stock.today_open || stock.today_low,
+                                        breakout_percentage: 0,
+                                        breakdown_percentage: breakdownPercent,
+                                        is_breakout: false,
+                                        is_breakdown: true,
+                                        updated_at: new Date().toISOString()
+                                    }
                                 }
                             }
                         }
@@ -263,9 +281,11 @@ export async function GET(request: NextRequest) {
             results.forEach(result => {
                 if (result) {
                     if (result.type === 'breakout') {
-                        breakoutsToInsert.push(result.data)
+                        breakoutsToInsert.push(result.data.breakout_stocks)
+                        snapshotsToInsert.push(result.data.snapshot)
                     } else if (result.type === 'breakdown') {
-                        breakdownsToInsert.push(result.data)
+                        breakdownsToInsert.push(result.data.breakdown_stocks)
+                        snapshotsToInsert.push(result.data.snapshot)
                     }
                 }
             })
@@ -277,13 +297,12 @@ export async function GET(request: NextRequest) {
         }
 
         // --- ATOMIC UPDATE START ---
-        // 1. Clear old records
-        await supabaseAdmin.from('breakout_stocks').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabaseAdmin.from('breakdown_stocks').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        // Tables already cleared at the beginning of the job
 
         // 2. Batch insert new records (if any)
         let breakoutCount = 0
         let breakdownCount = 0
+        let snapshotCount = 0
 
         if (breakoutsToInsert.length > 0) {
             const { error: insertError } = await supabaseAdmin
@@ -308,9 +327,21 @@ export async function GET(request: NextRequest) {
                 breakdownCount = breakdownsToInsert.length
             }
         }
+
+        if (snapshotsToInsert.length > 0) {
+            const { error: insertError } = await supabaseAdmin
+                .from('breakout_snapshots')
+                .upsert(snapshotsToInsert, { onConflict: 'symbol' })
+            if (insertError) {
+                console.error('[BREAKOUT-CHECK] Error upserting snapshots:', insertError)
+                errors.push(`Upsert snapshots: ${insertError.message}`)
+            } else {
+                snapshotCount = snapshotsToInsert.length
+            }
+        }
         // --- ATOMIC UPDATE END ---
 
-        console.log(`[BREAKOUT-CHECK] ✅ Complete: ${breakoutCount} breakouts, ${breakdownCount} breakdowns persisted`)
+        console.log(`[BREAKOUT-CHECK] ✅ Complete: ${breakoutCount} breakouts, ${breakdownCount} breakdowns, ${snapshotCount} snapshots persisted`)
 
         return NextResponse.json({
             success: true,
@@ -318,6 +349,7 @@ export async function GET(request: NextRequest) {
             stocks_checked: highLowData.length,
             breakouts_detected: breakoutCount,
             breakdowns_detected: breakdownCount,
+            snapshots_detected: snapshotCount,
             errors: errors.slice(0, 10), // Limit errors to first 10
             error_count: errors.length,
         })

@@ -110,10 +110,12 @@ export async function GET(request: NextRequest) {
 
                     const data = {
                         symbol: cleanSymbol,
-                        sector: 'General', // Can be enhanced with sector mapping
+                        sector: 'General',
                         today_high: quote.regularMarketDayHigh || 0,
                         today_low: quote.regularMarketDayLow || 0,
-                        captured_date: dateStr, // Required NOT NULL column
+                        today_open: quote.regularMarketOpen || quote.regularMarketDayHigh || 0,
+                        today_close: quote.regularMarketPrice || quote.regularMarketPreviousClose || quote.regularMarketDayHigh || 0,
+                        captured_date: dateStr,
                     };
 
                     // Delete existing record for this symbol first
