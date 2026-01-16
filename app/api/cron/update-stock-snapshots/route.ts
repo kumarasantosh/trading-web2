@@ -63,10 +63,13 @@ export async function GET(request: NextRequest) {
         }
         */
 
+
         console.log(`[STOCK-SNAPSHOTS] Starting update at ${istTime.toISOString()}`)
 
         // Auto-generate token if needed
         const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
+        console.log(`[STOCK-SNAPSHOTS] Token source: ${growwToken ? (growwToken.substring(0, 20) + '...') : 'MISSING'}`)
+
 
         // Get all unique stock symbols
         const allStocks = new Set<string>()
