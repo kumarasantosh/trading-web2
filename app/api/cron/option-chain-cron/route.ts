@@ -119,6 +119,51 @@ export async function GET(request: NextRequest) {
                     results.push(snapshot);
                 }
 
+                // --- NEW: Save detailed snapshot to option_chain_snapshots ---
+
+                // Convert expiry date format (DD-MMM-YYYY -> YYYY-MM-DD)
+                const monthMap: Record<string, string> = {
+                    'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
+                    'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
+                };
+
+                let expiryDateForStorage = data.expiryDate || '';
+                if (expiryDateForStorage) {
+                    const parts = expiryDateForStorage.split('-');
+                    if (parts.length === 3) {
+                        const day = parts[0];
+                        const month = parts[1].toUpperCase();
+                        const year = parts[2];
+                        const monthNum = monthMap[month];
+                        if (monthNum) {
+                            expiryDateForStorage = `${year}-${monthNum}-${day}`;
+                        }
+                    }
+                }
+
+                // Upsert into option_chain_snapshots
+                const { error: snapshotError } = await supabaseAdmin
+                    .from('option_chain_snapshots')
+                    .upsert({
+                        symbol: indexName,
+                        expiry_date: expiryDateForStorage,
+                        captured_at: capturedAtISO,
+                        nifty_spot: spotPrice,
+                        option_chain_data: data.records || data.optionChain // Save full data payload
+                    }, {
+                        onConflict: 'symbol,expiry_date,captured_at',
+                        ignoreDuplicates: false
+                    });
+
+                if (snapshotError) {
+                    console.error(`[OPTION-CHAIN-CRON] Snapshot save error for ${indexName}:`, snapshotError);
+                    // Don't fail the whole request, just log it
+                } else {
+                    console.log(`[OPTION-CHAIN-CRON] Snapshot saved for ${indexName}`);
+                }
+                // -----------------------------------------------------------
+
+
             } catch (error) {
                 console.error(`[OPTION-CHAIN-CRON] Error processing ${indexName}:`, error);
                 errors.push(`${indexName}: ${error instanceof Error ? error.message : 'Unknown error'}`);

@@ -174,6 +174,12 @@ export default function OptionChainPage() {
                 console.log(`[PCR Chart] Loaded ${mappedData.length} points from pcr-trendline API`)
                 setPcrData(mappedData)
                 pcrHistoryRef.current = mappedData
+
+                // Initialize lastResetDateRef to today to prevent unwanted reset on next live update
+                const now = new Date()
+                const istDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+                const todayStr = istDate.toISOString().split('T')[0]
+                lastResetDateRef.current = todayStr
             }
         } catch (error) {
             console.error('Error fetching trendline data:', error)
