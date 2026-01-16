@@ -21,7 +21,7 @@ export default function Subscribe() {
     email: '',
     isdCode: '+91',
     mobile: '',
-    plan: 'basic',
+    plan: 'monthly',
   })
   const [isLoading, setIsLoading] = useState(false)
 
@@ -34,9 +34,9 @@ export default function Subscribe() {
   ]
 
   const plans = [
-    { id: 'basic', name: 'Basic Plan', price: 999, duration: 'month' },
-    { id: 'pro', name: 'Pro Plan', price: 1999, duration: 'month' },
-    { id: 'premium', name: 'Premium Plan', price: 3999, duration: 'month' },
+    { id: 'monthly', name: 'Monthly Plan', price: 999, duration: 'month' },
+    { id: 'quarterly', name: 'Quarterly Plan', price: 1999, duration: 'quarter' },
+    { id: 'yearly', name: 'Yearly Plan', price: 5999, duration: 'year' },
   ]
 
   const handleInputChange = (
@@ -111,7 +111,7 @@ export default function Subscribe() {
               email: '',
               isdCode: '+91',
               mobile: '',
-              plan: 'basic',
+              plan: 'monthly',
             })
           } else {
             alert('Payment verification failed. Please contact support.')
@@ -217,13 +217,13 @@ export default function Subscribe() {
                 >
                   Mobile Number *
                 </label>
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
                   <select
                     id="isdCode"
                     name="isdCode"
                     value={formData.isdCode}
                     onChange={handleInputChange}
-                    className="px-5 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-black outline-none bg-white transition-all duration-300 hover:border-gray-400"
+                    className="w-full sm:w-auto px-5 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-black outline-none bg-white transition-all duration-300 hover:border-gray-400"
                   >
                     {isdCodes.map((code) => (
                       <option key={code.code} value={code.dialCode}>
@@ -239,7 +239,7 @@ export default function Subscribe() {
                     onChange={handleInputChange}
                     required
                     pattern="[0-9]{10}"
-                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                    className="w-full sm:flex-1 px-5 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-black outline-none transition-all duration-300 hover:border-gray-400"
                     placeholder="Enter mobile number"
                   />
                 </div>

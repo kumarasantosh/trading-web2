@@ -18,23 +18,15 @@ export default function Footer() {
                   href="/disclaimers"
                   className="text-gray-400 hover:text-white transition-colors"
                 >
-                  Disclaimers
+                  Disclaimer
                 </Link>
               </li>
               <li>
                 <Link
-                  href="/refund-policy"
+                  href="/risk-disclosure"
                   className="text-gray-400 hover:text-white transition-colors"
                 >
-                  Refund Policy
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/disclosures"
-                  className="text-gray-400 hover:text-white transition-colors"
-                >
-                  Disclosures
+                  Risk Disclosure
                 </Link>
               </li>
               <li>
@@ -70,6 +62,14 @@ export default function Footer() {
               </li>
               <li>
                 <Link
+                  href="/faq"
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  FAQ
+                </Link>
+              </li>
+              <li>
+                <Link
                   href="/contact-us"
                   className="text-gray-400 hover:text-white transition-colors"
                 >
@@ -85,12 +85,40 @@ export default function Footer() {
             <ul className="space-y-2">
               <li>
                 <a
-                  href="https://t.me/your-community"
+                  href="https://twitter.com/ectrade"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-gray-400 hover:text-white transition-colors"
                 >
-                  Telegram Community
+                  Twitter / X
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://instagram.com/ectrade"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  Instagram
+                </a>
+              </li>
+              <li>
+                <a
+                  href="mailto:info@ectrade.in"
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  Email
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://wa.me/918431102010"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  WhatsApp
                 </a>
               </li>
             </ul>
@@ -103,7 +131,7 @@ export default function Footer() {
               Have questions? We're here to help.
             </p>
             <p className="text-gray-400">
-              Email: support@tradingtoolkit.in
+              Email: info@ectrade.in
             </p>
           </div>
         </div>
@@ -111,7 +139,7 @@ export default function Footer() {
         {/* Copyright */}
         <div className="border-t border-gray-800 pt-8 text-center">
           <p className="text-gray-400">
-            © {currentYear} Trading Toolkit. All Rights Reserved.
+            © {currentYear} ectrade.in. All Rights Reserved.
           </p>
         </div>
       </div>

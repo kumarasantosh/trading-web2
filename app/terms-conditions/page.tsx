@@ -5,7 +5,7 @@ import Link from 'next/link'
 export default function TermsConditions() {
   return (
     <main className="min-h-screen">
-      <Header />
+      <Header forceDarkText />
       <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
         <div className="container mx-auto max-w-4xl">
           <h1 className="text-4xl font-bold text-black mb-8">
@@ -18,51 +18,99 @@ export default function TermsConditions() {
             <div className="space-y-6 text-gray-700">
               <div>
                 <h2 className="text-2xl font-bold text-black mb-3">
-                  Acceptance of Terms
+                  Nature of Content and Tools
                 </h2>
                 <p>
-                  By accessing and using this platform, you agree to be bound by
-                  these Terms and Conditions. If you do not agree, please do not
-                  use our services.
+                  All content and tools provided on ectrade.in are:
+                </p>
+                <ul className="list-disc list-inside space-y-2 ml-4">
+                  <li>For educational and informational purposes</li>
+                  <li>Generic in nature</li>
+                  <li>Not tailored to individual financial situations</li>
+                </ul>
+                <p className="mt-3">
+                  Users are solely responsible for their trading actions.
                 </p>
               </div>
+
               <div>
                 <h2 className="text-2xl font-bold text-black mb-3">
-                  User Responsibilities
+                  Third-Party Services
                 </h2>
                 <p>
-                  You are responsible for maintaining the confidentiality of your
-                  account credentials and for all activities that occur under
-                  your account.
+                  The platform may use or display:
+                </p>
+                <ul className="list-disc list-inside space-y-2 ml-4">
+                  <li>Third-party market data</li>
+                  <li>Charting tools</li>
+                  <li>Broker or API integrations</li>
+                </ul>
+                <p className="mt-3">
+                  ectrade.in is not responsible for data delays, errors, or service interruptions caused by third parties.
                 </p>
               </div>
-              <div>
-                <h2 className="text-2xl font-bold text-black mb-3">
-                  Service Availability
-                </h2>
-                <p>
-                  We strive to maintain service availability but do not guarantee
-                  uninterrupted access. We reserve the right to modify or
-                  discontinue services at any time.
-                </p>
-              </div>
+
               <div>
                 <h2 className="text-2xl font-bold text-black mb-3">
                   Limitation of Liability
                 </h2>
                 <p>
-                  We shall not be liable for any indirect, incidental, special,
-                  or consequential damages arising from your use of the platform.
+                  ectrade.in, its owners, and team members shall not be liable for:
                 </p>
+                <ul className="list-disc list-inside space-y-2 ml-4">
+                  <li>Trading losses</li>
+                  <li>Technical failures</li>
+                  <li>Data inaccuracies</li>
+                  <li>Any direct or indirect financial damage</li>
+                </ul>
+                <div className="bg-gray-100 border-l-4 border-gray-500 p-4 my-4">
+                  <p className="font-semibold">
+                    Use of the platform is entirely at the user's own risk.
+                  </p>
+                </div>
               </div>
+
               <div>
                 <h2 className="text-2xl font-bold text-black mb-3">
-                  Modifications
+                  User Responsibilities
                 </h2>
                 <p>
-                  We reserve the right to modify these terms at any time. Your
-                  continued use of the platform constitutes acceptance of
-                  modified terms.
+                  By using ectrade.in, users agree:
+                </p>
+                <ul className="list-disc list-inside space-y-2 ml-4">
+                  <li>Not to misuse the platform</li>
+                  <li>Not to copy, resell, or redistribute tools or content</li>
+                  <li>To keep login credentials secure</li>
+                </ul>
+                <p className="mt-3">
+                  Accounts may be suspended or terminated for violations.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-black mb-3">
+                  Intellectual Property
+                </h2>
+                <p>
+                  All content, tools, designs, code, and branding on ectrade.in are the property of ectrade.in and may not be used without written permission.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-black mb-3">
+                  Governing Law
+                </h2>
+                <p>
+                  These terms are governed by the laws of India. Any disputes shall be subject to Indian jurisdiction only.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-black mb-3">
+                  Changes to Terms
+                </h2>
+                <p>
+                  ectrade.in may update these terms from time to time. Continued use of the platform indicates acceptance of the updated terms.
                 </p>
               </div>
             </div>
@@ -81,4 +129,3 @@ export default function TermsConditions() {
     </main>
   )
 }
-

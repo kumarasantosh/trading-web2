@@ -5,7 +5,7 @@ import Link from 'next/link'
 export default function PrivacyPolicy() {
   return (
     <main className="min-h-screen">
-      <Header />
+      <Header forceDarkText />
       <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
         <div className="container mx-auto max-w-4xl">
           <h1 className="text-4xl font-bold text-black mb-8">Privacy Policy</h1>
@@ -18,50 +18,78 @@ export default function PrivacyPolicy() {
                 <h2 className="text-2xl font-bold text-black mb-3">
                   Information We Collect
                 </h2>
-                <p>
-                  We collect information that you provide directly to us,
-                  including name, email address, phone number, and payment
-                  information when you subscribe to our services.
-                </p>
+                <p>We may collect:</p>
+                <ul className="list-disc list-inside space-y-2 ml-4">
+                  <li>Name, email address, and contact details (if provided)</li>
+                  <li>Device, browser, IP address, and usage data</li>
+                </ul>
               </div>
+
               <div>
                 <h2 className="text-2xl font-bold text-black mb-3">
                   How We Use Your Information
                 </h2>
-                <p>
-                  We use your information to provide, maintain, and improve our
-                  services, process payments, send notifications, and communicate
-                  with you about your account.
-                </p>
+                <p>Collected information is used to:</p>
+                <ul className="list-disc list-inside space-y-2 ml-4">
+                  <li>Provide and improve services</li>
+                  <li>Communicate important updates</li>
+                  <li>Ensure platform security</li>
+                  <li>Comply with legal requirements</li>
+                </ul>
+                <div className="bg-blue-50 border-l-4 border-blue-400 p-4 my-4">
+                  <p className="font-semibold text-blue-800">
+                    We do not sell personal data.
+                  </p>
+                </div>
               </div>
+
               <div>
                 <h2 className="text-2xl font-bold text-black mb-3">
                   Data Security
                 </h2>
                 <p>
-                  We implement appropriate technical and organizational measures
-                  to protect your personal information against unauthorized
-                  access, alteration, disclosure, or destruction.
+                  Reasonable security measures are used to protect user data. However, no online system can be guaranteed to be completely secure.
                 </p>
               </div>
+
               <div>
                 <h2 className="text-2xl font-bold text-black mb-3">
-                  Data Sharing
+                  Cookies
                 </h2>
                 <p>
-                  We do not sell your personal information. We may share
-                  information with service providers who assist us in operating
-                  our platform, subject to confidentiality agreements.
+                  Cookies may be used to improve user experience and analytics. Users can manage cookie settings via their browser.
                 </p>
               </div>
+
               <div>
                 <h2 className="text-2xl font-bold text-black mb-3">
-                  Your Rights
+                  Legal Compliance
                 </h2>
                 <p>
-                  You have the right to access, update, or delete your personal
-                  information. You may also opt-out of marketing communications
-                  at any time.
+                  This platform complies with applicable Indian laws, including:
+                </p>
+                <ul className="list-disc list-inside space-y-2 ml-4">
+                  <li>Information Technology Act, 2000</li>
+                  <li>IT Rules, 2011</li>
+                  <li>Digital Personal Data Protection Act, 2023 (as applicable)</li>
+                </ul>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-black mb-3">
+                  Governing Law
+                </h2>
+                <p>
+                  This privacy policy is governed by the laws of India. Any disputes shall be subject to Indian jurisdiction only.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-black mb-3">
+                  Changes to Policy
+                </h2>
+                <p>
+                  ectrade.in may update this policy from time to time. Continued use of the platform indicates acceptance of the updated policy.
                 </p>
               </div>
             </div>
@@ -80,4 +108,3 @@ export default function PrivacyPolicy() {
     </main>
   )
 }
-

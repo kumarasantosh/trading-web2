@@ -39,12 +39,16 @@ export default function Header({ forceDarkText = false }: HeaderProps) {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <div className="flex items-center space-x-3">
-              <span className={`text-xl sm:text-2xl font-bold transition-colors ${useDarkText ? 'text-black' : 'text-white'
-                }`}>
-                ectrade
-              </span>
-            </div>
+            <a href="/" className="flex items-center space-x-3">
+              <img
+                src="/logo.png"
+                alt="ectrade"
+                className={`h-8 sm:h-10 w-auto transition-all ${useDarkText
+                    ? ''
+                    : 'bg-white p-1 rounded'
+                  }`}
+              />
+            </a>
 
             {/* Navigation */}
             <nav className="hidden md:flex items-center space-x-8">
@@ -99,7 +103,7 @@ export default function Header({ forceDarkText = false }: HeaderProps) {
 
             {/* Mobile Menu Button */}
             <button
-              className="md:hidden text-black"
+              className={`md:hidden transition-colors ${useDarkText ? 'text-black' : 'text-white'}`}
               onClick={() => {
                 const nav = document.getElementById('mobile-nav')
                 nav?.classList.toggle('hidden')
@@ -124,7 +128,7 @@ export default function Header({ forceDarkText = false }: HeaderProps) {
           {/* Mobile Navigation */}
           <nav
             id="mobile-nav"
-            className="hidden md:hidden mt-4 pb-4 space-y-3"
+            className="hidden md:hidden mt-4 pb-4 space-y-3 bg-white rounded-lg shadow-lg p-4 border border-gray-200"
           >
             <a
               href="/momentum"

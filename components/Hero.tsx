@@ -52,21 +52,7 @@ export default function Hero() {
               </button>
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-8 pt-8 border-t border-white/10">
-              <div>
-                <div className="text-3xl font-bold text-white">50K+</div>
-                <div className="text-sm text-gray-400 mt-1">Active Users</div>
-              </div>
-              <div>
-                <div className="text-3xl font-bold text-white">₹100Cr+</div>
-                <div className="text-sm text-gray-400 mt-1">Traded Volume</div>
-              </div>
-              <div>
-                <div className="text-3xl font-bold text-white">4.8★</div>
-                <div className="text-sm text-gray-400 mt-1">User Rating</div>
-              </div>
-            </div>
+
           </div>
 
           {/* Right Content - Main Image */}
