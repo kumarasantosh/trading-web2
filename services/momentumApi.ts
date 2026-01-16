@@ -38,6 +38,65 @@ interface GrowwQuote {
   week_52_low?: number
 }
 
+/**
+ * Check if the market is currently open
+ * Market hours: 9:15 AM - 3:30 PM IST, Monday-Friday
+ */
+function isMarketOpen(): boolean {
+  const now = new Date()
+
+  // Convert to IST (UTC + 5:30)
+  const istOffset = 5.5 * 60 * 60 * 1000
+  const istTime = new Date(now.getTime() + istOffset)
+
+  // Get day of week (0 = Sunday, 6 = Saturday)
+  const dayOfWeek = istTime.getUTCDay()
+
+  // Check if it's a weekday (Monday-Friday)
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    return false
+  }
+
+  // Get hours and minutes in IST
+  const hours = istTime.getUTCHours()
+  const minutes = istTime.getUTCMinutes()
+
+  // Market opens at 9:15 AM (9 hours, 15 minutes)
+  const marketOpenMinutes = 9 * 60 + 15
+
+  // Market closes at 3:30 PM (15 hours, 30 minutes)
+  const marketCloseMinutes = 15 * 60 + 30
+
+  // Current time in minutes
+  const currentMinutes = hours * 60 + minutes
+
+  return currentMinutes >= marketOpenMinutes && currentMinutes <= marketCloseMinutes
+}
+
+/**
+ * Save market indices snapshot to database
+ */
+async function saveMarketIndicesSnapshot(indices: any[]): Promise<boolean> {
+  try {
+    const response = await fetch('/api/market-indices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ indices })
+    })
+
+    if (!response.ok) {
+      console.error('Failed to save market indices snapshot:', response.status)
+      return false
+    }
+
+    console.log('[Market Indices] Snapshot saved to database')
+    return true
+  } catch (error) {
+    console.error('[Market Indices] Error saving snapshot:', error)
+    return false
+  }
+}
+
 interface GrowwLTP {
   [key: string]: {
     open: number
@@ -233,8 +292,70 @@ export async function fetchWidgetData(
 
 /**
  * Fetches market carousel data from NSE API (more accurate percentChange)
+ * After market close, uses saved database snapshots
  */
 export async function fetchMarketData(): Promise<any[]> {
+  try {
+    const marketOpen = isMarketOpen()
+
+    // After market close, try to use database snapshot
+    if (!marketOpen) {
+      console.log('[Market Indices] Market is closed - attempting to use database snapshot')
+
+      try {
+        const dbResponse = await fetch('/api/market-indices', {
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store'
+        })
+
+        if (dbResponse.ok) {
+          const dbData = await dbResponse.json()
+
+          if (dbData.success && dbData.indices && dbData.indices.length > 0) {
+            console.log(`[Market Indices] Using database snapshot from ${dbData.date} (${dbData.count} indices)`)
+            return dbData.indices
+          } else {
+            console.log('[Market Indices] No snapshot found in database - fetching live data and saving')
+          }
+        }
+      } catch (dbError) {
+        console.error('[Market Indices] Error fetching from database:', dbError)
+      }
+
+      // If no database snapshot exists, fetch live data and save it
+      const liveData = await fetchLiveMarketData()
+
+      // Save to database for future use
+      if (liveData.length > 0) {
+        await saveMarketIndicesSnapshot(liveData)
+      }
+
+      return liveData
+    }
+
+    // During market hours, always use live data
+    console.log('[Market Indices] Market is open - using live data')
+    return await fetchLiveMarketData()
+
+  } catch (error) {
+    console.error('Error fetching market data:', error)
+    // Return fallback data on error
+    return [
+      { name: 'NIFTY 50', value: 0, change: 0, changePercent: 0 },
+      { name: 'NIFTY BANK', value: 0, change: 0, changePercent: 0 },
+      { name: 'SENSEX', value: 0, change: 0, changePercent: 0 },
+      { name: 'FINNIFTY', value: 0, change: 0, changePercent: 0 },
+      { name: 'NIFTY MIDCAP', value: 0, change: 0, changePercent: 0 },
+      { name: 'INDIA_VIX', value: 0, change: 0, changePercent: 0 },
+    ]
+  }
+}
+
+/**
+ * Fetches live market data from NSE/BSE APIs
+ * Extracted from original fetchMarketData for reuse
+ */
+async function fetchLiveMarketData(): Promise<any[]> {
   try {
     // Fetch directly from NSE API via our proxy
     try {
@@ -314,16 +435,8 @@ export async function fetchMarketData(): Promise<any[]> {
     // Fallback to Groww API if NSE proxy fails
     return await fetchMarketDataFromGroww()
   } catch (error) {
-    console.error('Error fetching market data:', error)
-    // Return fallback data on error
-    return [
-      { name: 'NIFTY 50', value: 0, change: 0, changePercent: 0 },
-      { name: 'NIFTY BANK', value: 0, change: 0, changePercent: 0 },
-      { name: 'SENSEX', value: 0, change: 0, changePercent: 0 },
-      { name: 'FINNIFTY', value: 0, change: 0, changePercent: 0 },
-      { name: 'NIFTY MIDCAP', value: 0, change: 0, changePercent: 0 },
-      { name: 'INDIA_VIX', value: 0, change: 0, changePercent: 0 },
-    ]
+    console.error('Error fetching live market data:', error)
+    throw error
   }
 }
 
