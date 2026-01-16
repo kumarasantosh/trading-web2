@@ -43,11 +43,9 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
     useEffect(() => {
         const mappedStocksSet = getAllMappedStocks()
 
-        const fetchTopGainers = async (isBackground = false) => {
-            if (!isBackground) setIsLoading(true)
-
+        // Phase 1: Fetch DB data and display immediately
+        const fetchFromDB = async () => {
             try {
-                // 1. Fetch the LIST of top gainers from DB (Source of Truth for "Who is a Top Gainer")
                 const response = await fetch('/api/top-movers', {
                     cache: 'no-store',
                 })
@@ -59,7 +57,7 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
                 const data = await response.json()
 
                 if (data.success) {
-                    // Map initial data from DB
+                    // Map initial data from DB (includes LTP from DB)
                     const dbGainers = (data.gainers || []).map((stock: any) => ({
                         symbol: stock.symbol,
                         name: stock.symbol,
@@ -67,96 +65,118 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
                         dayChange: stock.last_price - stock.open_price,
                         dayChangePerc: stock.percent_change,
                         open: stock.open_price,
-                        prevClose: stock.prev_close || stock.open_price // Fallback
+                        prevClose: stock.prev_close || stock.open_price
                     }))
 
                     // Filter to only mapped sectors
                     const filteredGainers = dbGainers.filter((stock: Stock) => mappedStocksSet.has(stock.symbol))
-
-                    // 2. Fetch LIVE LTP for these specific stocks from Groww
-                    // This ensures the price is cutting-edge live, even if the DB list is 1 min old
-                    if (filteredGainers.length > 0) {
-                        try {
-                            const { fetchStockData } = await import('@/services/momentumApi')
-                            const symbols = filteredGainers.map((s: Stock) => s.symbol)
-                            const liveData = await fetchStockData(symbols)
-
-                            // Create a map for fast lookup
-                            const liveMap = new Map(liveData.map(item => [item.symbol, item]))
-
-                            // Merge live data
-                            const mergedGainers = filteredGainers.map((dbStock: Stock) => {
-                                const liveStock = liveMap.get(dbStock.symbol)
-                                if (liveStock && liveStock.ltp > 0) {
-                                    // Use live LTP and Open if available
-                                    const liveLtp = liveStock.ltp
-                                    const liveOpen = liveStock.open || dbStock.open || 0
-
-                                    // Recalculate change vs OPEN (consistent with DB logic)
-                                    // If open is 0, fallback to prevClose or just 0
-                                    const basePrice = liveOpen > 0 ? liveOpen : liveLtp
-                                    const change = liveLtp - basePrice
-                                    const changePerc = basePrice > 0 ? (change / basePrice) * 100 : 0
-
-                                    return {
-                                        ...dbStock,
-                                        ltp: liveLtp,
-                                        open: liveOpen,
-                                        dayChange: change,
-                                        dayChangePerc: changePerc
-                                    }
-                                }
-                                return dbStock
-                            })
-
-                            // Re-sort based on new live percentage (Desc for Gainers)
-                            mergedGainers.sort((a: Stock, b: Stock) => b.dayChangePerc - a.dayChangePerc)
-
-                            setGainers(mergedGainers)
-                        } catch (liveError) {
-                            console.error('Failed to fetch live updates:', liveError)
-                            setGainers(filteredGainers) // Fallback to DB data
-                        }
-                    } else {
-                        setGainers(filteredGainers)
-                    }
-
-                    // Fetch Yahoo data for previous day info (Optimization: Only fetch for new symbols)
-                    const symbolsToFetch = filteredGainers
-                        .map((s: Stock) => s.symbol)
-                        .filter((symbol: string) => !fetchedSymbolsRef.current.has(symbol))
-
-                    if (symbolsToFetch.length > 0) {
-                        symbolsToFetch.forEach((s: string) => fetchedSymbolsRef.current.add(s))
-                        const yahooPromises = symbolsToFetch.map((symbol: string) => fetchYahooStockData(symbol))
-                        const yahooResults = await Promise.all(yahooPromises)
-
-                        setPrevDayData(prev => {
-                            const newData = { ...prev }
-                            yahooResults.forEach(result => {
-                                if (result) {
-                                    const baseSymbol = result.symbol.replace('.NS', '').replace('.BO', '')
-                                    newData[baseSymbol] = {
-                                        high: result.high,
-                                        low: result.low,
-                                        open: result.open,
-                                        close: result.close,
-                                    }
-                                }
-                            })
-                            return newData
-                        })
-                    }
+                    return filteredGainers
                 }
+                return []
             } catch (error) {
-                console.error('Failed to fetch top gainers:', error)
-            } finally {
-                if (!isBackground) setIsLoading(false)
+                console.error('Failed to fetch top gainers from DB:', error)
+                return []
             }
         }
 
-        fetchTopGainers()
-        const interval = setInterval(() => fetchTopGainers(true), 10000)
+        // Phase 2: Fetch live LTP and update in background
+        const fetchLiveLTP = async (currentGainers: Stock[]) => {
+            if (currentGainers.length === 0) return
+
+            try {
+                const { fetchStockData } = await import('@/services/momentumApi')
+                const symbols = currentGainers.map((s: Stock) => s.symbol)
+                const liveData = await fetchStockData(symbols)
+
+                // Create a map for fast lookup
+                const liveMap = new Map(liveData.map(item => [item.symbol, item]))
+
+                // Merge live data
+                const mergedGainers = currentGainers.map((dbStock: Stock) => {
+                    const liveStock = liveMap.get(dbStock.symbol)
+                    if (liveStock && liveStock.ltp > 0) {
+                        const liveLtp = liveStock.ltp
+                        const liveOpen = liveStock.open || dbStock.open || 0
+                        const basePrice = liveOpen > 0 ? liveOpen : liveLtp
+                        const change = liveLtp - basePrice
+                        const changePerc = basePrice > 0 ? (change / basePrice) * 100 : 0
+
+                        return {
+                            ...dbStock,
+                            ltp: liveLtp,
+                            open: liveOpen,
+                            dayChange: change,
+                            dayChangePerc: changePerc
+                        }
+                    }
+                    return dbStock
+                })
+
+                // Re-sort based on new live percentage (Desc for Gainers)
+                mergedGainers.sort((a: Stock, b: Stock) => b.dayChangePerc - a.dayChangePerc)
+                setGainers(mergedGainers)
+            } catch (liveError) {
+                console.error('Failed to fetch live LTP updates:', liveError)
+                // Keep existing data, don't update
+            }
+        }
+
+        // Fetch Yahoo data for previous day info
+        const fetchPrevDayData = async (currentGainers: Stock[]) => {
+            const symbolsToFetch = currentGainers
+                .map((s: Stock) => s.symbol)
+                .filter((symbol: string) => !fetchedSymbolsRef.current.has(symbol))
+
+            if (symbolsToFetch.length > 0) {
+                symbolsToFetch.forEach((s: string) => fetchedSymbolsRef.current.add(s))
+                const yahooPromises = symbolsToFetch.map((symbol: string) => fetchYahooStockData(symbol))
+                const yahooResults = await Promise.all(yahooPromises)
+
+                setPrevDayData(prev => {
+                    const newData = { ...prev }
+                    yahooResults.forEach(result => {
+                        if (result) {
+                            const baseSymbol = result.symbol.replace('.NS', '').replace('.BO', '')
+                            newData[baseSymbol] = {
+                                high: result.high,
+                                low: result.low,
+                                open: result.open,
+                                close: result.close,
+                            }
+                        }
+                    })
+                    return newData
+                })
+            }
+        }
+
+        // Initial load: Show DB data first, then update LTP in background
+        const initialLoad = async () => {
+            setIsLoading(true)
+
+            // Phase 1: Get DB data and display immediately
+            const dbGainers = await fetchFromDB()
+            setGainers(dbGainers)
+            setIsLoading(false) // UI is now responsive with DB data
+
+            // Phase 2: Update LTP in background (non-blocking)
+            fetchLiveLTP(dbGainers)
+            fetchPrevDayData(dbGainers)
+        }
+
+        // Background refresh: Fetch both DB and live data
+        const backgroundRefresh = async () => {
+            const dbGainers = await fetchFromDB()
+            if (dbGainers.length > 0) {
+                // Update with DB data first
+                setGainers(dbGainers)
+                // Then fetch live LTP
+                fetchLiveLTP(dbGainers)
+            }
+        }
+
+        initialLoad()
+        const interval = setInterval(backgroundRefresh, 10000)
         return () => clearInterval(interval)
     }, [])
 
