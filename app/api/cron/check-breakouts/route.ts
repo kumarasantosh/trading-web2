@@ -68,19 +68,6 @@ export async function GET(request: NextRequest) {
         // Auto-generate token if needed
         const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
 
-        // Clear ALL breakout/breakdown records to show real-time state (non-cumulative)
-        console.log('[BREAKOUT-CHECK] Clearing ALL breakout/breakdown records for real-time mode...')
-
-        const { error: del1 } = await supabaseAdmin.from('breakout_stocks').delete().neq('symbol', '')
-        const { error: del2 } = await supabaseAdmin.from('breakdown_stocks').delete().neq('symbol', '')
-        const { error: del3 } = await supabaseAdmin.from('breakout_snapshots').delete().neq('symbol', '')
-
-        if (del1 || del2 || del3) {
-            console.error('[BREAKOUT-CHECK] Error clearing tables:', { del1, del2, del3 })
-        }
-
-        console.log('[BREAKOUT-CHECK] Old records cleared')
-
         // Fetch yesterday's high-low data from database
         console.log('[BREAKOUT-CHECK] Attempting to fetch from daily_high_low table...')
 
@@ -297,7 +284,11 @@ export async function GET(request: NextRequest) {
         }
 
         // --- ATOMIC UPDATE START ---
-        // Tables already cleared at the beginning of the job
+        // Clear OLD records just before inserting new ones to minimize "empty" time on UI
+        console.log('[BREAKOUT-CHECK] Clearing old records...')
+        await supabaseAdmin.from('breakout_stocks').delete().neq('symbol', '')
+        await supabaseAdmin.from('breakdown_stocks').delete().neq('symbol', '')
+        await supabaseAdmin.from('breakout_snapshots').delete().neq('symbol', '')
 
         // 2. Batch insert new records (if any)
         let breakoutCount = 0
