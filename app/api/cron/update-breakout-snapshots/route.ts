@@ -62,12 +62,8 @@ export async function GET(request: Request) {
 
         console.log(`[BREAKOUT-SNAPSHOTS] Processing ${symbols.length} stocks`)
 
-        // Cleanup old snapshots (older than 24 hours)
-        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-        await supabaseAdmin
-            .from('breakout_snapshots')
-            .delete()
-            .lt('updated_at', oneDayAgo)
+        // Cleanup moved to the end to prevent empty table during processing
+        const jobStartTime = new Date().toISOString()
 
         // Fetch previous day data from daily_high_low table
         const { data: prevDayData, error: prevDayError } = await supabaseAdmin
@@ -232,6 +228,19 @@ export async function GET(request: Request) {
             }
 
             console.log(`[BREAKOUT-SNAPSHOTS] Successfully upserted ${snapshots.length} stocks`)
+
+            // Cleanup old snapshots that weren't updated in this run
+            // This ensures we only keep the latest data and remove any stale stocks
+            const { error: cleanupError } = await supabaseAdmin
+                .from('breakout_snapshots')
+                .delete()
+                .lt('updated_at', jobStartTime)
+
+            if (cleanupError) {
+                console.error('[BREAKOUT-SNAPSHOTS] Error cleaning up old snapshots:', cleanupError)
+            } else {
+                console.log('[BREAKOUT-SNAPSHOTS] Cleaned up old snapshots from previous runs')
+            }
         }
 
         return NextResponse.json({

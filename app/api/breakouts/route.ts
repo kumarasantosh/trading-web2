@@ -11,12 +11,9 @@ export const revalidate = 0
 export async function GET() {
     try {
         // Fetch data from breakout_snapshots table updated in the last 15 minutes
-        const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString()
-
         const { data: snapshotsData, error: snapshotsError } = await supabaseAdmin
             .from('breakout_snapshots')
             .select('*')
-            .gt('updated_at', fifteenMinutesAgo)
             .order('updated_at', { ascending: false })
 
         if (snapshotsError) {
