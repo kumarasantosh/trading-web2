@@ -83,9 +83,14 @@ export async function GET(request: NextRequest) {
             )
         }
 
-        console.log(`[BREAKOUT-CHECK] Fetched ${highLowData?.length || 0} stocks from daily_high_low table`)
+        // Filter out indices (NIFTY, BANKNIFTY) - only analyze individual stocks
+        const filteredData = (highLowData || []).filter(stock =>
+            !['NIFTY', 'BANKNIFTY'].includes(stock.symbol)
+        )
 
-        if (!highLowData || highLowData.length === 0) {
+        console.log(`[BREAKOUT-CHECK] Fetched ${highLowData?.length || 0} records, analyzing ${filteredData.length} stocks (excluded indices)`)
+
+        if (!filteredData || filteredData.length === 0) {
             console.log('[BREAKOUT-CHECK] No high-low data available - run EOD capture first')
             return NextResponse.json({
                 success: true,
@@ -95,7 +100,7 @@ export async function GET(request: NextRequest) {
             })
         }
 
-        console.log(`[BREAKOUT-CHECK] Checking ${highLowData.length} stocks`)
+        console.log(`[BREAKOUT-CHECK] Checking ${filteredData.length} stocks`)
 
         const breakoutsToInsert: any[] = []
         const breakdownsToInsert: any[] = []
@@ -105,8 +110,8 @@ export async function GET(request: NextRequest) {
         // Process stocks in parallel batches to avoid timeout
         const BATCH_SIZE = 20 // Process 20 stocks at a time
         const batches = []
-        for (let i = 0; i < highLowData.length; i += BATCH_SIZE) {
-            batches.push(highLowData.slice(i, i + BATCH_SIZE))
+        for (let i = 0; i < filteredData.length; i += BATCH_SIZE) {
+            batches.push(filteredData.slice(i, i + BATCH_SIZE))
         }
 
         console.log(`[BREAKOUT-CHECK] Processing ${batches.length} batches of ${BATCH_SIZE} stocks`)
@@ -119,6 +124,7 @@ export async function GET(request: NextRequest) {
             const batchPromises = batch.map(async (stock: any) => {
                 try {
                     let ltp = 0
+                    let todayOpen = 0
 
                     // TRY GROWW API FIRST
                     try {
@@ -136,6 +142,7 @@ export async function GET(request: NextRequest) {
                         if (growwResponse.ok) {
                             const data = await growwResponse.json()
                             ltp = data.payload?.last_price || 0
+                            todayOpen = data.payload?.open || 0
                         }
                     } catch (growwError) {
                         console.log(`[BREAKOUT-CHECK] New Groww API failed for ${stock.symbol}, trying old Groww API`)
@@ -155,6 +162,7 @@ export async function GET(request: NextRequest) {
                             if (oldGrowwResponse.ok) {
                                 const oldData = await oldGrowwResponse.json()
                                 ltp = oldData.ltp || oldData.last || 0
+                                todayOpen = oldData.open || 0
                                 console.log(`[BREAKOUT-CHECK] ✅ ${stock.symbol} using old Groww API: ${ltp}`)
                             }
                         } catch (oldGrowwError) {
@@ -178,6 +186,7 @@ export async function GET(request: NextRequest) {
                             if (nseResponse.ok) {
                                 const nseData = await nseResponse.json()
                                 ltp = nseData.priceInfo?.lastPrice || 0
+                                todayOpen = nseData.priceInfo?.open || 0
                                 console.log(`[BREAKOUT-CHECK] ✅ ${stock.symbol} using NSE fallback: ${ltp}`)
                             }
                         } catch (nseError) {
@@ -200,7 +209,7 @@ export async function GET(request: NextRequest) {
                                         yesterday_high: stock.today_high,
                                         breakout_percent: breakoutPercent,
                                         breakout_date: todayDate,
-                                        yesterday_open: stock.today_open || stock.today_high,
+                                        yesterday_open: todayOpen || stock.today_open || stock.today_high,
                                         yesterday_close: stock.today_close || stock.today_high,
                                     },
                                     snapshot: {
@@ -209,7 +218,7 @@ export async function GET(request: NextRequest) {
                                         prev_day_high: stock.today_high,
                                         prev_day_low: stock.today_low,
                                         prev_day_close: stock.today_close || stock.today_high,
-                                        prev_day_open: stock.today_open || stock.today_high,
+                                        prev_day_open: todayOpen || stock.today_open || stock.today_high,
                                         breakout_percentage: breakoutPercent,
                                         breakdown_percentage: 0,
                                         is_breakout: true,
@@ -234,7 +243,7 @@ export async function GET(request: NextRequest) {
                                         yesterday_low: stock.today_low,
                                         breakdown_percent: breakdownPercent,
                                         breakdown_date: todayDate,
-                                        yesterday_open: stock.today_open || stock.today_low,
+                                        yesterday_open: todayOpen || stock.today_open || stock.today_low,
                                         yesterday_close: stock.today_close || stock.today_low,
                                     },
                                     snapshot: {
@@ -243,7 +252,7 @@ export async function GET(request: NextRequest) {
                                         prev_day_high: stock.today_high,
                                         prev_day_low: stock.today_low,
                                         prev_day_close: stock.today_close || stock.today_low,
-                                        prev_day_open: stock.today_open || stock.today_low,
+                                        prev_day_open: todayOpen || stock.today_open || stock.today_low,
                                         breakout_percentage: 0,
                                         breakdown_percentage: breakdownPercent,
                                         is_breakout: false,
@@ -337,7 +346,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             success: true,
             checked_at: now.toISOString(),
-            stocks_checked: highLowData.length,
+            stocks_checked: filteredData.length,
             breakouts_detected: breakoutCount,
             breakdowns_detected: breakdownCount,
             snapshots_detected: snapshotCount,

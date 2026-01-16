@@ -124,8 +124,15 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 lg:gap-0">
           {/* Top Row: Logo and Mobile Menu */}
           <div className="flex items-center justify-between w-full lg:w-auto">
-            <div className="text-lg sm:text-xl lg:text-2xl font-extrabold bg-gradient-to-r from-black to-gray-700 bg-clip-text text-transparent">
-              INTRADAY SCREENER
+            <div className="flex items-center gap-2">
+              <img
+                src="/logo.png"
+                alt="ectrade logo"
+                className="h-6 sm:h-8 w-auto"
+              />
+              <div className="text-lg sm:text-xl lg:text-2xl font-extrabold bg-gradient-to-r from-black to-gray-700 bg-clip-text text-transparent">
+                ectrade
+              </div>
             </div>
             {/* Hamburger Menu Button - Mobile Only */}
             <button

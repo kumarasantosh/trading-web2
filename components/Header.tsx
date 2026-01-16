@@ -55,34 +55,55 @@ export default function Header({ forceDarkText = false }: HeaderProps) {
 
             {/* Navigation */}
             <nav className="hidden md:flex items-center space-x-8">
-              <a
-                href="/momentum"
-                className={`transition-colors font-medium ${useDarkText
-                  ? 'text-gray-700 hover:text-black'
-                  : 'text-white/80 hover:text-white'
-                  }`}
-              >
-                Momentum
-              </a>
-              <button
-                onClick={() => scrollToSection('explore')}
-                className={`transition-colors font-medium ${useDarkText
-                  ? 'text-gray-700 hover:text-black'
-                  : 'text-white/80 hover:text-white'
-                  }`}
-              >
-                Explore
-              </button>
-              <button
-                onClick={() => scrollToSection('testimonials')}
-                className={`transition-colors font-medium ${useDarkText
-                  ? 'text-gray-700 hover:text-black'
-                  : 'text-white/80 hover:text-white'
-                  }`}
-              >
-                Testimonials
-              </button>
+              <SignedIn>
+                <a
+                  href="/momentum"
+                  className={`transition-colors font-medium ${useDarkText
+                    ? 'text-gray-700 hover:text-black'
+                    : 'text-white/80 hover:text-white'
+                    }`}
+                >
+                  Momentum
+                </a>
+                <a
+                  href="/option-chain"
+                  className={`transition-colors font-medium ${useDarkText
+                    ? 'text-gray-700 hover:text-black'
+                    : 'text-white/80 hover:text-white'
+                    }`}
+                >
+                  Option Data
+                </a>
+                <a
+                  href="/breakout-stocks"
+                  className={`transition-colors font-medium ${useDarkText
+                    ? 'text-gray-700 hover:text-black'
+                    : 'text-white/80 hover:text-white'
+                    }`}
+                >
+                  Breakout Stocks
+                </a>
+                <UserButton afterSignOutUrl="/" />
+              </SignedIn>
               <SignedOut>
+                <button
+                  onClick={() => scrollToSection('explore')}
+                  className={`transition-colors font-medium ${useDarkText
+                    ? 'text-gray-700 hover:text-black'
+                    : 'text-white/80 hover:text-white'
+                    }`}
+                >
+                  Explore
+                </button>
+                <button
+                  onClick={() => scrollToSection('testimonials')}
+                  className={`transition-colors font-medium ${useDarkText
+                    ? 'text-gray-700 hover:text-black'
+                    : 'text-white/80 hover:text-white'
+                    }`}
+                >
+                  Testimonials
+                </button>
                 <a
                   href="/sign-in"
                   className={`transition-colors font-medium ${useDarkText
@@ -92,16 +113,13 @@ export default function Header({ forceDarkText = false }: HeaderProps) {
                 >
                   Login
                 </a>
+                <button
+                  onClick={() => scrollToSection('subscribe')}
+                  className="bg-black text-white px-6 py-3 rounded-xl hover:bg-gray-900 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl hover:scale-105"
+                >
+                  Subscribe Now
+                </button>
               </SignedOut>
-              <SignedIn>
-                <UserButton afterSignOutUrl="/" />
-              </SignedIn>
-              <button
-                onClick={() => scrollToSection('subscribe')}
-                className="bg-black text-white px-6 py-3 rounded-xl hover:bg-gray-900 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl hover:scale-105"
-              >
-                Subscribe Now
-              </button>
             </nav>
 
             {/* Mobile Menu Button */}
@@ -133,32 +151,51 @@ export default function Header({ forceDarkText = false }: HeaderProps) {
             id="mobile-nav"
             className="hidden md:hidden mt-4 pb-4 space-y-3 bg-white rounded-lg shadow-lg p-4 border border-gray-200"
           >
-            <a
-              href="/momentum"
-              onClick={() => document.getElementById('mobile-nav')?.classList.add('hidden')}
-              className="block w-full text-left text-black hover:text-gray-600 transition-colors font-medium py-2"
-            >
-              Momentum
-            </a>
-            <button
-              onClick={() => {
-                scrollToSection('explore')
-                document.getElementById('mobile-nav')?.classList.add('hidden')
-              }}
-              className="block w-full text-left text-black hover:text-gray-600 transition-colors font-medium py-2"
-            >
-              Explore
-            </button>
-            <button
-              onClick={() => {
-                scrollToSection('testimonials')
-                document.getElementById('mobile-nav')?.classList.add('hidden')
-              }}
-              className="block w-full text-left text-black hover:text-gray-600 transition-colors font-medium py-2"
-            >
-              Testimonials
-            </button>
+            <SignedIn>
+              <a
+                href="/momentum"
+                onClick={() => document.getElementById('mobile-nav')?.classList.add('hidden')}
+                className="block w-full text-left text-black hover:text-gray-600 transition-colors font-medium py-2"
+              >
+                Momentum
+              </a>
+              <a
+                href="/option-chain"
+                onClick={() => document.getElementById('mobile-nav')?.classList.add('hidden')}
+                className="block w-full text-left text-black hover:text-gray-600 transition-colors font-medium py-2"
+              >
+                Option Data
+              </a>
+              <a
+                href="/breakout-stocks"
+                onClick={() => document.getElementById('mobile-nav')?.classList.add('hidden')}
+                className="block w-full text-left text-black hover:text-gray-600 transition-colors font-medium py-2"
+              >
+                Breakout Stocks
+              </a>
+              <div className="py-2">
+                <UserButton afterSignOutUrl="/" />
+              </div>
+            </SignedIn>
             <SignedOut>
+              <button
+                onClick={() => {
+                  scrollToSection('explore')
+                  document.getElementById('mobile-nav')?.classList.add('hidden')
+                }}
+                className="block w-full text-left text-black hover:text-gray-600 transition-colors font-medium py-2"
+              >
+                Explore
+              </button>
+              <button
+                onClick={() => {
+                  scrollToSection('testimonials')
+                  document.getElementById('mobile-nav')?.classList.add('hidden')
+                }}
+                className="block w-full text-left text-black hover:text-gray-600 transition-colors font-medium py-2"
+              >
+                Testimonials
+              </button>
               <a
                 href="/sign-in"
                 onClick={() => document.getElementById('mobile-nav')?.classList.add('hidden')}
@@ -166,21 +203,16 @@ export default function Header({ forceDarkText = false }: HeaderProps) {
               >
                 Login
               </a>
+              <button
+                onClick={() => {
+                  scrollToSection('subscribe')
+                  document.getElementById('mobile-nav')?.classList.add('hidden')
+                }}
+                className="block w-full bg-black text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors font-medium text-center"
+              >
+                Subscribe Now
+              </button>
             </SignedOut>
-            <SignedIn>
-              <div className="py-2">
-                <UserButton afterSignOutUrl="/" />
-              </div>
-            </SignedIn>
-            <button
-              onClick={() => {
-                scrollToSection('subscribe')
-                document.getElementById('mobile-nav')?.classList.add('hidden')
-              }}
-              className="block w-full bg-black text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors font-medium text-center"
-            >
-              Subscribe Now
-            </button>
           </nav>
         </div>
       </header>

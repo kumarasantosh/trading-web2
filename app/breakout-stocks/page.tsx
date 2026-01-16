@@ -50,33 +50,45 @@ export default function BreakoutStocksPage() {
 
           if (newApiData.success) {
             // Map to existing format
-            const mappedBreakouts: BreakoutStock[] = (newApiData.breakouts || []).map((s: any) => ({
-              symbol: s.symbol,
-              name: s.symbol,
-              ltp: parseFloat(s.ltp),
-              dayChange: parseFloat(s.ltp) - parseFloat(s.yesterday_high || s.ltp),
-              dayChangePerc: parseFloat(s.breakout_percent),
-              volume: s.volume || 0,
-              prevDayHigh: parseFloat(s.yesterday_high),
-              prevDayLow: parseFloat(s.yesterday_low || s.yesterday_high),
-              prevDayClose: s.today_close || parseFloat(s.yesterday_high),
-              prevDayOpen: s.today_open || parseFloat(s.yesterday_high),
-              isBreakout: true,
-            }))
+            const mappedBreakouts: BreakoutStock[] = (newApiData.breakouts || []).map((s: any) => {
+              const ltp = parseFloat(s.ltp)
+              const todayOpen = parseFloat(s.today_open || s.yesterday_high)
+              const changeFromOpen = ((ltp - todayOpen) / todayOpen) * 100
 
-            const mappedBreakdowns: BreakoutStock[] = (newApiData.breakdowns || []).map((s: any) => ({
-              symbol: s.symbol,
-              name: s.symbol,
-              ltp: parseFloat(s.ltp),
-              dayChange: parseFloat(s.yesterday_low) - parseFloat(s.ltp),
-              dayChangePerc: parseFloat(s.breakdown_percent),
-              volume: s.volume || 0,
-              prevDayHigh: parseFloat(s.yesterday_low), // For breakdowns, we care about yesterday_low
-              prevDayLow: parseFloat(s.yesterday_low),
-              prevDayClose: s.today_close || parseFloat(s.yesterday_low),
-              prevDayOpen: s.today_open || parseFloat(s.yesterday_low),
-              isBreakout: false,
-            }))
+              return {
+                symbol: s.symbol,
+                name: s.symbol,
+                ltp: ltp,
+                dayChange: ltp - todayOpen,
+                dayChangePerc: changeFromOpen,
+                volume: s.volume || 0,
+                prevDayHigh: parseFloat(s.yesterday_high),
+                prevDayLow: parseFloat(s.yesterday_low || s.yesterday_high),
+                prevDayClose: s.today_close || parseFloat(s.yesterday_high),
+                prevDayOpen: todayOpen,
+                isBreakout: true,
+              }
+            }).sort((a: BreakoutStock, b: BreakoutStock) => b.dayChangePerc - a.dayChangePerc)
+
+            const mappedBreakdowns: BreakoutStock[] = (newApiData.breakdowns || []).map((s: any) => {
+              const ltp = parseFloat(s.ltp)
+              const todayOpen = parseFloat(s.today_open || s.yesterday_low)
+              const changeFromOpen = ((ltp - todayOpen) / todayOpen) * 100
+
+              return {
+                symbol: s.symbol,
+                name: s.symbol,
+                ltp: ltp,
+                dayChange: ltp - todayOpen,
+                dayChangePerc: changeFromOpen,
+                volume: s.volume || 0,
+                prevDayHigh: parseFloat(s.yesterday_high),
+                prevDayLow: parseFloat(s.yesterday_low),
+                prevDayClose: s.today_close || parseFloat(s.yesterday_low),
+                prevDayOpen: todayOpen,
+                isBreakout: false,
+              }
+            }).sort((a: BreakoutStock, b: BreakoutStock) => a.dayChangePerc - b.dayChangePerc)
 
             setGainers(mappedBreakouts)
             setLosers(mappedBreakdowns)
@@ -157,7 +169,7 @@ export default function BreakoutStocksPage() {
                             LTP
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Change %
+                            Change % from Open
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Breakout
@@ -195,18 +207,15 @@ export default function BreakoutStocksPage() {
                               </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <div className="text-sm font-bold text-green-600">
-                                +{stock.dayChangePerc.toFixed(2)}%
+                              <div className={`text-sm font-bold ${stock.dayChangePerc >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {stock.dayChangePerc >= 0 ? '+' : ''}{stock.dayChangePerc.toFixed(2)}%
                               </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               {stock.prevDayHigh > 0 && (
-                                <div className="text-sm flex flex-row items-center gap-1 font-semibold text-green-600">
+                                <div className={`text-sm flex flex-row items-center gap-1 font-semibold ${stock.ltp - stock.prevDayOpen >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                   <div>
-                                    +₹{(stock.ltp - stock.prevDayHigh).toFixed(2)}
-                                  </div>
-                                  <div className="text-xs">
-                                    (+{(((stock.ltp - stock.prevDayHigh) / stock.prevDayHigh) * 100).toFixed(2)}%)
+                                    {stock.ltp - stock.prevDayOpen >= 0 ? '+' : '-'}₹{Math.abs(stock.ltp - stock.prevDayOpen).toFixed(2)}
                                   </div>
                                 </div>
                               )}
@@ -246,7 +255,7 @@ export default function BreakoutStocksPage() {
                             LTP
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Change %
+                            Change % from Open
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Breakdown
@@ -284,18 +293,15 @@ export default function BreakoutStocksPage() {
                               </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <div className="text-sm font-bold text-red-600">
-                                {stock.dayChangePerc.toFixed(2)}%
+                              <div className={`text-sm font-bold ${stock.dayChangePerc >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {stock.dayChangePerc >= 0 ? '+' : ''}{stock.dayChangePerc.toFixed(2)}%
                               </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               {stock.prevDayLow > 0 && (
-                                <div className="text-sm flex flex-row items-center gap-1 font-semibold text-red-600">
+                                <div className={`text-sm flex flex-row items-center gap-1 font-semibold ${stock.ltp - stock.prevDayOpen >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                   <div>
-                                    -₹{(stock.prevDayLow - stock.ltp).toFixed(2)}
-                                  </div>
-                                  <div className="text-xs">
-                                    (-{(((stock.prevDayLow - stock.ltp) / stock.prevDayLow) * 100).toFixed(2)}%)
+                                    {stock.ltp - stock.prevDayOpen >= 0 ? '+' : '-'}₹{Math.abs(stock.ltp - stock.prevDayOpen).toFixed(2)}
                                   </div>
                                 </div>
                               )}
