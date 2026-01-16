@@ -6,72 +6,109 @@ export const revalidate = 0
 
 /**
  * Frontend API endpoint for breakouts and breakdowns
- * Returns pre-calculated data from breakout_snapshots table
+ * Returns live data from breakout_stocks and breakdown_stocks tables
+ * populated by the check-breakouts cron
  */
 export async function GET() {
     try {
-        // Fetch latest data from breakout_snapshots
-        // We order by updated_at desc to get the latest snapshot batch
-        const { data: snapshots, error } = await supabaseAdmin
-            .from('breakout_snapshots')
+        // Fetch breakouts from breakout_stocks table
+        const { data: breakoutsData, error: breakoutsError } = await supabaseAdmin
+            .from('breakout_stocks')
             .select('*')
-            .order('updated_at', { ascending: false })
+            .order('detected_at', { ascending: false })
 
-        if (error) {
-            console.error('[BREAKOUTS-API] Error fetching snapshots:', error)
-            throw error
+        if (breakoutsError) {
+            console.error('[BREAKOUTS-API] Error fetching breakouts:', breakoutsError)
+            throw breakoutsError
         }
 
-        // Get the most recent timestamp to filter stale data if necessary
-        // Ideally the cron updates all at once, so we just return what we have
-        const latestUpdate = snapshots?.[0]?.updated_at || new Date().toISOString()
+        // Fetch breakdowns from breakdown_stocks table
+        const { data: breakdownsData, error: breakdownsError } = await supabaseAdmin
+            .from('breakdown_stocks')
+            .select('*')
+            .order('detected_at', { ascending: false })
 
-        // Filter for breakouts and breakdowns
-        const breakouts = (snapshots || []).filter((s: any) => s.is_breakout).map((s: any) => ({
-            symbol: s.symbol,
-            ltp: s.current_price,
-            change_percent: s.breakout_percentage,
-            breakout_percent: s.breakout_percentage,
-            yesterday_high: s.prev_day_high,
-            yesterday_low: s.prev_day_low,
-            today_open: s.prev_day_open, // Note: Schema might use prev_day_open, adjusting mapping
-            today_close: s.prev_day_close,
-            volume: s.volume,
-            detected_at: s.updated_at
+        if (breakdownsError) {
+            console.error('[BREAKOUTS-API] Error fetching breakdowns:', breakdownsError)
+            console.log('[BREAKOUTS-API] breakdown_stocks table might not exist')
+        }
+
+        // Fetch daily_high_low data for sentiment indicators
+        const { data: dailyHighLowData, error: dailyHighLowError } = await supabaseAdmin
+            .from('daily_high_low')
+            .select('symbol, today_open, today_close')
+
+        if (dailyHighLowError) {
+            console.error('[BREAKOUTS-API] Error fetching daily_high_low:', dailyHighLowError)
+        }
+
+        // Create a map for quick lookup
+        const highLowMap = new Map()
+        if (dailyHighLowData) {
+            dailyHighLowData.forEach((item: any) => {
+                highLowMap.set(item.symbol, {
+                    today_open: item.today_open,
+                    today_close: item.today_close
+                })
+            })
+        }
+
+        // Merge the data
+        const finalBreakouts = (breakoutsData || []).map((item: any) => ({
+            ...item,
+            today_open: highLowMap.get(item.symbol)?.today_open,
+            today_close: highLowMap.get(item.symbol)?.today_close,
         }))
 
-        const breakdowns = (snapshots || []).filter((s: any) => s.is_breakdown).map((s: any) => ({
-            symbol: s.symbol,
-            ltp: s.current_price,
-            change_percent: s.breakdown_percentage,
-            breakdown_percent: s.breakdown_percentage,
-            yesterday_high: s.prev_day_high,
-            yesterday_low: s.prev_day_low,
-            today_open: s.prev_day_open,
-            today_close: s.prev_day_close,
-            volume: s.volume,
-            detected_at: s.updated_at
+        const finalBreakdowns = (breakdownsData || []).map((item: any) => ({
+            ...item,
+            today_open: highLowMap.get(item.symbol)?.today_open,
+            today_close: highLowMap.get(item.symbol)?.today_close,
         }))
+
+        // Get the most recent update timestamp
+        const latestUpdate = finalBreakouts?.[0]?.detected_at || finalBreakdowns?.[0]?.detected_at || new Date().toISOString()
+
+        console.log(`[BREAKOUTS-API] Fetched ${finalBreakouts.length} breakouts and ${finalBreakdowns.length} breakdowns`)
 
         return NextResponse.json({
             success: true,
-            breakouts,
-            breakdowns,
+            breakouts: finalBreakouts || [],
+            breakdowns: finalBreakdowns || [],
             updated_at: latestUpdate,
             count: {
-                total_breakouts: breakouts.length,
-                total_breakdowns: breakdowns.length,
+                total_breakouts: finalBreakouts.length || 0,
+                total_breakdowns: finalBreakdowns.length || 0,
             },
         })
 
     } catch (error) {
         console.error('[BREAKOUTS-API] Error:', error)
+
+        // Check if it's a "relation does not exist" error
+        if (error instanceof Error && error.message.includes('relation') && error.message.includes('does not exist')) {
+            return NextResponse.json(
+                {
+                    error: 'Database table not found',
+                    details: 'The breakout_stocks table does not exist.',
+                    hint: 'Tables are populated by /api/cron/check-breakouts',
+                    success: false,
+                    breakouts: [],
+                    breakdowns: [],
+                },
+                { status: 200 } // Return 200 so frontend falls back gracefully
+            )
+        }
+
         return NextResponse.json(
             {
                 error: 'Internal server error',
                 details: error instanceof Error ? error.message : 'Unknown error',
+                success: false,
+                breakouts: [],
+                breakdowns: [],
             },
-            { status: 500 }
+            { status: 200 }
         )
     }
 }

@@ -31,10 +31,6 @@
         {
             "path": "/api/cron/update-stock-snapshots",
             "schedule": "*/3 3-10 * * *"
-        },
-        {
-            "path": "/api/cron/update-breakout-snapshots",
-            "schedule": "*/3 3-10 * * *"
         }
     ],
     "functions": {

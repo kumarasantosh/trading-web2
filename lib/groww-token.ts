@@ -24,11 +24,11 @@ let memoryCache: { token: string; expiry: number } | null = null;
 export async function getGrowwAccessToken(): Promise<string | null> {
     console.log('[GROWW-TOKEN] Attempting to get access token...');
 
-    // Memory cache disabled - always fetch from Supabase for fresh token
-    // if (memoryCache && Date.now() < memoryCache.expiry - 5 * 60 * 1000) {
-    //     console.log('[GROWW-TOKEN] Using token from memory cache');
-    //     return memoryCache.token;
-    // }
+    // Check memory cache first (with 5 min buffer)
+    if (memoryCache && Date.now() < memoryCache.expiry - 5 * 60 * 1000) {
+        console.log('[GROWW-TOKEN] Using token from memory cache');
+        return memoryCache.token;
+    }
 
     // Try to get token from Supabase (set by daily cron)
     try {

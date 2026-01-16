@@ -86,35 +86,35 @@ export default function BreakoutStocksPage() {
             const newApiData = await newApiRes.json()
             console.timeEnd('[BREAKOUT] Fetch from new breakout snapshots API')
 
-            if (newApiData.success && (newApiData.breakouts.length > 0 || newApiData.breakdowns.length > 0)) {
+            if (newApiData.success) {
               console.log('✅ Using NEW breakout snapshots API (instant!)')
 
               // Map to existing format
-              const mappedBreakouts: BreakoutStock[] = newApiData.breakouts.map((s: any) => ({
+              const mappedBreakouts: BreakoutStock[] = (newApiData.breakouts || []).map((s: any) => ({
                 symbol: s.symbol,
                 name: s.symbol,
                 ltp: parseFloat(s.ltp),
                 dayChange: parseFloat(s.ltp) - parseFloat(s.yesterday_high || s.ltp),
-                dayChangePerc: parseFloat(s.breakout_percent),
-                volume: 0,
-                prevDayHigh: parseFloat(s.yesterday_high),
-                prevDayLow: parseFloat(s.yesterday_low || s.yesterday_high),
-                prevDayClose: s.today_close || parseFloat(s.yesterday_high),
-                prevDayOpen: s.today_open || parseFloat(s.yesterday_high),
+                dayChangePerc: parseFloat(s.breakout_percent || s.breakout_percentage || 0),
+                volume: parseInt(s.volume || '0'),
+                prevDayHigh: parseFloat(s.yesterday_high || s.prev_day_high),
+                prevDayLow: parseFloat(s.yesterday_low || s.prev_day_low),
+                prevDayClose: s.today_close || parseFloat(s.yesterday_high || 0),
+                prevDayOpen: s.today_open || parseFloat(s.yesterday_high || 0),
                 isBreakout: true,
               }))
 
-              const mappedBreakdowns: BreakoutStock[] = newApiData.breakdowns.map((s: any) => ({
+              const mappedBreakdowns: BreakoutStock[] = (newApiData.breakdowns || []).map((s: any) => ({
                 symbol: s.symbol,
                 name: s.symbol,
                 ltp: parseFloat(s.ltp),
-                dayChange: parseFloat(s.yesterday_low) - parseFloat(s.ltp),
-                dayChangePerc: parseFloat(s.breakdown_percent),
-                volume: 0,
-                prevDayHigh: parseFloat(s.yesterday_low), // For breakdowns, we care about yesterday_low
-                prevDayLow: parseFloat(s.yesterday_low),
-                prevDayClose: s.today_close || parseFloat(s.yesterday_low),
-                prevDayOpen: s.today_open || parseFloat(s.yesterday_low),
+                dayChange: parseFloat(s.yesterday_low || s.ltp) - parseFloat(s.ltp),
+                dayChangePerc: parseFloat(s.breakdown_percent || s.breakdown_percentage || 0),
+                volume: parseInt(s.volume || '0'),
+                prevDayHigh: parseFloat(s.yesterday_high || s.prev_day_high), // For breakdowns, we care about yesterday_low
+                prevDayLow: parseFloat(s.yesterday_low || s.prev_day_low),
+                prevDayClose: s.today_close || parseFloat(s.yesterday_low || 0),
+                prevDayOpen: s.today_open || parseFloat(s.yesterday_low || 0),
                 isBreakout: false,
               }))
 
@@ -124,12 +124,14 @@ export default function BreakoutStocksPage() {
               setIsLoading(false)
               isLoadingRef.current = false
               console.timeEnd('[BREAKOUT] Total fetch time')
-              return // Exit early - we got the data!
+              return // Exit early - we got the data (even if empty)!
             }
           }
         } catch (newApiError) {
-          console.log('New API not available, falling back to old method')
+          console.log('New API error:', newApiError)
         }
+
+        console.log('⚠️ New API failed or not used, falling back to old method')
 
         // FALLBACK TO OLD METHOD if new API didn't work
         // STEP 1: Try to fetch yesterday's high-low data from database

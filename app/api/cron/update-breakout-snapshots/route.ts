@@ -62,6 +62,13 @@ export async function GET(request: Request) {
 
         console.log(`[BREAKOUT-SNAPSHOTS] Processing ${symbols.length} stocks`)
 
+        // Cleanup old snapshots (older than 24 hours)
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        await supabaseAdmin
+            .from('breakout_snapshots')
+            .delete()
+            .lt('updated_at', oneDayAgo)
+
         // Fetch previous day data from daily_high_low table
         const { data: prevDayData, error: prevDayError } = await supabaseAdmin
             .from('daily_high_low')
