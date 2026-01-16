@@ -44,10 +44,13 @@ export default function Header({ forceDarkText = false }: HeaderProps) {
                 src="/logo.png"
                 alt="ectrade"
                 className={`h-8 sm:h-10 w-auto transition-all ${useDarkText
-                    ? ''
-                    : 'bg-white p-1 rounded'
+                  ? ''
+                  : 'bg-white p-1 rounded'
                   }`}
               />
+              <span className={`text-xl sm:text-2xl font-bold transition-colors ${useDarkText ? 'text-black' : 'text-white'}`}>
+                ectrade
+              </span>
             </a>
 
             {/* Navigation */}

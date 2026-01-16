@@ -1,4 +1,5 @@
 import { SignIn } from '@clerk/nextjs'
+import Link from 'next/link'
 
 export default function SignInPage() {
     return (
@@ -17,9 +18,24 @@ export default function SignInPage() {
                         elements: {
                             rootBox: "mx-auto",
                             card: "shadow-xl",
+                            footer: "hidden", // Hide default footer with "Don't have an account?"
                         }
                     }}
+                    signUpUrl="/sign-up"
+                    forceRedirectUrl="/momentum"
                 />
+                {/* Custom Sign Up Prompt */}
+                <div className="mt-6 text-center">
+                    <p className="text-gray-600">
+                        Don't have an account?{' '}
+                        <Link
+                            href="/sign-up"
+                            className="font-semibold text-black hover:underline"
+                        >
+                            Pay and join
+                        </Link>
+                    </p>
+                </div>
             </div>
         </div>
     )
