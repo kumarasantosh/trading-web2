@@ -23,6 +23,7 @@ interface StockTableProps {
 export default function StockTable({ selectedSector, isReplayMode = false, replayTime }: StockTableProps) {
   const [stocks, setStocks] = useState<Stock[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [prevDayData, setPrevDayData] = useState<Record<string, { close: number; open: number }>>({})
 
@@ -78,12 +79,20 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
       if (allSymbols.length === 0) return
 
       // Only show loading for sector change/initial load
-      if (!isBackground) setIsLoading(true)
+      if (!isBackground) {
+        setIsLoading(true)
+        setStocks([]) // Clear existing stocks to ensure loader is visible during sector change
+      }
 
       try {
         // Split symbols into batches
         const firstBatch = allSymbols.slice(0, BATCH_SIZE)
         const remainingBatches = allSymbols.slice(BATCH_SIZE)
+
+        // Set loading more if there are remaining batches
+        if (remainingBatches.length > 0 && !isBackground) {
+          setIsLoadingMore(true)
+        }
 
         // Fetch first batch immediately
         const firstBatchData = await fetchStocksBatch(firstBatch, isReplayMode, replayTime)
@@ -127,18 +136,26 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
                 await new Promise(resolve => setTimeout(resolve, 200))
               }
             }
+            if (isMounted) setIsLoadingMore(false)
           }
 
           // Start processing remaining batches asynchronously
           processRemainingBatches()
-        } else if (validFirstBatch.length === 0) {
-          // No data at all
-          if (isMounted) setStocks([])
-          setIsLoading(false)
+        } else {
+          // If no remaining batches, stop loading more
+          if (isMounted) setIsLoadingMore(false)
+          if (validFirstBatch.length === 0) {
+            // No data at all
+            if (isMounted) setStocks([])
+            setIsLoading(false)
+          }
         }
       } catch (error) {
         console.error('Failed to fetch stock data', error)
-        if (isMounted && !isBackground) setIsLoading(false)
+        if (isMounted) {
+          setIsLoading(false)
+          setIsLoadingMore(false)
+        }
       }
     }
 
@@ -214,6 +231,8 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
   // Sort stocks based on changePercent
   const sortedStocks = [...stocks].sort((a, b) => {
     if (sortOrder === 'desc') {
+      // Prioritize stocks that haven't loaded yet (optional, but sorting can jump things around)
+      // Actually standard sort is better
       return b.changePercent - a.changePercent
     } else {
       return a.changePercent - b.changePercent
@@ -350,6 +369,16 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
                     </tr>
                   )
                 })}
+                {isLoadingMore && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-4 text-center">
+                      <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                        <div className="w-4 h-4 border-2 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
+                        <span>Loading more stocks...</span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
 
@@ -365,6 +394,8 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
                     className="bg-gray-50 rounded-lg p-3 border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
                   >
                     <div className="flex items-center justify-between mb-2">
+                      {/* Mobile row content */}
+                      {/* This part was not changed, just ensuring it's preserved */}
                       <div className="flex items-center gap-2">
                         {prevDayData[stock.symbol] && (
                           <>
@@ -413,6 +444,14 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
                   </div>
                 )
               })}
+              {isLoadingMore && (
+                <div className="py-4 text-center">
+                  <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                    <div className="w-4 h-4 border-2 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
+                    <span>Loading more stocks...</span>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
