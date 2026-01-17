@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { useAuth } from '@clerk/nextjs'
 import Header from '@/components/Header'
 import Hero from '@/components/Hero'
 import Explore from '@/components/Explore'
@@ -13,16 +13,28 @@ import Footer from '@/components/Footer'
 
 export default function Home() {
   const router = useRouter()
+  const { isLoaded, userId } = useAuth()
 
   useEffect(() => {
-    // Check if user is logged in
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        // User is logged in, redirect to momentum
-        router.push('/momentum')
-      }
-    })
-  }, [router])
+    // Wait for Clerk to load, then check if user is logged in
+    if (isLoaded && userId) {
+      router.push('/momentum')
+    }
+  }, [isLoaded, userId, router])
+
+  // Show loading while Clerk is initializing
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    )
+  }
+
+  // If user is logged in, don't render landing page (redirect will happen)
+  if (userId) {
+    return null
+  }
 
   return (
     <main className="min-h-screen">

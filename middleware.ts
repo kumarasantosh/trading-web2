@@ -16,6 +16,14 @@ const isPublicRoute = createRouteMatcher([
 ])
 
 export default clerkMiddleware(async (auth, req) => {
+    const { userId } = await auth()
+    const url = req.nextUrl
+
+    // Redirect logged-in users from landing page to momentum
+    if (userId && url.pathname === '/') {
+        return Response.redirect(new URL('/momentum', req.url))
+    }
+
     // Protect all routes except public ones
     if (!isPublicRoute(req)) {
         await auth.protect()
