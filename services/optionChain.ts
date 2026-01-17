@@ -104,24 +104,84 @@ export async function fetchOptionChainData(symbol: string, expiryDate?: string |
 
         // Step 3: If no expiryDate provided, fetch first available expiry
         if (!expiryDate) {
+            // Try method 1: New dropdown API
             const dropdownUrl = `https://www.nseindia.com/api/NextApi/apiClient/GetQuoteApi?functionName=getOptionChainDropdown&symbol=${symbol}`;
-            const dropdownResponse = await fetch(dropdownUrl, {
-                headers: apiHeaders,
-                cache: 'no-store',
-            });
+            console.log(`[OptionChain Service] Trying dropdown API: ${dropdownUrl}`);
 
-            if (dropdownResponse.ok) {
-                const dropdownData = await dropdownResponse.json();
-                let expiries: string[] = [];
-                // Handle various response structures
-                if (dropdownData && Array.isArray(dropdownData)) expiries = dropdownData;
-                else if (dropdownData?.expiryDates) expiries = dropdownData.expiryDates;
-                else if (dropdownData?.data) expiries = dropdownData.data; // Added from cron logic
+            try {
+                const dropdownResponse = await fetch(dropdownUrl, {
+                    headers: apiHeaders,
+                    cache: 'no-store',
+                });
 
-                if (expiries.length > 0) {
-                    expiryDate = expiries[0];
-                    console.log(`[OptionChain Service] Found nearest expiry: ${expiryDate}`);
+                if (dropdownResponse.ok) {
+                    const dropdownData = await dropdownResponse.json();
+                    console.log(`[OptionChain Service] Dropdown response:`, JSON.stringify(dropdownData).substring(0, 200));
+
+                    let expiries: string[] = [];
+                    // Handle various response structures
+                    if (dropdownData && Array.isArray(dropdownData)) expiries = dropdownData;
+                    else if (dropdownData?.expiryDates) expiries = dropdownData.expiryDates;
+                    else if (dropdownData?.data) expiries = dropdownData.data;
+                    else if (dropdownData?.records?.expiryDates) expiries = dropdownData.records.expiryDates;
+
+                    if (expiries.length > 0) {
+                        expiryDate = expiries[0];
+                        console.log(`[OptionChain Service] Found nearest expiry via dropdown: ${expiryDate}`);
+                    }
+                } else {
+                    console.warn(`[OptionChain Service] Dropdown API returned ${dropdownResponse.status}`);
                 }
+            } catch (dropdownError) {
+                console.warn('[OptionChain Service] Dropdown API failed:', dropdownError);
+            }
+
+            // Try method 2: Old option-chain-indices API (fallback)
+            if (!expiryDate) {
+                const isIndex = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'NIFTYIT', 'MIDCPNIFTY'].includes(symbol);
+                const oldApiUrl = isIndex
+                    ? `https://www.nseindia.com/api/option-chain-indices?symbol=${symbol}`
+                    : `https://www.nseindia.com/api/option-chain-equities?symbol=${symbol}`;
+
+                console.log(`[OptionChain Service] Trying old API: ${oldApiUrl}`);
+
+                try {
+                    const oldResponse = await fetch(oldApiUrl, {
+                        headers: apiHeaders,
+                        cache: 'no-store',
+                    });
+
+                    if (oldResponse.ok) {
+                        const oldData = await oldResponse.json();
+                        const recordsExpiries = oldData?.records?.expiryDates || [];
+
+                        if (recordsExpiries.length > 0) {
+                            expiryDate = recordsExpiries[0];
+                            console.log(`[OptionChain Service] Found nearest expiry via old API: ${expiryDate}`);
+                        }
+                    } else {
+                        console.warn(`[OptionChain Service] Old API returned ${oldResponse.status}`);
+                    }
+                } catch (oldApiError) {
+                    console.warn('[OptionChain Service] Old API failed:', oldApiError);
+                }
+            }
+
+            // Try method 3: Hardcoded weekly expiry calculation (last resort)
+            if (!expiryDate) {
+                console.log('[OptionChain Service] Using calculated weekly expiry as last resort');
+                const now = new Date();
+                const dayOfWeek = now.getDay(); // 0 = Sunday, 4 = Thursday
+                const daysUntilThursday = (4 - dayOfWeek + 7) % 7 || 7; // Next Thursday
+                const nextThursday = new Date(now.getTime() + daysUntilThursday * 24 * 60 * 60 * 1000);
+
+                const day = nextThursday.getDate().toString().padStart(2, '0');
+                const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                const month = monthNames[nextThursday.getMonth()];
+                const year = nextThursday.getFullYear();
+
+                expiryDate = `${day}-${month}-${year}`;
+                console.log(`[OptionChain Service] Calculated expiry: ${expiryDate}`);
             }
         }
 
