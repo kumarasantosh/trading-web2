@@ -169,10 +169,10 @@ export default function BreakoutStocksPage() {
                             LTP
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Change % from Open
+                            From Open
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Breakout
+                            From Breakout
                           </th>
                         </tr>
                       </thead>
@@ -213,9 +213,12 @@ export default function BreakoutStocksPage() {
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               {stock.prevDayHigh > 0 && (
-                                <div className={`text-sm flex flex-row items-center gap-1 font-semibold ${stock.ltp - stock.prevDayOpen >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                <div className={`text-sm flex flex-row items-center gap-1 font-semibold ${stock.ltp - stock.prevDayHigh >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                   <div>
-                                    {stock.ltp - stock.prevDayOpen >= 0 ? '+' : '-'}₹{Math.abs(stock.ltp - stock.prevDayOpen).toFixed(2)}
+                                    {stock.ltp - stock.prevDayHigh >= 0 ? '+' : '-'}₹{Math.abs(stock.ltp - stock.prevDayHigh).toFixed(2)}
+                                  </div>
+                                  <div className="text-xs">
+                                    ({stock.ltp - stock.prevDayHigh >= 0 ? '+' : ''}{(((stock.ltp - stock.prevDayHigh) / stock.prevDayHigh) * 100).toFixed(2)}%)
                                   </div>
                                 </div>
                               )}
@@ -255,10 +258,10 @@ export default function BreakoutStocksPage() {
                             LTP
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Change % from Open
+                            From Open
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Breakdown
+                            From Breakdown
                           </th>
                         </tr>
                       </thead>
@@ -299,9 +302,12 @@ export default function BreakoutStocksPage() {
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               {stock.prevDayLow > 0 && (
-                                <div className={`text-sm flex flex-row items-center gap-1 font-semibold ${stock.ltp - stock.prevDayOpen >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                <div className={`text-sm flex flex-row items-center gap-1 font-semibold ${stock.ltp - stock.prevDayLow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                   <div>
-                                    {stock.ltp - stock.prevDayOpen >= 0 ? '+' : '-'}₹{Math.abs(stock.ltp - stock.prevDayOpen).toFixed(2)}
+                                    {stock.ltp - stock.prevDayLow >= 0 ? '+' : '-'}₹{Math.abs(stock.ltp - stock.prevDayLow).toFixed(2)}
+                                  </div>
+                                  <div className="text-xs">
+                                    ({stock.ltp - stock.prevDayLow >= 0 ? '+' : ''}{(((stock.ltp - stock.prevDayLow) / stock.prevDayLow) * 100).toFixed(2)}%)
                                   </div>
                                 </div>
                               )}
