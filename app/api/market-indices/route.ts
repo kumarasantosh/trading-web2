@@ -20,12 +20,14 @@ export async function GET(request: NextRequest) {
             .from('market_indices_snapshots')
             .select('*')
             .eq('captured_at', todayDate)
-            .order('index_name', { ascending: true })
 
         if (error) {
             console.error('Supabase query error:', error)
             return NextResponse.json({ error: error.message }, { status: 500 })
         }
+
+        // Define custom order for indices
+        const indexOrder = ['NIFTY 50', 'NIFTY BANK', 'FINNIFTY', 'SENSEX', 'INDIA_VIX']
 
         // Transform to match TopNavigation format
         const indices = (data || []).map((item: any) => ({
@@ -36,6 +38,23 @@ export async function GET(request: NextRequest) {
             previousClose: item.previous_close || undefined,
             open: item.open_price || undefined,
         }))
+
+        // Sort by custom order
+        indices.sort((a, b) => {
+            const indexA = indexOrder.indexOf(a.name)
+            const indexB = indexOrder.indexOf(b.name)
+
+            // If both are in the order list, sort by position
+            if (indexA !== -1 && indexB !== -1) {
+                return indexA - indexB
+            }
+            // If only A is in the list, it comes first
+            if (indexA !== -1) return -1
+            // If only B is in the list, it comes first
+            if (indexB !== -1) return 1
+            // If neither is in the list, maintain original order
+            return 0
+        })
 
         return NextResponse.json({
             success: true,

@@ -424,7 +424,7 @@ async function fetchLiveMarketData(): Promise<any[]> {
           }
 
           // Sort to maintain order
-          const order = ['NIFTY 50', 'NIFTY BANK', 'FINNIFTY', 'NIFTY MIDCAP', 'SENSEX', 'INDIA_VIX']
+          const order = ['NIFTY 50', 'NIFTY BANK', 'FINNIFTY', 'SENSEX', 'INDIA_VIX']
           return order.map(name => indices.find((i: any) => i.name === name)).filter(Boolean)
         }
       }
@@ -533,7 +533,7 @@ async function fetchMarketDataFromGroww(): Promise<any[]> {
     }).filter(idx => idx.value > 0) // Only return indices with valid data
 
     // Return in preferred order
-    const order = ['NIFTY 50', 'NIFTY BANK', 'FINNIFTY', 'NIFTY MIDCAP', 'SENSEX', 'INDIA_VIX']
+    const order = ['NIFTY 50', 'NIFTY BANK', 'FINNIFTY', 'SENSEX', 'INDIA_VIX']
     const sorted = order.map(name =>
       indices.find(idx => idx.name === name)
     ).filter(Boolean) as any[]

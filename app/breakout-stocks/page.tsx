@@ -127,9 +127,9 @@ export default function BreakoutStocksPage() {
                 <h1 className="text-3xl font-extrabold bg-gradient-to-r from-black to-gray-700 bg-clip-text text-transparent">
                   Breakout Stocks
                 </h1>
-                <p className="mt-2 text-sm text-gray-600">
-                  Stocks breaking previous day high/low (using saved database data)
-                </p>
+                {/* <p className="mt-2 text-sm text-gray-600">
+                  Stocks breaking previous day high/low
+                </p> */}
               </div>
             </div>
           </div>
