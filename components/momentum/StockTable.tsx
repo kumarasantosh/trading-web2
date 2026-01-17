@@ -26,10 +26,52 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [prevDayData, setPrevDayData] = useState<Record<string, { close: number; open: number }>>({})
+  const [dataSource, setDataSource] = useState<'database' | 'live'>('database')
 
   useEffect(() => {
     let isMounted = true
     const BATCH_SIZE = 5 // Load first 5 stocks immediately, then rest in background
+
+    // Fetch from database with timeout (fast, cached data)
+    const fetchFromDatabase = async (symbols: string[]): Promise<Stock[]> => {
+      if (symbols.length === 0) return []
+
+      try {
+        // Add timeout - if DB takes more than 2 seconds, skip it
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 2000)
+
+        // Build URL with either sector or symbols
+        const url = selectedSector
+          ? `/api/sector-stocks?sector=${encodeURIComponent(selectedSector)}`
+          : `/api/sector-stocks?symbols=${encodeURIComponent(symbols.join(','))}`
+
+        const response = await fetch(url, { signal: controller.signal })
+        clearTimeout(timeoutId)
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.stocks && data.stocks.length > 0) {
+            console.log(`[SectorStocks] Loaded ${data.stocks.length} stocks from ${data.source} in ${data.time_ms}ms`)
+            return data.stocks.map((s: any) => ({
+              symbol: s.symbol,
+              price: s.ltp || s.price || 0,
+              changePercent: s.changePercent || 0,
+              close: s.close || 0,
+              open: s.open || 0,
+              ltp: s.ltp || s.price || 0
+            }))
+          }
+        }
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+          console.log('[SectorStocks] Database fetch timed out, loading from Groww directly')
+        } else {
+          console.error('[SectorStocks] Database fetch failed:', error)
+        }
+      }
+      return []
+    }
 
     const fetchStocksBatch = async (symbolsBatch: string[], isReplay: boolean, time?: Date): Promise<Stock[]> => {
       if (isReplay && time) {
@@ -63,53 +105,94 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
         }
         return []
       } else {
-        // Fetch live data
+        // Fetch live data from Groww
         const { fetchStockData } = await import('@/services/momentumApi')
         return await fetchStockData(symbolsBatch)
       }
     }
 
-    const fetchStocks = async (isBackground = false) => {
-      // Get symbols based on selected sector, or use default Financial Services stocks
-      // Using reliable symbols that are known to work with the API
+    const fetchStocks = async () => {
+      // Get symbols based on selected sector
       const allSymbols = selectedSector
         ? getStocksForSector(selectedSector)
         : ['SBILIFE', 'LICHSGFIN', 'BAJAJFINSV', 'SBIN', 'ICICIBANK', 'SBICARD', 'AXISBANK', 'HDFCBANK', 'KOTAKBANK']
 
       if (allSymbols.length === 0) return
 
-      // Only show loading for sector change/initial load
-      if (!isBackground) {
-        setIsLoading(true)
-        setStocks([]) // Clear existing stocks to ensure loader is visible during sector change
-      }
+      setIsLoading(true)
+      setStocks([])
+      setDataSource('database')
 
       try {
-        // Split symbols into batches
+        // STEP 1: Load from database first (fast)
+        if (!isReplayMode) {
+          const dbStocks = await fetchFromDatabase(allSymbols)
+          if (isMounted && dbStocks.length > 0) {
+            const validDbStocks = dbStocks.filter(stock =>
+              stock.ltp > 0 && stock.symbol && !isNaN(stock.changePercent)
+            )
+            if (validDbStocks.length > 0) {
+              setStocks(validDbStocks)
+              setIsLoading(false) // Hide loading immediately
+              console.log(`[SectorStocks] Displayed ${validDbStocks.length} stocks from database`)
+            }
+          }
+        }
+
+        // STEP 2: Fetch live data from Groww
+        // For small lists (<15 stocks), fetch all at once for speed
+        if (allSymbols.length <= 15) {
+          const { fetchStockData } = await import('@/services/momentumApi')
+          const liveData = await fetchStockData(allSymbols)
+          const validData = liveData.filter(stock =>
+            stock.ltp > 0 && stock.symbol && !isNaN(stock.changePercent)
+          )
+          if (isMounted && validData.length > 0) {
+            setStocks(validData)
+            setDataSource('live')
+            setIsLoading(false)
+            setIsLoadingMore(false)
+          }
+          return
+        }
+
+        // For larger lists, use batching
         const firstBatch = allSymbols.slice(0, BATCH_SIZE)
         const remainingBatches = allSymbols.slice(BATCH_SIZE)
 
-        // Set loading more if there are remaining batches
-        if (remainingBatches.length > 0 && !isBackground) {
+        if (remainingBatches.length > 0) {
           setIsLoadingMore(true)
         }
 
-        // Fetch first batch immediately
+        // Fetch first batch
         const firstBatchData = await fetchStocksBatch(firstBatch, isReplayMode, replayTime)
-
-        // Filter out invalid data (symbols with 0 or null values)
         const validFirstBatch = firstBatchData.filter(stock =>
           stock.ltp > 0 && stock.symbol && !isNaN(stock.changePercent)
         )
 
         if (isMounted && validFirstBatch.length > 0) {
-          setStocks(validFirstBatch)
-          setIsLoading(false) // Hide loading after first batch
+          setStocks(prev => {
+            // If we have database data, update matching symbols with live data
+            if (prev.length > 0) {
+              const updatedStocks = [...prev]
+              validFirstBatch.forEach(liveStock => {
+                const existingIndex = updatedStocks.findIndex(s => s.symbol === liveStock.symbol)
+                if (existingIndex >= 0) {
+                  updatedStocks[existingIndex] = liveStock
+                } else {
+                  updatedStocks.push(liveStock)
+                }
+              })
+              return updatedStocks
+            }
+            return validFirstBatch
+          })
+          setDataSource('live')
+          setIsLoading(false)
         }
 
         // Fetch remaining stocks in background
         if (remainingBatches.length > 0) {
-          // Process remaining stocks in smaller batches to avoid overwhelming the API
           const processRemainingBatches = async () => {
             for (let i = 0; i < remainingBatches.length; i += BATCH_SIZE) {
               if (!isMounted) break
@@ -117,35 +200,39 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
               const batch = remainingBatches.slice(i, i + BATCH_SIZE)
               const batchData = await fetchStocksBatch(batch, isReplayMode, replayTime)
 
-              // Filter out invalid data
               const validBatch = batchData.filter(stock =>
                 stock.ltp > 0 && stock.symbol && !isNaN(stock.changePercent)
               )
 
               if (isMounted && validBatch.length > 0) {
                 setStocks(prev => {
-                  // Merge new data with existing, avoiding duplicates
-                  const existingSymbols = new Set(prev.map(s => s.symbol))
-                  const newStocks = validBatch.filter(s => !existingSymbols.has(s.symbol))
-                  return [...prev, ...newStocks]
+                  const updatedStocks = [...prev]
+                  validBatch.forEach(liveStock => {
+                    const existingIndex = updatedStocks.findIndex(s => s.symbol === liveStock.symbol)
+                    if (existingIndex >= 0) {
+                      updatedStocks[existingIndex] = liveStock
+                    } else {
+                      updatedStocks.push(liveStock)
+                    }
+                  })
+                  return updatedStocks
                 })
               }
 
-              // Small delay between batches to avoid rate limiting
               if (i + BATCH_SIZE < remainingBatches.length) {
                 await new Promise(resolve => setTimeout(resolve, 200))
               }
             }
-            if (isMounted) setIsLoadingMore(false)
+            if (isMounted) {
+              setIsLoadingMore(false)
+              setDataSource('live')
+            }
           }
 
-          // Start processing remaining batches asynchronously
           processRemainingBatches()
         } else {
-          // If no remaining batches, stop loading more
           if (isMounted) setIsLoadingMore(false)
-          if (validFirstBatch.length === 0) {
-            // No data at all
+          if (validFirstBatch.length === 0 && stocks.length === 0) {
             if (isMounted) setStocks([])
             setIsLoading(false)
           }
@@ -162,10 +249,42 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
     // Initial fetch
     fetchStocks()
 
-    // Background refresh
+    // Background refresh (live data only)
     let interval: NodeJS.Timeout
     if (!isReplayMode) {
-      interval = setInterval(() => fetchStocks(true), 60000) // Refresh every 1 minute
+      interval = setInterval(async () => {
+        // Background refresh - directly update with Groww data
+        const allSymbols = selectedSector
+          ? getStocksForSector(selectedSector)
+          : ['SBILIFE', 'LICHSGFIN', 'BAJAJFINSV', 'SBIN', 'ICICIBANK', 'SBICARD', 'AXISBANK', 'HDFCBANK', 'KOTAKBANK']
+
+        if (allSymbols.length === 0) return
+
+        try {
+          const { fetchStockData } = await import('@/services/momentumApi')
+          const liveData = await fetchStockData(allSymbols)
+          const validData = liveData.filter(stock =>
+            stock.ltp > 0 && stock.symbol && !isNaN(stock.changePercent)
+          )
+          if (isMounted && validData.length > 0) {
+            setStocks(prev => {
+              const updatedStocks = [...prev]
+              validData.forEach(liveStock => {
+                const existingIndex = updatedStocks.findIndex(s => s.symbol === liveStock.symbol)
+                if (existingIndex >= 0) {
+                  updatedStocks[existingIndex] = liveStock
+                } else {
+                  updatedStocks.push(liveStock)
+                }
+              })
+              return updatedStocks
+            })
+            setDataSource('live')
+          }
+        } catch (error) {
+          console.error('Background refresh failed:', error)
+        }
+      }, 10000) // Refresh every 10 seconds
     }
 
     return () => {
@@ -262,9 +381,16 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
               </span>
             </div>
           ) : (
-            <div className="flex items-center gap-2 px-2 sm:px-3 py-1 bg-green-50 rounded-lg border border-green-200">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-              <span className="text-xs font-semibold text-green-700">LIVE</span>
+            <div className={`flex items-center gap-2 px-2 sm:px-3 py-1 rounded-lg border ${dataSource === 'live'
+              ? 'bg-green-50 border-green-200'
+              : 'bg-yellow-50 border-yellow-200'
+              }`}>
+              <div className={`w-2 h-2 rounded-full ${dataSource === 'live' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'
+                }`}></div>
+              <span className={`text-xs font-semibold ${dataSource === 'live' ? 'text-green-700' : 'text-yellow-700'
+                }`}>
+                {dataSource === 'live' ? 'LIVE' : ''}
+              </span>
             </div>
           )}
         </div>
