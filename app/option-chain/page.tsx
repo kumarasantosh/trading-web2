@@ -526,24 +526,22 @@ export default function OptionChainPage() {
             const afterMarket = isAfterMarketHours()
             console.log('[OptionChain] After market hours:', afterMarket)
 
-            if (afterMarket) {
-                // AFTER MARKET HOURS - Fetch only saved data from DB
-                console.log('[OptionChain] Market closed - fetching saved data from DB')
-                fetchTrendlineData()
-            } else {
-                // LIVE MODE - Fetching live data
-                // Fetch immediately for live mode (user expects to see data)
-                fetchOptionChainData()
+            // LIVE OR CLOSED - Fetch data immediately
+            // If market is closed, this will fetch the latest available data from the API (usually closing data)
+            fetchOptionChainData()
+            // Support full historical trendline fetch
+            fetchTrendlineData()
 
+            if (!afterMarket) {
+                // LIVE MODE - Auto-refresh every 5 minutes
                 // Auto-refresh every 5 minutes (300000 ms) when not in replay mode
                 intervalRef.current = setInterval(() => {
                     if (!isReplayModeRef.current && !isAfterMarketHours()) {
                         fetchOptionChainData()
                     }
                 }, 300000) // 5 minutes
-
-                // Support full historical trendline fetch
-                fetchTrendlineData()
+            } else {
+                console.log('[OptionChain] Market closed - fetched latest data once, no auto-refresh')
             }
         }
 

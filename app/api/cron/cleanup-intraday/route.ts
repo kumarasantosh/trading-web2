@@ -87,8 +87,53 @@ export async function GET(request: NextRequest) {
             results.push('Cleaned pcr_data')
         }
 
-        // 6. Clear option_chain_snapshots (or similar) if exists
-        // Check table name... assuming 'option_chain_snapshots' based on context
+        // 6. Clear option_chain_snapshots (History) - Keep today's
+        const { error: optionChainError } = await supabaseAdmin
+            .from('option_chain_snapshots')
+            .delete()
+            .lt('captured_at', todayDate)
+
+        if (optionChainError) {
+            errors.push(`option_chain_snapshots: ${optionChainError.message}`)
+        } else {
+            results.push('Cleaned option_chain_snapshots')
+        }
+
+        // 7. Clear oi_trendline (History) - Keep today's
+        const { error: oiTrendlineError } = await supabaseAdmin
+            .from('oi_trendline')
+            .delete()
+            .lt('time', `${todayDate}T00:00:00Z`)
+
+        if (oiTrendlineError) {
+            errors.push(`oi_trendline: ${oiTrendlineError.message}`)
+        } else {
+            results.push('Cleaned oi_trendline')
+        }
+
+        // 8. Clear breakout_stocks (Live current state) - Delete all
+        const { error: breakoutStocksError } = await supabaseAdmin
+            .from('breakout_stocks')
+            .delete()
+            .gte('id', 0) // Delete all rows
+
+        if (breakoutStocksError) {
+            errors.push(`breakout_stocks: ${breakoutStocksError.message}`)
+        } else {
+            results.push('Cleared breakout_stocks')
+        }
+
+        // 9. Clear breakdown_stocks (Live current state) - Delete all
+        const { error: breakdownStocksError } = await supabaseAdmin
+            .from('breakdown_stocks')
+            .delete()
+            .gte('id', 0) // Delete all rows
+
+        if (breakdownStocksError) {
+            errors.push(`breakdown_stocks: ${breakdownStocksError.message}`)
+        } else {
+            results.push('Cleared breakdown_stocks')
+        }
 
         return NextResponse.json({
             success: true,

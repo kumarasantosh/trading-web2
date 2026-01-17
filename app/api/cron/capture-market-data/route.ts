@@ -23,12 +23,12 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // Round DOWN to nearest 5-minute interval for consistent querying
-        // This ensures all data captured within the same 5-minute window (e.g., 12:40-12:44)
-        // gets saved with the same timestamp (12:40:00), making it easy to query with the slider
+        // Round DOWN to nearest 3-minute interval for consistent querying
+        // This ensures all data captured within the same 3-minute window (e.g., 12:40-12:42)
+        // gets saved with the same timestamp (12:39:00 or 12:42:00), matching the slider interval
         const now = new Date()
         const minutes = now.getMinutes()
-        const roundedMinutes = Math.floor(minutes / 5) * 5
+        const roundedMinutes = Math.floor(minutes / 3) * 3
         const roundedTime = new Date(now)
         roundedTime.setMinutes(roundedMinutes, 0, 0) // Set seconds and milliseconds to 0
         const capturedAt = roundedTime.toISOString()
