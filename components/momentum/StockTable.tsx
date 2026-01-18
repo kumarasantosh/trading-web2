@@ -18,15 +18,36 @@ interface StockTableProps {
   selectedSector: string | null
   isReplayMode?: boolean
   replayTime?: Date
+  isExpanded?: boolean
+  onToggleExpand?: (expanded: boolean) => void
 }
 
-export default function StockTable({ selectedSector, isReplayMode = false, replayTime }: StockTableProps) {
+export default function StockTable({
+  selectedSector,
+  isReplayMode = false,
+  replayTime,
+  isExpanded: externalExpanded,
+  onToggleExpand
+}: StockTableProps) {
   const [stocks, setStocks] = useState<Stock[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [prevDayData, setPrevDayData] = useState<Record<string, { close: number; open: number }>>({})
   const [dataSource, setDataSource] = useState<'database' | 'live'>('database')
+
+  // Use external state if provided, otherwise internal
+  const [internalExpanded, setInternalExpanded] = useState(false)
+  const isExpanded = externalExpanded !== undefined ? externalExpanded : internalExpanded
+
+  const handleToggle = () => {
+    const newState = !isExpanded
+    if (onToggleExpand) {
+      onToggleExpand(newState)
+    } else {
+      setInternalExpanded(newState)
+    }
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -367,221 +388,231 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
   }
 
   return (
-    <div className="bg-white/95 backdrop-blur-sm rounded-2xl border border-gray-200/50 shadow-xl p-3 sm:p-4 lg:p-6 h-full hover:shadow-2xl transition-all duration-300">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3">
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          <h2 className="text-base sm:text-lg lg:text-xl font-extrabold text-black">
-            {selectedSector ? `${selectedSector} Stocks` : 'Index Majors'}
-          </h2>
-          {isReplayMode && replayTime ? (
-            <div className="flex items-center gap-2 px-2 sm:px-3 py-1 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-              <span className="text-xs font-semibold text-blue-700">
-                {replayTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            </div>
-          ) : (
-            <div className={`flex items-center gap-2 px-2 sm:px-3 py-1 rounded-lg border ${dataSource === 'live'
-              ? 'bg-green-50 border-green-200'
-              : 'bg-yellow-50 border-yellow-200'
-              }`}>
-              <div className={`w-2 h-2 rounded-full ${dataSource === 'live' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'
-                }`}></div>
-              <span className={`text-xs font-semibold ${dataSource === 'live' ? 'text-green-700' : 'text-yellow-700'
-                }`}>
-                {dataSource === 'live' ? 'LIVE' : ''}
-              </span>
-            </div>
-          )}
-        </div>
-        <button
-          onClick={toggleSortOrder}
-          className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-semibold text-xs sm:text-sm transition-all duration-300 hover:bg-green-600 bg-green-500 text-white shadow-md w-full sm:w-auto"
+    <div className={`bg-white/95 backdrop-blur-sm rounded-2xl border border-gray-200/50 shadow-xl hover:shadow-2xl transition-all duration-300 h-full ${isExpanded ? 'p-3 sm:p-4 lg:p-6' : 'p-2 flex items-center justify-center'}`}>
+      {/* Collapsed: Just arrow centered */}
+      {!isExpanded && (
+        <div
+          className="cursor-pointer select-none p-4 rounded-lg hover:bg-gray-50 transition-colors"
+          onClick={handleToggle}
         >
-          {sortOrder === 'desc' ? (
-            <span className="text-xs">↓ Desc</span>
-          ) : (
-            <span className="text-xs">↑ Asc</span>
-          )}
-        </button>
-      </div>
+          <span className="text-gray-500 text-2xl">◀</span>
+        </div>
+      )}
 
-      <div className="overflow-x-auto overflow-y-auto max-h-[600px] -mx-3 sm:mx-0 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent pr-2">
-        {isLoading && stocks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12">
-            <div className="relative">
-              <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+      {/* Expanded: Full header and content */}
+      {isExpanded && (
+        <>
+          {/* Header */}
+          <div
+            className="flex items-center justify-between cursor-pointer select-none"
+            onClick={handleToggle}
+          >
+            <div className="flex items-center gap-2 sm:gap-3">
+              {/* Collapse Arrow */}
+              <span className="text-gray-500 transition-transform duration-200">▶</span>
+              <h2 className="text-base sm:text-lg lg:text-xl font-extrabold text-black">
+                {selectedSector ? `${selectedSector} Stocks` : 'Index Majors'}
+              </h2>
+              <div className={`flex items-center gap-2 px-2 py-1 rounded-lg border ${dataSource === 'live'
+                ? 'bg-green-50 border-green-200'
+                : 'bg-yellow-50 border-yellow-200'
+                }`}>
+                <div className={`w-2 h-2 rounded-full ${dataSource === 'live' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div>
+                <span className={`text-xs font-semibold ${dataSource === 'live' ? 'text-green-700' : 'text-yellow-700'}`}>
+                  {dataSource === 'live' ? 'LIVE' : ''}
+                </span>
+              </div>
             </div>
-            <p className="mt-4 text-sm text-gray-600 font-semibold">Loading stocks...</p>
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleSortOrder(); }}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg font-semibold text-xs transition-all duration-300 hover:bg-green-600 bg-green-500 text-white shadow-sm"
+            >
+              {sortOrder === 'desc' ? '↓ Desc' : '↑ Asc'}
+            </button>
           </div>
-        ) : sortedStocks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12">
-            <div className="text-4xl mb-4">📊</div>
-            <div className="text-lg font-bold text-gray-700 mb-2">No Stocks Available</div>
-            <div className="text-sm text-gray-500">No stock data found for the selected criteria.</div>
-          </div>
-        ) : (
-          <>
-            {/* Desktop Table View */}
-            <table className="w-full hidden md:table">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="px-3 sm:px-4 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700">Symbol</th>
-                  <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm font-semibold text-gray-700">Change</th>
-                  <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm font-semibold text-gray-700">Close</th>
-                  <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm font-semibold text-gray-700">Open</th>
-                  <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm font-semibold text-gray-700">LTP</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sortedStocks.map((stock, index) => {
-                  const isPositive = stock.changePercent >= 0
 
-                  return (
-                    <tr
-                      key={index}
-                      onClick={() => handleStockClick(stock.symbol)}
-                      className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-white transition-all duration-200 group cursor-pointer"
-                    >
-                      <td className="px-3 sm:px-4 py-2">
-                        <div className="flex items-center gap-2">
-                          {prevDayData[stock.symbol] && (
-                            <>
-                              {prevDayData[stock.symbol].close > prevDayData[stock.symbol].open && (
-                                <div
-                                  className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
-                                  title={`Yesterday close (₹${prevDayData[stock.symbol].close.toFixed(2)}) > open (₹${prevDayData[stock.symbol].open.toFixed(2)})`}
-                                />
-                              )}
-                              {prevDayData[stock.symbol].close < prevDayData[stock.symbol].open && (
-                                <div
-                                  className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500"
-                                  title={`Yesterday close (₹${prevDayData[stock.symbol].close.toFixed(2)}) < open (₹${prevDayData[stock.symbol].open.toFixed(2)})`}
-                                />
-                              )}
-                            </>
-                          )}
-                          <span className="font-bold text-gray-900 group-hover:text-black transition-colors">{stock.symbol}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 sm:px-4 py-2 text-right">
-                        <div className={`inline-flex items-center justify-end gap-1.5 font-bold px-2 sm:px-3 py-1.5 rounded-lg transition-all duration-200 ${isPositive
-                          ? 'text-green-700 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200/50'
-                          : 'text-red-700 bg-gradient-to-r from-red-50 to-rose-50 border border-red-200/50'
-                          }`}>
-                          <span className={`text-xs sm:text-sm ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                            {isPositive ? '▲' : '▼'}
-                          </span>
-                          <span className="text-xs sm:text-sm font-extrabold">
-                            {isPositive ? '+' : ''}{stock.changePercent.toFixed(2)}%
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-3 sm:px-4 py-2 text-right">
-                        <span className="font-semibold text-gray-700 text-xs sm:text-sm">
-                          {stock.close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                        </span>
-                      </td>
-                      <td className="px-3 sm:px-4 py-2 text-right">
-                        <span className="font-semibold text-gray-700 text-xs sm:text-sm">
-                          {stock.open.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                        </span>
-                      </td>
-                      <td className="px-3 sm:px-4 py-2 text-right">
-                        <span className="font-bold text-gray-900 text-xs sm:text-sm">
-                          {stock.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {isLoadingMore && (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-4 text-center">
-                      <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-                        <div className="w-4 h-4 border-2 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
-                        <span>Loading more stocks...</span>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-
-            {/* Mobile Card View */}
-            <div className="md:hidden space-y-3 px-3">
-              {sortedStocks.map((stock, index) => {
-                const isPositive = stock.changePercent >= 0
-
-                return (
-                  <div
-                    key={index}
-                    onClick={() => handleStockClick(stock.symbol)}
-                    className="bg-gray-50 rounded-lg p-3 border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      {/* Mobile row content */}
-                      {/* This part was not changed, just ensuring it's preserved */}
-                      <div className="flex items-center gap-2">
-                        {prevDayData[stock.symbol] && (
-                          <>
-                            {prevDayData[stock.symbol].close > prevDayData[stock.symbol].open && (
-                              <div
-                                className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
-                                title={`Yesterday close (₹${prevDayData[stock.symbol].close.toFixed(2)}) > open (₹${prevDayData[stock.symbol].open.toFixed(2)})`}
-                              />
-                            )}
-                            {prevDayData[stock.symbol].close < prevDayData[stock.symbol].open && (
-                              <div
-                                className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500"
-                                title={`Yesterday close (₹${prevDayData[stock.symbol].close.toFixed(2)}) < open (₹${prevDayData[stock.symbol].open.toFixed(2)})`}
-                              />
-                            )}
-                          </>
-                        )}
-                        <span className="font-bold text-gray-900 text-sm">{stock.symbol}</span>
-                      </div>
-                      <div className={`inline-flex items-center gap-1.5 font-bold px-2 py-1 rounded-lg ${isPositive
-                        ? 'text-green-700 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200/50'
-                        : 'text-red-700 bg-gradient-to-r from-red-50 to-rose-50 border border-red-200/50'
-                        }`}>
-                        <span className={`text-xs ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                          {isPositive ? '▲' : '▼'}
-                        </span>
-                        <span className="text-xs font-extrabold">
-                          {isPositive ? '+' : ''}{stock.changePercent.toFixed(2)}%
-                        </span>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <div className="text-gray-500">Close</div>
-                        <div className="font-semibold text-gray-700">{stock.close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Open</div>
-                        <div className="font-semibold text-gray-700">{stock.open.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">LTP</div>
-                        <div className="font-bold text-gray-900">{stock.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
-                      </div>
-                    </div>
+          {/* Expandable Content */}
+          {isExpanded && (
+            <div className="mt-4 overflow-x-auto overflow-y-auto max-h-[600px] scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
+              {isLoading && stocks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="relative">
+                    <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
                   </div>
-                )
-              })}
-              {isLoadingMore && (
-                <div className="py-4 text-center">
-                  <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-                    <div className="w-4 h-4 border-2 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
-                    <span>Loading more stocks...</span>
-                  </div>
+                  <p className="mt-4 text-sm text-gray-600 font-semibold">Loading stocks...</p>
                 </div>
+              ) : sortedStocks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="text-4xl mb-4">📊</div>
+                  <div className="text-lg font-bold text-gray-700 mb-2">No Stocks Available</div>
+                  <div className="text-sm text-gray-500">No stock data found for the selected criteria.</div>
+                </div>
+              ) : (
+                <>
+                  {/* Desktop Table View */}
+                  <table className="w-full hidden md:table">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="px-3 sm:px-4 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700">Symbol</th>
+                        <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm font-semibold text-gray-700">Change</th>
+                        <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm font-semibold text-gray-700">Close</th>
+                        <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm font-semibold text-gray-700">Open</th>
+                        <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm font-semibold text-gray-700">LTP</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {sortedStocks.map((stock, index) => {
+                        const isPositive = stock.changePercent >= 0
+
+                        return (
+                          <tr
+                            key={index}
+                            onClick={() => handleStockClick(stock.symbol)}
+                            className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-white transition-all duration-200 group cursor-pointer"
+                          >
+                            <td className="px-3 sm:px-4 py-2">
+                              <div className="flex items-center gap-2">
+                                {prevDayData[stock.symbol] && (
+                                  <>
+                                    {prevDayData[stock.symbol].close > prevDayData[stock.symbol].open && (
+                                      <div
+                                        className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
+                                        title={`Yesterday close (₹${prevDayData[stock.symbol].close.toFixed(2)}) > open (₹${prevDayData[stock.symbol].open.toFixed(2)})`}
+                                      />
+                                    )}
+                                    {prevDayData[stock.symbol].close < prevDayData[stock.symbol].open && (
+                                      <div
+                                        className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500"
+                                        title={`Yesterday close (₹${prevDayData[stock.symbol].close.toFixed(2)}) < open (₹${prevDayData[stock.symbol].open.toFixed(2)})`}
+                                      />
+                                    )}
+                                  </>
+                                )}
+                                <span className="font-bold text-gray-900 group-hover:text-black transition-colors">{stock.symbol}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 sm:px-4 py-2 text-right">
+                              <div className={`inline-flex items-center justify-end gap-1.5 font-bold px-2 sm:px-3 py-1.5 rounded-lg transition-all duration-200 ${isPositive
+                                ? 'text-green-700 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200/50'
+                                : 'text-red-700 bg-gradient-to-r from-red-50 to-rose-50 border border-red-200/50'
+                                }`}>
+                                <span className={`text-xs sm:text-sm ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                  {isPositive ? '▲' : '▼'}
+                                </span>
+                                <span className="text-xs sm:text-sm font-extrabold">
+                                  {isPositive ? '+' : ''}{stock.changePercent.toFixed(2)}%
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-3 sm:px-4 py-2 text-right">
+                              <span className="font-semibold text-gray-700 text-xs sm:text-sm">
+                                {stock.close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                              </span>
+                            </td>
+                            <td className="px-3 sm:px-4 py-2 text-right">
+                              <span className="font-semibold text-gray-700 text-xs sm:text-sm">
+                                {stock.open.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                              </span>
+                            </td>
+                            <td className="px-3 sm:px-4 py-2 text-right">
+                              <span className="font-bold text-gray-900 text-xs sm:text-sm">
+                                {stock.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                      {isLoadingMore && (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-4 text-center">
+                            <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                              <div className="w-4 h-4 border-2 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
+                              <span>Loading more stocks...</span>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+
+                  {/* Mobile Card View */}
+                  <div className="md:hidden space-y-3 px-3">
+                    {sortedStocks.map((stock, index) => {
+                      const isPositive = stock.changePercent >= 0
+
+                      return (
+                        <div
+                          key={index}
+                          onClick={() => handleStockClick(stock.symbol)}
+                          className="bg-gray-50 rounded-lg p-3 border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            {/* Mobile row content */}
+                            {/* This part was not changed, just ensuring it's preserved */}
+                            <div className="flex items-center gap-2">
+                              {prevDayData[stock.symbol] && (
+                                <>
+                                  {prevDayData[stock.symbol].close > prevDayData[stock.symbol].open && (
+                                    <div
+                                      className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
+                                      title={`Yesterday close (₹${prevDayData[stock.symbol].close.toFixed(2)}) > open (₹${prevDayData[stock.symbol].open.toFixed(2)})`}
+                                    />
+                                  )}
+                                  {prevDayData[stock.symbol].close < prevDayData[stock.symbol].open && (
+                                    <div
+                                      className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500"
+                                      title={`Yesterday close (₹${prevDayData[stock.symbol].close.toFixed(2)}) < open (₹${prevDayData[stock.symbol].open.toFixed(2)})`}
+                                    />
+                                  )}
+                                </>
+                              )}
+                              <span className="font-bold text-gray-900 text-sm">{stock.symbol}</span>
+                            </div>
+                            <div className={`inline-flex items-center gap-1.5 font-bold px-2 py-1 rounded-lg ${isPositive
+                              ? 'text-green-700 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200/50'
+                              : 'text-red-700 bg-gradient-to-r from-red-50 to-rose-50 border border-red-200/50'
+                              }`}>
+                              <span className={`text-xs ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                {isPositive ? '▲' : '▼'}
+                              </span>
+                              <span className="text-xs font-extrabold">
+                                {isPositive ? '+' : ''}{stock.changePercent.toFixed(2)}%
+                              </span>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div>
+                              <div className="text-gray-500">Close</div>
+                              <div className="font-semibold text-gray-700">{stock.close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+                            </div>
+                            <div>
+                              <div className="text-gray-500">Open</div>
+                              <div className="font-semibold text-gray-700">{stock.open.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+                            </div>
+                            <div>
+                              <div className="text-gray-500">LTP</div>
+                              <div className="font-bold text-gray-900">{stock.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {isLoadingMore && (
+                      <div className="py-4 text-center">
+                        <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                          <div className="w-4 h-4 border-2 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
+                          <span>Loading more stocks...</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
-          </>
-        )}
-      </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
+

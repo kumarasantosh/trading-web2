@@ -12,6 +12,7 @@ export default function MomentumPage() {
   const [selectedSector, setSelectedSector] = useState<string | null>(null)
   const [isReplayMode, setIsReplayMode] = useState(false)
   const [selectedTime, setSelectedTime] = useState(new Date())
+  const [isStockTableExpanded, setIsStockTableExpanded] = useState(false) // Collapsed by default
 
   useEffect(() => {
     // Check if disclaimer was accepted today
@@ -31,6 +32,7 @@ export default function MomentumPage() {
 
   const handleSectorClick = (sectorName: string) => {
     setSelectedSector(sectorName)
+    setIsStockTableExpanded(true) // Auto-expand when sector is clicked
   }
 
   const handleReplayModeChange = (enabled: boolean) => {
@@ -39,6 +41,10 @@ export default function MomentumPage() {
 
   const handleTimeChange = (time: Date) => {
     setSelectedTime(time)
+  }
+
+  const handleStockTableToggle = (expanded: boolean) => {
+    setIsStockTableExpanded(expanded)
   }
 
   return (
@@ -51,10 +57,10 @@ export default function MomentumPage() {
       {/* Main Content Area - Scrollable */}
       <div className="w-full py-4 sm:py-6 lg:py-8">
         <div className="px-2 sm:px-4 lg:px-6">
-          {/* Sector Performance and Stock Table */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
-            {/* Left Panel: Sector Performance - Full width when no sector selected */}
-            <div className={selectedSector ? 'lg:col-span-8' : 'lg:col-span-12'}>
+          {/* Sector Performance and Stock Table - Flex layout */}
+          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
+            {/* Left Panel: Sector Performance - Takes remaining space */}
+            <div className={`flex-1 flex flex-col transition-all duration-300`}>
               <SectorPerformance
                 onSectorClick={handleSectorClick}
                 selectedSector={selectedSector}
@@ -65,16 +71,16 @@ export default function MomentumPage() {
               />
             </div>
 
-            {/* Right Panel: Stock Table - Only show when sector is selected */}
-            {selectedSector && (
-              <div className="lg:col-span-4 flex flex-col">
-                <StockTable
-                  selectedSector={selectedSector}
-                  isReplayMode={isReplayMode}
-                  replayTime={selectedTime}
-                />
-              </div>
-            )}
+            {/* Right Panel: Stock Table - Dynamic width */}
+            <div className={`flex flex-col transition-all duration-300 ${isStockTableExpanded ? 'lg:w-[400px]' : 'lg:w-auto'}`}>
+              <StockTable
+                selectedSector={selectedSector}
+                isReplayMode={isReplayMode}
+                replayTime={selectedTime}
+                isExpanded={isStockTableExpanded}
+                onToggleExpand={handleStockTableToggle}
+              />
+            </div>
           </div>
         </div>
       </div>
