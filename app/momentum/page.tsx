@@ -53,8 +53,8 @@ export default function MomentumPage() {
         <div className="px-2 sm:px-4 lg:px-6">
           {/* Sector Performance and Stock Table */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
-            {/* Left Panel: Sector Performance - Wider */}
-            <div className="lg:col-span-8 flex flex-col">
+            {/* Left Panel: Sector Performance - Full width when no sector selected */}
+            <div className={selectedSector ? 'lg:col-span-8' : 'lg:col-span-12'}>
               <SectorPerformance
                 onSectorClick={handleSectorClick}
                 selectedSector={selectedSector}
@@ -65,14 +65,16 @@ export default function MomentumPage() {
               />
             </div>
 
-            {/* Right Panel: Stock Table - Narrower */}
-            <div className="lg:col-span-4 flex flex-col">
-              <StockTable
-                selectedSector={selectedSector}
-                isReplayMode={isReplayMode}
-                replayTime={selectedTime}
-              />
-            </div>
+            {/* Right Panel: Stock Table - Only show when sector is selected */}
+            {selectedSector && (
+              <div className="lg:col-span-4 flex flex-col">
+                <StockTable
+                  selectedSector={selectedSector}
+                  isReplayMode={isReplayMode}
+                  replayTime={selectedTime}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

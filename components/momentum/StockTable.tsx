@@ -256,7 +256,7 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
         // Background refresh - directly update with Groww data
         const allSymbols = selectedSector
           ? getStocksForSector(selectedSector)
-          : ['HDFCBANK', 'RELIANCE', 'ICICIBANK', 'INFY', 'TCS', 'ITC', 'AXISBANK', 'KOTAKBANK', 'SBIN']
+          : ['HDFCBANK', 'RELIANCE', 'ICICIBANK', 'INFY', 'TCS']
 
         if (allSymbols.length === 0) return
 
