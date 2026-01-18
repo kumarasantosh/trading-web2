@@ -188,7 +188,6 @@ export async function fetchOptionChainData(symbol: string, expiryDate?: string |
         if (!expiryDate) {
             throw new Error('Could not determine expiry date');
         }
-        //
         // NSE expects DD-MMM-YYYY (e.g., 13-Jan-2026)
         let nseExpiryDate = expiryDate;
 

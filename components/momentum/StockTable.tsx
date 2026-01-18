@@ -115,7 +115,7 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
       // Get symbols based on selected sector
       const allSymbols = selectedSector
         ? getStocksForSector(selectedSector)
-        : ['SBILIFE', 'LICHSGFIN', 'BAJAJFINSV', 'SBIN', 'ICICIBANK', 'SBICARD', 'AXISBANK', 'HDFCBANK', 'KOTAKBANK']
+        : ['HDFCBANK', 'RELIANCE', 'ICICIBANK', 'INFY', 'TCS', 'ITC', 'AXISBANK', 'KOTAKBANK', 'SBIN']
 
       if (allSymbols.length === 0) return
 
@@ -256,7 +256,7 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
         // Background refresh - directly update with Groww data
         const allSymbols = selectedSector
           ? getStocksForSector(selectedSector)
-          : ['SBILIFE', 'LICHSGFIN', 'BAJAJFINSV', 'SBIN', 'ICICIBANK', 'SBICARD', 'AXISBANK', 'HDFCBANK', 'KOTAKBANK']
+          : ['HDFCBANK', 'RELIANCE', 'ICICIBANK', 'INFY', 'TCS', 'ITC', 'AXISBANK', 'KOTAKBANK', 'SBIN']
 
         if (allSymbols.length === 0) return
 
@@ -371,7 +371,7 @@ export default function StockTable({ selectedSector, isReplayMode = false, repla
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3">
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <h2 className="text-base sm:text-lg lg:text-xl font-extrabold text-black">
-            {selectedSector ? `${selectedSector} Stocks` : 'Nifty Financial Services'}
+            {selectedSector ? `${selectedSector} Stocks` : 'Index Majors'}
           </h2>
           {isReplayMode && replayTime ? (
             <div className="flex items-center gap-2 px-2 sm:px-3 py-1 bg-blue-50 rounded-lg border border-blue-200">
