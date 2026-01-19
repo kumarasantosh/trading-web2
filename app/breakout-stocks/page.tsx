@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import TopNavigation from '@/components/momentum/TopNavigation'
 import Footer from '@/components/Footer'
+import VideoTutorial from '@/components/VideoTutorial'
 
 interface BreakoutStock {
   symbol: string
@@ -321,7 +322,9 @@ export default function BreakoutStocksPage() {
               </div>
             </div>
           )}
+
         </div>
+        <VideoTutorial className="px-4 lg:px-6" />
       </div>
       <Footer />
     </div>

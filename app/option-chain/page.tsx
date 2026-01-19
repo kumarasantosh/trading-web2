@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, ResponsiveCo
 import TimelineSlider from '@/components/momentum/TimelineSlider'
 import TopNavigation from '@/components/momentum/TopNavigation'
 import Footer from '@/components/Footer'
+import VideoTutorial from '@/components/VideoTutorial'
 
 interface OptionChainData {
     strikePrice: number
@@ -1316,6 +1317,8 @@ export default function OptionChainPage() {
                             intervalMinutes={3}
                         />
                     </div>
+
+                    <VideoTutorial />
                 </div>
             </div>
             <Footer />

@@ -113,6 +113,7 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
 
   const navLinks = [
     { name: 'Momentum', href: '/momentum' },
+    { name: 'Sectors', href: '/sector-performance' },
     { name: 'Option Data', href: '/option-chain' },
     { name: 'Breakout Stocks', href: '/breakout-stocks' }
   ]

@@ -320,6 +320,7 @@ async function captureMarketIndices() {
                 // Target indices to capture
                 const targetIndices = [
                     { searchName: 'NIFTY 50', displayName: 'NIFTY 50' },
+                    { searchName: 'SENSEX', displayName: 'SENSEX' },
                     { searchName: 'NIFTY BANK', displayName: 'NIFTY BANK' },
                     { searchName: 'NIFTY FIN SERVICE', displayName: 'FINNIFTY' },
                     { searchName: 'NIFTY MIDCAP 100', displayName: 'NIFTY MIDCAP' },
