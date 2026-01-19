@@ -65,6 +65,35 @@ export async function GET(request: NextRequest) {
         const todayDate = istTime.toISOString().split('T')[0] // YYYY-MM-DD format
         console.log(`[BREAKOUT-CHECK] Checking breakouts/breakdowns for ${todayDate}`)
 
+        // Clear breakdown/breakout tables at market open (9:15-9:16 AM)
+        // This ensures we start fresh each day with correct previous day reference data
+        const isMarketOpenWindow = currentTimeInMinutes >= marketOpenTime && currentTimeInMinutes < marketOpenTime + 1
+
+        if (isMarketOpenWindow) {
+            console.log('[BREAKOUT-CHECK] Market open detected - clearing previous day breakdown/breakout data')
+
+            try {
+                // Clear all three tables atomically
+                await Promise.all([
+                    supabaseAdmin.from('breakout_stocks').delete().neq('symbol', ''),
+                    supabaseAdmin.from('breakdown_stocks').delete().neq('symbol', ''),
+                    supabaseAdmin.from('breakout_snapshots').delete().neq('symbol', '')
+                ])
+
+                console.log('[BREAKOUT-CHECK] ✅ Successfully cleared breakdown/breakout tables for fresh detection')
+
+                return NextResponse.json({
+                    success: true,
+                    message: 'Market open - cleared breakdown/breakout tables',
+                    action: 'cleanup',
+                    cleared_at: now.toISOString()
+                })
+            } catch (clearError) {
+                console.error('[BREAKOUT-CHECK] Error clearing tables:', clearError)
+                // Continue with normal check even if clear fails
+            }
+        }
+
         // Auto-generate token if needed
         const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
 

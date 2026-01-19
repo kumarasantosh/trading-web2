@@ -34,11 +34,13 @@ export async function GET(request: NextRequest) {
         const capturedAt = roundedTime.toISOString()
         console.log(`[CRON] Starting data capture at ${capturedAt} (rounded from ${now.toISOString()})`)
 
-        // Check if this is the 3:30 PM capture (end of trading day)
+        // Check if this is the 3:30 PM capture (end of trading day) or forced
         // 3:30 PM IST = 10:00 AM UTC (IST is UTC+5:30)
         const istHour = now.getUTCHours() + 5.5 // Convert to IST
         const istMinutes = now.getUTCMinutes() + (now.getUTCSeconds() / 60)
-        const isEndOfDay = Math.floor(istHour) === 15 && Math.floor(istMinutes) >= 30 && Math.floor(istMinutes) < 35
+        const isTimeMatch = Math.floor(istHour) === 15 && Math.floor(istMinutes) >= 30 && Math.floor(istMinutes) < 35
+        const isForced = request.nextUrl.searchParams.get('force') === 'true'
+        const isEndOfDay = isTimeMatch || isForced
 
         // Capture sector data
         const sectorResults = await captureSectorData(capturedAt)
@@ -50,7 +52,7 @@ export async function GET(request: NextRequest) {
         // Capture market indices at 3:30 PM (end of trading day)
         let marketIndicesResults = { count: 0, errors: [] as string[] }
         if (isEndOfDay) {
-            console.log('[CRON] End of trading day detected - capturing market indices')
+            console.log(`[CRON] ${isForced ? 'Forced capture' : 'End of trading day detected'} - capturing market indices`)
             marketIndicesResults = await captureMarketIndices()
 
             // Clean up previous day's records (keep only today's data)
@@ -102,7 +104,7 @@ async function captureSectorData(capturedAt: string) {
 
         const nseData = await response.json()
 
-        // Map of NSE index names to our sector names
+        // Map of NSE index names to our sector names (16 sectors total)
         const sectorMap: Record<string, string> = {
             'NIFTY BANK': 'Bank Nifty',
             'NIFTY IT': 'IT',
@@ -112,10 +114,14 @@ async function captureSectorData(capturedAt: string) {
             'NIFTY ENERGY': 'Energy',
             'NIFTY FMCG': 'FMCG',
             'NIFTY REALTY': 'Realty',
-            'NIFTY FIN SERVICE': 'Financial Services',
-            'NIFTY PVT BANK': 'Private Bank',
+            'NIFTY FINANCIAL SERVICES': 'Financial Services',
+            'NIFTY PRIVATE BANK': 'Private Bank',
             'NIFTY PSU BANK': 'PSU Bank',
-            'NIFTY CONSUMPTION': 'Consumer Durables',
+            'NIFTY CONSUMER DURABLES': 'Consumer Durables',
+            'NIFTY OIL & GAS': 'Oil & Gas',
+            'NIFTY INDIA CONSUMPTION': 'Consumption',
+            'NIFTY 50': 'Sensex',  // Using NIFTY 50 as proxy for Sensex
+            'NIFTY MIDCAP SELECT': 'Nifty MidSelect',
         }
 
         const snapshots = []
@@ -284,15 +290,15 @@ async function captureMarketIndices() {
         const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000))
         const todayDate = istTime.toISOString().split('T')[0] // YYYY-MM-DD format
 
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
         const snapshots: any[] = []
 
         // Fetch NSE indices from NSE API (more accurate percentChange)
         try {
-            const nseUrl = `${baseUrl}/api/nse/indices`
-            const nseResponse = await fetch(nseUrl, {
+            const nseResponse = await fetch('https://www.nseindia.com/api/allIndices', {
                 headers: {
-                    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                    'Accept-Language': 'en-US,en;q=0.9',
                 },
                 cache: 'no-store',
             })
@@ -353,7 +359,7 @@ async function captureMarketIndices() {
                 })
             } else {
                 console.warn('[CRON] NSE API returned non-OK status:', nseResponse.status)
-                errors.push('NSE API returned non-OK status')
+                errors.push(`NSE API returned ${nseResponse.status}`)
             }
         } catch (nseError) {
             console.error('[CRON] Error fetching NSE indices:', nseError)
@@ -363,50 +369,34 @@ async function captureMarketIndices() {
         // Check if SENSEX was already found in NSE API response
         const sensexInNse = snapshots.find(s => s.index_name === 'SENSEX')
 
-        // Fetch BSE SENSEX from BSE API if not found in NSE
+        // Fetch BSE SENSEX from Groww API if not found in NSE
         if (!sensexInNse) {
             try {
-                const bseUrl = `${baseUrl}/api/bse/indices`
-                const bseResponse = await fetch(bseUrl, {
+                const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
+                const url = 'https://api.groww.in/v1/live-data/quote?exchange=BSE&segment=CASH&trading_symbol=SENSEX'
+
+                const bseResponse = await fetch(url, {
                     headers: {
-                        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                        'Authorization': `Bearer ${growwToken}`,
+                        'X-API-VERSION': '1.0',
+                        'Accept': 'application/json',
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
                     },
                     cache: 'no-store',
                 })
 
                 if (bseResponse.ok) {
-                    const bseData = await bseResponse.json()
-                    console.log('[CRON] BSE API response:', bseData)
+                    const data = await bseResponse.json()
+                    console.log('[CRON] SENSEX response from Groww:', data.payload ? 'Found' : 'Empty')
 
-                    // Handle different BSE API response structures
-                    let allBseIndices: any[] = []
+                    if (data.payload) {
+                        const payload = data.payload
+                        const ohlc = payload.ohlc
 
-                    if (Array.isArray(bseData.data)) {
-                        allBseIndices = bseData.data
-                    } else if (bseData.data && typeof bseData.data === 'object') {
-                        Object.values(bseData.data).forEach((value: any) => {
-                            if (Array.isArray(value)) {
-                                allBseIndices = [...allBseIndices, ...value]
-                            }
-                        })
-                    }
-
-                    // Look for SENSEX in the BSE data
-                    const sensexData = allBseIndices.find((item: any) =>
-                        item.IndexName?.toUpperCase().includes('SENSEX') ||
-                        item.indexName?.toUpperCase().includes('SENSEX') ||
-                        item.name?.toUpperCase().includes('SENSEX') ||
-                        item.index?.toUpperCase().includes('SENSEX')
-                    )
-
-                    if (sensexData) {
-                        const value = sensexData.currentValue || sensexData.CurrentValue || sensexData.last || sensexData.Last || sensexData.value || sensexData.Value || 0
-                        const previousClose = sensexData.previousClose || sensexData.PreviousClose || sensexData.prevClose || sensexData.PrevClose || 0
-                        const change = sensexData.change || sensexData.Change || sensexData.variation || sensexData.Variation || (value && previousClose ? value - previousClose : 0)
-                        const changePercent = sensexData.changePercent || sensexData.ChangePercent || sensexData.percentChange || sensexData.PercentChange ||
-                            (previousClose && previousClose > 0 ? (change / previousClose) * 100 : 0)
-
-                        console.log(`[CRON] SENSEX from BSE API: value=${value}, previousClose=${previousClose}, change=${change}, changePercent=${changePercent}`)
+                        const value = payload.last_price || 0
+                        const previousClose = ohlc?.close || payload.close || 0
+                        const change = payload.day_change || (value - previousClose)
+                        const changePercent = payload.day_change_perc || ((change / previousClose) * 100)
 
                         if (value > 0) {
                             snapshots.push({
@@ -416,20 +406,17 @@ async function captureMarketIndices() {
                                 change: Number(change),
                                 change_percent: Number(changePercent),
                                 previous_close: Number(previousClose),
-                                open_price: sensexData.open || sensexData.Open || 0,
+                                open_price: ohlc?.open || 0,
                             })
-                            console.log('[CRON] ✅ SENSEX added from BSE API')
+                            console.log('[CRON] ✅ SENSEX added from Groww API')
                         }
-                    } else {
-                        console.warn('[CRON] SENSEX not found in BSE API response')
-                        errors.push('SENSEX not found in BSE API')
                     }
                 } else {
-                    console.warn('[CRON] BSE API returned non-OK status:', bseResponse.status)
-                    errors.push('BSE API returned non-OK status')
+                    console.warn('[CRON] Groww API for SENSEX returned non-OK status:', bseResponse.status)
+                    errors.push('Groww API for SENSEX failed')
                 }
             } catch (bseError) {
-                console.error('[CRON] Error fetching BSE SENSEX from BSE API:', bseError)
+                console.error('[CRON] Error fetching BSE SENSEX from Groww:', bseError)
                 errors.push('Failed to fetch BSE SENSEX')
             }
         } else {

@@ -91,12 +91,6 @@ export default function OptionChainPage() {
 
     // Update PCR chart data
     const updatePcrChart = useCallback((pcrValue: number, spotValue: number, timestamp: Date) => {
-        // Check if we need to reset for new trading day
-        if (shouldResetTrendLine(timestamp)) {
-            console.log('[PCR Chart] Resetting for new trading day')
-            pcrHistoryRef.current = []
-        }
-
         // Format time string for display (IST)
         const timeStr = timestamp.toLocaleTimeString('en-IN', {
             timeZone: 'Asia/Kolkata',
@@ -112,7 +106,7 @@ export default function OptionChainPage() {
             spot: spotValue
         }
 
-        // Add to history
+        // Add to history (don't reset - fetchTrendlineData loads full day's data)
         pcrHistoryRef.current = [...pcrHistoryRef.current, newPcrPoint]
 
         // Keep only last 1000 points to prevent memory issues
@@ -121,7 +115,7 @@ export default function OptionChainPage() {
         }
 
         setPcrData([...pcrHistoryRef.current])
-    }, [shouldResetTrendLine])
+    }, [])
 
     // Fetch trendline data for the full day
     const fetchTrendlineData = useCallback(async () => {

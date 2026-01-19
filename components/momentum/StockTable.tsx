@@ -433,7 +433,7 @@ export default function StockTable({
 
           {/* Expandable Content */}
           {isExpanded && (
-            <div className="mt-4 overflow-x-auto overflow-y-auto max-h-[600px] scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
+            <div className="mt-4 overflow-x-auto overflow-y-auto max-h-[900px] scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
               {isLoading && stocks.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <div className="relative">

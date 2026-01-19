@@ -325,18 +325,6 @@ export default function SectorPerformance({
           </div>
         </div>
 
-        {/* Timeline Slider */}
-        {onTimeChange && onReplayModeChange && replayTime && (
-          <div className="mb-4">
-            <TimelineSlider
-              selectedTime={replayTime}
-              onTimeChange={onTimeChange}
-              isReplayMode={isReplayMode}
-              onReplayModeChange={onReplayModeChange}
-            />
-          </div>
-        )}
-
         {/* Range Selector
         <div className="flex items-center space-x-3">
           <span className="text-sm font-semibold text-gray-700">Range:</span>
@@ -476,7 +464,18 @@ export default function SectorPerformance({
           })
         )}
       </div>
+
+      {/* Timeline Slider - Moved below bars */}
+      {onTimeChange && onReplayModeChange && replayTime && (
+        <div className="mt-6">
+          <TimelineSlider
+            selectedTime={replayTime}
+            onTimeChange={onTimeChange}
+            isReplayMode={isReplayMode}
+            onReplayModeChange={onReplayModeChange}
+          />
+        </div>
+      )}
     </div>
   )
 }
-

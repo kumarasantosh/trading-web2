@@ -25,6 +25,8 @@ export default function BreakoutStocksPage() {
   const [losers, setLosers] = useState<BreakoutStock[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const isLoadingRef = useRef(false) // Track if loading is in progress
+  const [visibleGainers, setVisibleGainers] = useState(10) // Show 10 initially
+  const [visibleLosers, setVisibleLosers] = useState(10) // Show 10 initially
 
   useEffect(() => {
     const fetchBreakoutStocks = async () => {
@@ -178,7 +180,7 @@ export default function BreakoutStocksPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {gainers.map((stock) => (
+                        {gainers.slice(0, visibleGainers).map((stock) => (
                           <tr
                             key={stock.symbol}
                             onClick={() => handleStockClick(stock.symbol)}
@@ -228,6 +230,17 @@ export default function BreakoutStocksPage() {
                         ))}
                       </tbody>
                     </table>
+                    {/* Load More Button */}
+                    {visibleGainers < gainers.length && (
+                      <div className="p-4 border-t border-gray-200 bg-gray-50">
+                        <button
+                          onClick={() => setVisibleGainers(prev => Math.min(prev + 10, gainers.length))}
+                          className="w-full py-2 px-4 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
+                        >
+                          Load More ({gainers.length - visibleGainers} remaining)
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -267,7 +280,7 @@ export default function BreakoutStocksPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {losers.map((stock) => (
+                        {losers.slice(0, visibleLosers).map((stock) => (
                           <tr
                             key={stock.symbol}
                             onClick={() => handleStockClick(stock.symbol)}
@@ -317,6 +330,17 @@ export default function BreakoutStocksPage() {
                         ))}
                       </tbody>
                     </table>
+                    {/* Load More Button */}
+                    {visibleLosers < losers.length && (
+                      <div className="p-4 border-t border-gray-200 bg-gray-50">
+                        <button
+                          onClick={() => setVisibleLosers(prev => Math.min(prev + 10, losers.length))}
+                          className="w-full py-2 px-4 bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
+                        >
+                          Load More ({losers.length - visibleLosers} remaining)
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

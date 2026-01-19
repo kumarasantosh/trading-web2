@@ -46,53 +46,68 @@ export const fetchYahooStockData = async (symbol: string, exchange: 'NSE' | 'BSE
         const quote = result.indicators.quote[0];
         const timestamps = result.timestamp;
 
-        // Find the last valid trading day
-        let lastIndex = timestamps.length - 1;
+        // Helper function to check if a candle is valid (has actual trading data)
+        const isValidTradingDay = (index: number): boolean => {
+            if (index < 0 || index >= timestamps.length) return false;
 
-        // Skip incomplete data (sometimes current day data is partial or null if market is open/just opened)
-        // logic: if close is null, it's not a complete candle. 
-        // Yahoo often returns nulls for future placeholders or incomplete days.
-        while (lastIndex >= 0 && (quote.open[lastIndex] === null || quote.close[lastIndex] === null || quote.high[lastIndex] === null || quote.low[lastIndex] === null)) {
-            lastIndex--;
+            const open = quote.open[index];
+            const high = quote.high[index];
+            const low = quote.low[index];
+            const close = quote.close[index];
+            const volume = quote.volume[index];
+
+            // Check for null values
+            if (open === null || high === null || low === null || close === null) {
+                return false;
+            }
+
+            // Check for placeholder data (all OHLC same - indicates no trading)
+            if (open === high && high === low && low === close) {
+                return false;
+            }
+
+            // Check for zero or very low volume (likely a holiday/non-trading day)
+            if (volume === null || volume === 0) {
+                return false;
+            }
+
+            return true;
+        };
+
+        // Find the last valid trading day
+        let lastValidIndex = timestamps.length - 1;
+        while (lastValidIndex >= 0 && !isValidTradingDay(lastValidIndex)) {
+            lastValidIndex--;
         }
 
-        // If we want "Previous Day" specifically, we might need to check the date.
-        // But usually "Previous Data" implies the last completed candle available.
-        // If market is OPEN, the last candle might be "Today".
-        // The user wants "Previous Day" details. 
-        // If today is Monday trading session, "Previous Day" is Friday.
-        // If we are mid-day, the last index is "Current/Today". The index before that is "Previous Day".
+        if (lastValidIndex < 0) {
+            console.warn(`No valid trading data found for ${symbol}`);
+            return null;
+        }
 
-        // Let's determine if the last candle is "Today" (incomplete or complete).
-        // Since we are client side, we can check date.
-        const lastTimestamp = timestamps[lastIndex];
-        const lastDate = new Date(lastTimestamp * 1000);
+        // Check if the last valid trading day is today
+        const lastValidTimestamp = timestamps[lastValidIndex];
+        const lastValidDate = new Date(lastValidTimestamp * 1000);
         const today = new Date();
 
-        // Simple check: is last candle same date as today?
-        const isToday = lastDate.getDate() === today.getDate() &&
-            lastDate.getMonth() === today.getMonth() &&
-            lastDate.getFullYear() === today.getFullYear();
+        // Set time to midnight for accurate date comparison
+        today.setHours(0, 0, 0, 0);
+        lastValidDate.setHours(0, 0, 0, 0);
 
-        let targetIndex = lastIndex;
+        const isToday = lastValidDate.getTime() === today.getTime();
 
-        // If the last candle is today, we technically want the *previous* day for "Previous Day High/Low" context 
-        // to compare against current LTP (which is Today's price).
-        // However, if the user just wants "Last available full data", that's different.
-        // The prompt says: "on hover... details of previous day high and low".
-        // Use case: Breakout detection. Breakout is usually checking if Current LTP > Previous Day High.
-        // So we definitely need the *completed* previous day, not the current running day.
-
+        // If the last valid day is today, we want the previous trading day
+        let targetIndex = lastValidIndex;
         if (isToday) {
-            targetIndex = lastIndex - 1;
-        }
-
-        // Search backwards again for valid data if we stepped back
-        while (targetIndex >= 0 && (quote.open[targetIndex] === null || quote.close[targetIndex] === null)) {
-            targetIndex--;
+            targetIndex = lastValidIndex - 1;
+            // Find the previous valid trading day
+            while (targetIndex >= 0 && !isValidTradingDay(targetIndex)) {
+                targetIndex--;
+            }
         }
 
         if (targetIndex < 0) {
+            console.warn(`No previous trading day data found for ${symbol}`);
             return null;
         }
 
