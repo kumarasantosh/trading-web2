@@ -84,6 +84,8 @@ export async function GET(request: NextRequest) {
                             sector: stockToSectorMap.get(symbol) || 'Unknown',
                             today_high: ohlc.high,
                             today_low: ohlc.low,
+                            today_open: ohlc.open || payload?.open || ohlc.high, // Fallback to high if open missing
+                            today_close: ohlc.close || payload?.close || payload?.last_price || ohlc.low, // Fallback to close/ltp/low
                             captured_date: todayDate,
                         })
                         successCount++
@@ -126,6 +128,8 @@ export async function GET(request: NextRequest) {
                             sector: stockToSectorMap.get(symbol) || 'Unknown',
                             today_high: yahooData.high,
                             today_low: yahooData.low,
+                            today_open: yahooData.open || yahooData.high, // Fallback to high if open missing
+                            today_close: yahooData.close || yahooData.low, // Fallback to low if close missing
                             captured_date: todayDate,
                         })
                         successCount++

@@ -106,7 +106,7 @@ export default function BreakoutStocksPage() {
     }
 
     fetchBreakoutStocks()
-    const interval = setInterval(fetchBreakoutStocks, 60000) // Refresh every 1 minute
+    const interval = setInterval(fetchBreakoutStocks, 5000) // Refresh every 5 seconds during market hours
     return () => clearInterval(interval)
   }, [])
 

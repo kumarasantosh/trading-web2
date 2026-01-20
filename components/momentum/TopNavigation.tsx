@@ -105,8 +105,8 @@ export default function TopNavigation({ hideTopMovers = false }: TopNavigationPr
 
     loadMarketData()
 
-    // Always use 10 second refresh interval for real-time updates
-    const refreshInterval = 10000
+    // Refresh every 5 seconds for real-time updates during market hours
+    const refreshInterval = 5000
     const interval = setInterval(loadMarketData, refreshInterval)
     return () => clearInterval(interval)
   }, [])

@@ -1,164 +1,178 @@
-import { NextRequest, NextResponse } from 'next/server';
-import YahooFinance from 'yahoo-finance2';
-import { supabaseAdmin } from '@/lib/supabase';
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase'
+import { SECTOR_STOCKS } from '@/constants/sector-stocks-mapping'
+import { fetchYahooStockData } from '@/services/yahooFinance'
 
+// Force dynamic rendering since we use request headers
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300;
+export const maxDuration = 300; // 5 minutes max
 
-// Instantiate yahoo-finance2 (required for v3)
-const yahooFinance = new YahooFinance();
-
-// All unique stocks from sector-stocks-mapping (160+ stocks)
-const SYMBOLS = [
-    // Indices
-    '^NSEI',      // NIFTY 50
-    '^NSEBANK',   // BANK NIFTY
-
-    // PSU Bank
-    'BANKBARODA.NS', 'BANKINDIA.NS', 'CANBK.NS', 'INDIANB.NS', 'PNB.NS', 'SBIN.NS', 'UNIONBANK.NS',
-
-    // Private Bank
-    'AXISBANK.NS', 'BANDHANBNK.NS', 'FEDERALBNK.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'IDFCFIRSTB.NS',
-    'INDUSINDBK.NS', 'KOTAKBANK.NS', 'RBLBANK.NS', 'AUBANK.NS',
-
-    // Financial Services
-    '360ONE.NS', 'ABCAPITAL.NS', 'ANGELONE.NS', 'BAJAJFINSV.NS', 'BAJFINANCE.NS', 'BSE.NS', 'CDSL.NS',
-    'CHOLAFIN.NS', 'HDFCAMC.NS', 'HDFCLIFE.NS', 'HUDCO.NS', 'ICICIGI.NS', 'ICICIPRULI.NS', 'IIFL.NS',
-    'IRFC.NS', 'JIOFIN.NS', 'LICHSGFIN.NS', 'LICI.NS', 'LTF.NS', 'MANAPPURAM.NS', 'MFSL.NS',
-    'MUTHOOTFIN.NS', 'NUVAMA.NS', 'PAYTM.NS', 'PFC.NS', 'PNBHOUSING.NS', 'POLICYBZR.NS', 'RECLTD.NS',
-    'SAMMAANCAP.NS', 'SBICARD.NS', 'SBILIFE.NS', 'SHRIRAMFIN.NS',
-
-    // Auto
-    'ASHOKLEY.NS', 'BHARATFORG.NS', 'BOSCHLTD.NS', 'EICHERMOT.NS', 'EXIDEIND.NS', 'HAL.NS',
-    'HEROMOTOCO.NS', 'M%26M.NS', 'MARUTI.NS', 'MOTHERSON.NS', 'SONACOMS.NS', 'TIINDIA.NS',
-    'TITAGARH.NS', 'TVSMOTOR.NS', 'UNOMINDA.NS',
-
-    // Metal
-    'ADANIENT.NS', 'APLAPOLLO.NS', 'HINDALCO.NS', 'HINDZINC.NS', 'JINDALSTEL.NS', 'JSWSTEEL.NS',
-    'NATIONALUM.NS', 'NMDC.NS', 'SAIL.NS', 'TATASTEEL.NS', 'VEDL.NS',
-
-    // Energy
-    'ADANIENSOL.NS', 'ADANIGREEN.NS', 'BDL.NS', 'BHEL.NS', 'BLUESTARCO.NS', 'BPCL.NS', 'CGPOWER.NS',
-    'COALINDIA.NS', 'GMRAIRPORT.NS', 'HINDPETRO.NS', 'IEX.NS', 'IGL.NS', 'INOXWIND.NS', 'IOC.NS',
-    'IREDA.NS', 'JSWENERGY.NS', 'MAZDOCK.NS', 'NHPC.NS', 'NTPC.NS', 'OIL.NS', 'ONGC.NS',
-    'PETRONET.NS', 'POWERGRID.NS', 'POWERINDIA.NS', 'RELIANCE.NS', 'SOLARINDS.NS', 'SUZLON.NS',
-    'TATAPOWER.NS', 'TORNTPOWER.NS', 'GAIL.NS',
-
-    // FMCG
-    'BRITANNIA.NS', 'COLPAL.NS', 'DABUR.NS', 'DMART.NS', 'GODREJCP.NS', 'HINDUNILVR.NS', 'ITC.NS',
-    'MARICO.NS', 'NESTLEIND.NS', 'NYKAA.NS', 'PATANJALI.NS', 'SUPREMEIND.NS', 'TATACONSUM.NS',
-    'UBL.NS', 'VBL.NS',
-
-    // Consumer Durables
-    'AMBER.NS', 'BATAINDIA.NS', 'CROMPTON.NS', 'DIXON.NS', 'HAVELLS.NS', 'KALYANKJIL.NS',
-    'PGEL.NS', 'TITAN.NS', 'VOLTAS.NS',
-
-    // Consumption
-    'AMBUJACEM.NS', 'APOLLOHOSP.NS', 'ASIANPAINT.NS', 'BHARTIARTL.NS', 'DALBHARAT.NS',
-    'DELHIVERY.NS', 'DLF.NS', 'GRASIM.NS', 'INDHOTEL.NS', 'INDIGO.NS', 'KEI.NS',
-    'MAXHEALTH.NS', 'NAUKRI.NS', 'PIDILITEIND.NS', 'TRENT.NS', 'ULTRACEMCO.NS',
-
-    // Realty
-    'GODREJPROP.NS', 'INDUSTOWER.NS', 'LODHA.NS', 'LT.NS', 'NBCC.NS', 'NCC.NS',
-    'OBEROIRLTY.NS', 'PHOENIXLTD.NS', 'PRESTIGE.NS', 'SIEMENS.NS',
-
-    // Pharma
-    'ALKEM.NS', 'AUROPHARMA.NS', 'BIOCON.NS', 'CIPLA.NS', 'DIVISLAB.NS', 'DRREDDY.NS',
-    'FORTIS.NS', 'GLENMARK.NS', 'LAURUSLAB.NS', 'LUPIN.NS', 'MANKIND.NS', 'PPLPHARMA.NS',
-    'SUNPHARMA.NS', 'SYNGENE.NS', 'TORNTPHARM.NS', 'ZYDUSLIFE.NS',
-
-    // IT
-    'ABB.NS', 'CAMS.NS', 'COFORGE.NS', 'CYIENT.NS', 'HCLTECH.NS', 'INFY.NS', 'KAYNES.NS',
-    'KFINTECH.NS', 'KPITTECH.NS', 'LTIM.NS', 'MPHASIS.NS', 'OFSS.NS', 'PERSISTENT.NS',
-    'TATAELXSI.NS', 'TATATECH.NS', 'TCS.NS', 'TECHM.NS', 'WIPRO.NS',
-
-    // Nifty MidSelect
-    'ASTRAL.NS', 'BEL.NS', 'CONCOR.NS', 'CUMMINSIND.NS', 'JUBLFOOD.NS', 'PAGEIND.NS',
-    'PIIND.NS', 'POLYCAB.NS', 'RVNL.NS', 'UPL.NS',
-
-    // Additional major stocks
-    'ADANIPORTS.NS', 'ZOMATO.NS', 'TATAMOTORS.NS',
-];
-
+/**
+ * Cron job API route that populates daily_high_low table with PREVIOUS DAY's OHLC data
+ * Uses Yahoo Finance to get accurate historical data
+ * 
+ * This should run ONCE per day at market open (9:15 AM IST) or before
+ * to ensure we have yesterday's data ready for breakout detection
+ * 
+ * Security: Validates CRON_SECRET to prevent unauthorized access
+ */
 export async function GET(request: NextRequest) {
     try {
-        const authHeader = request.headers.get('authorization');
-        const token = authHeader?.replace('Bearer ', '');
+        // Validate cron secret for security
+        const authHeader = request.headers.get('authorization')
+        const cronSecret = process.env.CRON_SECRET
 
-        if (token !== process.env.CRON_SECRET) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+            console.error('[POPULATE-DAILY-HL] Unauthorized cron request')
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        console.log('🔄 Fetching yesterday\'s OHLC from yahoo-finance2...');
+        // Get current IST time
+        const now = new Date()
+        const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000))
+        const todayDate = istTime.toISOString().split('T')[0] // YYYY-MM-DD format
 
-        const results: any[] = [];
-        const errors: string[] = [];
+        console.log(`[POPULATE-DAILY-HL] Starting population for ${todayDate}`)
 
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const dateStr = yesterday.toISOString().split('T')[0];
+        // Collect all unique stocks from all sectors
+        const allStocks = new Set<string>()
+        const stockToSectorMap = new Map<string, string>()
 
-        for (const symbol of SYMBOLS) {
-            try {
-                const quote = await yahooFinance.quote(symbol) as any;
-
-                if (quote && quote.regularMarketPreviousClose) {
-                    const cleanSymbol = symbol
-                        .replace('.NS', '')
-                        .replace('^NSEI', 'NIFTY')
-                        .replace('^NSEBANK', 'BANKNIFTY');
-
-                    const data = {
-                        symbol: cleanSymbol,
-                        sector: 'General',
-                        today_high: quote.regularMarketDayHigh || 0,
-                        today_low: quote.regularMarketDayLow || 0,
-                        today_open: quote.regularMarketOpen || quote.regularMarketDayHigh || 0,
-                        today_close: quote.regularMarketPrice || quote.regularMarketPreviousClose || quote.regularMarketDayHigh || 0,
-                        captured_date: dateStr,
-                    };
-
-                    // Delete existing record for this symbol first
-                    await supabaseAdmin
-                        .from('daily_high_low')
-                        .delete()
-                        .eq('symbol', cleanSymbol);
-
-                    // Insert new record
-                    const { error: insertError } = await supabaseAdmin
-                        .from('daily_high_low')
-                        .insert(data);
-
-                    if (insertError) {
-                        errors.push(`${cleanSymbol}: ${insertError.message}`);
-                    } else {
-                        results.push(data);
-                    }
+        Object.entries(SECTOR_STOCKS).forEach(([sector, stocks]) => {
+            stocks.forEach(symbol => {
+                allStocks.add(symbol)
+                // Store first sector mapping (a stock may appear in multiple sectors)
+                if (!stockToSectorMap.has(symbol)) {
+                    stockToSectorMap.set(symbol, sector)
                 }
-            } catch (err) {
-                errors.push(`${symbol}: ${err instanceof Error ? err.message : 'Unknown'}`);
+            })
+        })
+
+        console.log(`[POPULATE-DAILY-HL] Fetching previous day data for ${allStocks.size} unique stocks using Yahoo Finance`)
+
+        // Fetch previous day OHLC data for all stocks using Yahoo Finance
+        const highLowData: any[] = []
+        const errors: string[] = []
+        let successCount = 0
+        let failedCount = 0
+
+        // Process stocks in batches to avoid overwhelming the API
+        const stockArray = Array.from(allStocks)
+        const BATCH_SIZE = 10 // Process 10 stocks at a time
+
+        for (let i = 0; i < stockArray.length; i += BATCH_SIZE) {
+            const batch = stockArray.slice(i, i + BATCH_SIZE)
+            console.log(`[POPULATE-DAILY-HL] Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(stockArray.length / BATCH_SIZE)} (${batch.length} stocks)`)
+
+            // Process batch in parallel
+            const batchPromises = batch.map(async (symbol) => {
+                try {
+                    // Fetch PREVIOUS DAY's OHLC from Yahoo Finance
+                    const yahooData = await fetchYahooStockData(symbol)
+
+                    if (yahooData && yahooData.high > 0 && yahooData.low > 0) {
+                        return {
+                            symbol: symbol,
+                            sector: stockToSectorMap.get(symbol) || 'Unknown',
+                            today_high: yahooData.high,
+                            today_low: yahooData.low,
+                            today_open: yahooData.open || yahooData.high, // Fallback to high if open missing
+                            today_close: yahooData.close || yahooData.low, // Fallback to low if close missing
+                            captured_date: todayDate,
+                        }
+                    } else {
+                        errors.push(`${symbol}: No valid Yahoo Finance data`)
+                        return null
+                    }
+                } catch (error) {
+                    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+                    errors.push(`${symbol}: ${errorMsg}`)
+                    return null
+                }
+            })
+
+            const batchResults = await Promise.all(batchPromises)
+
+            // Collect successful results
+            batchResults.forEach(result => {
+                if (result) {
+                    highLowData.push(result)
+                    successCount++
+                } else {
+                    failedCount++
+                }
+            })
+
+            // Small delay between batches to avoid rate limiting
+            if (i + BATCH_SIZE < stockArray.length) {
+                await new Promise(resolve => setTimeout(resolve, 500))
+            }
+        }
+
+        console.log(`[POPULATE-DAILY-HL] Fetch complete: ${successCount} successful, ${failedCount} failed`)
+
+        // Clear existing data and insert fresh data
+        if (highLowData.length > 0) {
+            console.log('[POPULATE-DAILY-HL] Clearing old data from daily_high_low table...')
+
+            // Delete all existing records
+            const { error: deleteError } = await supabaseAdmin
+                .from('daily_high_low')
+                .delete()
+                .neq('symbol', '__DUMMY__') // Delete all records
+
+            if (deleteError) {
+                console.error('[POPULATE-DAILY-HL] Error deleting old records:', deleteError)
+                errors.push(`Delete error: ${deleteError.message}`)
+            } else {
+                console.log('[POPULATE-DAILY-HL] Old data cleared successfully')
             }
 
-            await new Promise(resolve => setTimeout(resolve, 100)); // Rate limit
-        }
+            // Insert fresh high-low data
+            console.log(`[POPULATE-DAILY-HL] Inserting ${highLowData.length} records...`)
 
-        console.log(`✅ Populated ${results.length} symbols, ${errors.length} errors`);
+            const { error: insertError } = await supabaseAdmin
+                .from('daily_high_low')
+                .insert(highLowData)
+
+            if (insertError) {
+                console.error('[POPULATE-DAILY-HL] Insert error:', insertError)
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: 'Failed to insert data',
+                        details: insertError.message
+                    },
+                    { status: 500 }
+                )
+            }
+
+            console.log(`[POPULATE-DAILY-HL] ✅ Successfully inserted ${highLowData.length} records`)
+        } else {
+            console.log('[POPULATE-DAILY-HL] ⚠️ No data to insert')
+        }
 
         return NextResponse.json({
             success: true,
-            message: 'Daily high-low populated',
-            date: dateStr,
-            symbols_processed: results.length,
-            symbols_failed: errors.length,
-            errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
-        });
+            captured_date: todayDate,
+            total_stocks: allStocks.size,
+            stocks_captured: successCount,
+            stocks_failed: failedCount,
+            stocks_inserted: highLowData.length,
+            errors: errors.slice(0, 20), // Limit errors to first 20
+            error_count: errors.length,
+            message: `Successfully populated ${highLowData.length} stocks with previous day OHLC data from Yahoo Finance`
+        })
 
     } catch (error) {
-        console.error('❌ Populate error:', error);
-        return NextResponse.json({
-            success: false,
-            error: 'Failed to populate',
-            details: error instanceof Error ? error.message : 'Unknown error',
-        }, { status: 500 });
+        console.error('[POPULATE-DAILY-HL] Fatal error:', error)
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'Internal server error',
+                details: error instanceof Error ? error.message : 'Unknown error'
+            },
+            { status: 500 }
+        )
     }
 }
