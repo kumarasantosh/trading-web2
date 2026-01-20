@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { SECTOR_STOCKS } from '@/constants/sector-stocks-mapping'
 import { fetchYahooStockData } from '@/services/yahooFinance'
+import { getGrowwAccessToken } from '@/lib/groww-token'
 
 // Force dynamic rendering since we use request headers
 export const dynamic = 'force-dynamic';
@@ -9,7 +10,7 @@ export const maxDuration = 300; // 5 minutes max
 
 /**
  * Cron job API route that populates daily_high_low table with PREVIOUS DAY's OHLC data
- * Uses Yahoo Finance to get accurate historical data
+ * Uses Groww API (primary) and Yahoo Finance (fallback) to get accurate historical data
  * 
  * This should run ONCE per day at market open (9:15 AM IST) or before
  * to ensure we have yesterday's data ready for breakout detection
@@ -48,13 +49,18 @@ export async function GET(request: NextRequest) {
             })
         })
 
-        console.log(`[POPULATE-DAILY-HL] Fetching previous day data for ${allStocks.size} unique stocks using Yahoo Finance`)
+        console.log(`[POPULATE-DAILY-HL] Fetching previous day data for ${allStocks.size} unique stocks`)
 
-        // Fetch previous day OHLC data for all stocks using Yahoo Finance
+        // Get Groww token
+        const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
+
+        // Fetch previous day OHLC data for all stocks
         const highLowData: any[] = []
         const errors: string[] = []
         let successCount = 0
         let failedCount = 0
+        let growwCount = 0
+        let yahooCount = 0
 
         // Process stocks in batches to avoid overwhelming the API
         const stockArray = Array.from(allStocks)
@@ -67,21 +73,69 @@ export async function GET(request: NextRequest) {
             // Process batch in parallel
             const batchPromises = batch.map(async (symbol) => {
                 try {
-                    // Fetch PREVIOUS DAY's OHLC from Yahoo Finance
-                    const yahooData = await fetchYahooStockData(symbol)
+                    let ohlcData: any = null
 
-                    if (yahooData && yahooData.high > 0 && yahooData.low > 0) {
+                    // TRY 1: Groww API (more reliable for Indian stocks, gives today's data)
+                    try {
+                        const growwUrl = `https://api.groww.in/v1/live-data/quote?exchange=NSE&segment=CASH&trading_symbol=${symbol}`
+                        const growwResponse = await fetch(growwUrl, {
+                            headers: {
+                                'Authorization': `Bearer ${growwToken}`,
+                                'X-API-VERSION': '1.0',
+                                'Accept': 'application/json',
+                                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                            },
+                            cache: 'no-store',
+                        })
+
+                        if (growwResponse.ok) {
+                            const data = await growwResponse.json()
+                            const payload = data.payload
+                            const ohlc = payload?.ohlc
+
+                            if (ohlc?.high && ohlc?.low) {
+                                ohlcData = {
+                                    high: ohlc.high,
+                                    low: ohlc.low,
+                                    open: ohlc.open || payload?.open || ohlc.high,
+                                    close: ohlc.close || payload?.close || payload?.last_price || ohlc.low,
+                                    source: 'Groww'
+                                }
+                                growwCount++
+                            }
+                        }
+                    } catch (growwError) {
+                        // Continue to Yahoo Finance fallback
+                    }
+
+                    // TRY 2: Yahoo Finance (fallback - gives previous day data)
+                    if (!ohlcData) {
+                        const yahooData = await fetchYahooStockData(symbol)
+
+                        if (yahooData && yahooData.high > 0 && yahooData.low > 0) {
+                            ohlcData = {
+                                high: yahooData.high,
+                                low: yahooData.low,
+                                open: yahooData.open || yahooData.high,
+                                close: yahooData.close || yahooData.low,
+                                source: 'Yahoo'
+                            }
+                            yahooCount++
+                        }
+                    }
+
+                    if (ohlcData) {
                         return {
                             symbol: symbol,
                             sector: stockToSectorMap.get(symbol) || 'Unknown',
-                            today_high: yahooData.high,
-                            today_low: yahooData.low,
-                            today_open: yahooData.open || yahooData.high, // Fallback to high if open missing
-                            today_close: yahooData.close || yahooData.low, // Fallback to low if close missing
+                            today_high: ohlcData.high,
+                            today_low: ohlcData.low,
+                            today_open: ohlcData.open,
+                            today_close: ohlcData.close,
                             captured_date: todayDate,
                         }
                     } else {
-                        errors.push(`${symbol}: No valid Yahoo Finance data`)
+                        errors.push(`${symbol}: No valid data from Groww or Yahoo Finance`)
                         return null
                     }
                 } catch (error) {
@@ -109,7 +163,7 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        console.log(`[POPULATE-DAILY-HL] Fetch complete: ${successCount} successful, ${failedCount} failed`)
+        console.log(`[POPULATE-DAILY-HL] Fetch complete: ${successCount} successful (${growwCount} from Groww, ${yahooCount} from Yahoo), ${failedCount} failed`)
 
         // Clear existing data and insert fresh data
         if (highLowData.length > 0) {
@@ -159,9 +213,13 @@ export async function GET(request: NextRequest) {
             stocks_captured: successCount,
             stocks_failed: failedCount,
             stocks_inserted: highLowData.length,
+            sources: {
+                groww: growwCount,
+                yahoo: yahooCount
+            },
             errors: errors.slice(0, 20), // Limit errors to first 20
             error_count: errors.length,
-            message: `Successfully populated ${highLowData.length} stocks with previous day OHLC data from Yahoo Finance`
+            message: `Successfully populated ${highLowData.length} stocks (${growwCount} from Groww, ${yahooCount} from Yahoo Finance)`
         })
 
     } catch (error) {
