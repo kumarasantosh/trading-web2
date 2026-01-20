@@ -82,26 +82,26 @@ export async function GET(request: NextRequest) {
                         }) as any[]
 
                         if (result && result.length > 0) {
-                            // Python logic: iloc[-2] (assuming fetching while market open)
-                            // Our Logic: Find the latest candle that represents a FULL requested day.
+                            // Find the latest candle that is NOT today
+                            let idx = result.length - 1;
+                            const todayStr = new Date().toISOString().split('T')[0];
 
-                            // Since we passed period2 = Today (exclusive), we effectively asked for data up to Yesterday.
-                            // However, yahoo-finance2 might return today if the user didn't specify period2 correctly or if timezones apply.
+                            // If the last candle is today, go back to yesterday
+                            if (result[idx].date.toISOString().split('T')[0] === todayStr) {
+                                console.log(`[POPULATE-DAILY-HL] ${symbol}: Skipping today's candle (${todayStr}), moving to previous`);
+                                idx--;
+                            }
 
-                            // Let's be explicit: We want the LAST candle from the result.
-                            // If we set period2 = Today's Date String, it usually excludes today.
-                            // So the last candle IS Yesterday (or Friday if today is Mon).
-
-                            const lastCandle = result[result.length - 1]
-
-                            // Validate it has fields
-                            if (lastCandle.high !== undefined && lastCandle.low !== undefined) {
-                                ohlcData = {
-                                    high: lastCandle.high,
-                                    low: lastCandle.low,
-                                    open: lastCandle.open,
-                                    close: lastCandle.close,
-                                    date: lastCandle.date.toISOString().split('T')[0]
+                            if (idx >= 0) {
+                                const lastCandle = result[idx]
+                                if (lastCandle.high !== undefined && lastCandle.low !== undefined) {
+                                    ohlcData = {
+                                        high: lastCandle.high,
+                                        low: lastCandle.low,
+                                        open: lastCandle.open,
+                                        close: lastCandle.close,
+                                        date: lastCandle.date.toISOString().split('T')[0]
+                                    }
                                 }
                             }
                         }

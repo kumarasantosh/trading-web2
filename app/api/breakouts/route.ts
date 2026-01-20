@@ -30,8 +30,9 @@ export async function GET() {
                 yesterday_high: item.prev_day_high,
                 yesterday_low: item.prev_day_low,
                 breakout_percent: item.breakout_percentage,
-                today_open: item.prev_day_open,
-                today_close: item.prev_day_close,
+                prev_day_open: item.prev_day_open,
+                prev_day_close: item.prev_day_close,
+                today_open: item.today_open || item.prev_day_open, // Use current day open if available
                 volume: item.volume,
                 detected_at: item.updated_at,
             }))
@@ -45,8 +46,9 @@ export async function GET() {
                 yesterday_high: item.prev_day_high,
                 yesterday_low: item.prev_day_low,
                 breakdown_percent: item.breakdown_percentage,
-                today_open: item.prev_day_open,
-                today_close: item.prev_day_close,
+                prev_day_open: item.prev_day_open,
+                prev_day_close: item.prev_day_close,
+                today_open: item.today_open || item.prev_day_low, // Use current day open if available
                 volume: item.volume,
                 detected_at: item.updated_at,
             }))

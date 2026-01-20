@@ -66,9 +66,9 @@ export default function BreakoutStocksPage() {
                 dayChangePerc: changeFromOpen,
                 volume: s.volume || 0,
                 prevDayHigh: parseFloat(s.yesterday_high),
-                prevDayLow: parseFloat(s.yesterday_low || s.yesterday_high),
-                prevDayClose: s.today_close || parseFloat(s.yesterday_high),
-                prevDayOpen: todayOpen,
+                prevDayLow: parseFloat(s.yesterday_low),
+                prevDayClose: parseFloat(s.prev_day_close || s.yesterday_high),
+                prevDayOpen: parseFloat(s.prev_day_open || s.yesterday_high),
                 isBreakout: true,
               }
             }).sort((a: BreakoutStock, b: BreakoutStock) => b.dayChangePerc - a.dayChangePerc)
@@ -87,8 +87,8 @@ export default function BreakoutStocksPage() {
                 volume: s.volume || 0,
                 prevDayHigh: parseFloat(s.yesterday_high),
                 prevDayLow: parseFloat(s.yesterday_low),
-                prevDayClose: s.today_close || parseFloat(s.yesterday_low),
-                prevDayOpen: todayOpen,
+                prevDayClose: parseFloat(s.prev_day_close || s.yesterday_low),
+                prevDayOpen: parseFloat(s.prev_day_open || s.yesterday_low),
                 isBreakout: false,
               }
             }).sort((a: BreakoutStock, b: BreakoutStock) => a.dayChangePerc - b.dayChangePerc)
