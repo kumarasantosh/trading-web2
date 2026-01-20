@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
 
         // Process stocks in batches to avoid overwhelming the API
         const stockArray = Array.from(allStocks)
-        const BATCH_SIZE = 10 // Process 10 stocks at a time
+        const BATCH_SIZE = 5 // Process 5 stocks at a time (reduced to avoid rate limiting)
 
         for (let i = 0; i < stockArray.length; i += BATCH_SIZE) {
             const batch = stockArray.slice(i, i + BATCH_SIZE)
@@ -109,18 +109,37 @@ export async function GET(request: NextRequest) {
                     }
 
                     // TRY 2: Yahoo Finance (fallback - gives previous day data)
+                    // Add retry logic with delays to avoid rate limiting
                     if (!ohlcData) {
-                        const yahooData = await fetchYahooStockData(symbol)
+                        let retries = 3
+                        let delay = 2000 // Start with 2 second delay
 
-                        if (yahooData && yahooData.high > 0 && yahooData.low > 0) {
-                            ohlcData = {
-                                high: yahooData.high,
-                                low: yahooData.low,
-                                open: yahooData.open || yahooData.high,
-                                close: yahooData.close || yahooData.low,
-                                source: 'Yahoo'
+                        while (retries > 0 && !ohlcData) {
+                            try {
+                                // Add delay before Yahoo Finance request to avoid rate limiting
+                                await new Promise(resolve => setTimeout(resolve, delay))
+
+                                const yahooData = await fetchYahooStockData(symbol)
+
+                                if (yahooData && yahooData.high > 0 && yahooData.low > 0) {
+                                    ohlcData = {
+                                        high: yahooData.high,
+                                        low: yahooData.low,
+                                        open: yahooData.open || yahooData.high,
+                                        close: yahooData.close || yahooData.low,
+                                        source: 'Yahoo'
+                                    }
+                                    yahooCount++
+                                    break
+                                }
+                            } catch (yahooError) {
+                                retries--
+                                if (retries > 0) {
+                                    // Exponential backoff
+                                    delay *= 2
+                                    console.log(`[POPULATE-DAILY-HL] Retry ${3 - retries}/3 for ${symbol} after ${delay}ms`)
+                                }
                             }
-                            yahooCount++
                         }
                     }
 
@@ -157,9 +176,9 @@ export async function GET(request: NextRequest) {
                 }
             })
 
-            // Small delay between batches to avoid rate limiting
+            // Longer delay between batches to avoid rate limiting Yahoo Finance
             if (i + BATCH_SIZE < stockArray.length) {
-                await new Promise(resolve => setTimeout(resolve, 500))
+                await new Promise(resolve => setTimeout(resolve, 2000)) // 2 second delay between batches
             }
         }
 
