@@ -22,6 +22,24 @@ interface StockTableProps {
   onToggleExpand?: (expanded: boolean) => void
 }
 
+const INDEX_MAJOR_WEIGHTS: Record<string, number> = {
+  'RELIANCE': 9.31,
+  'HDFCBANK': 6.95,
+  'BHARTIARTL': 5.96,
+  'TCS': 5.57,
+  'ICICIBANK': 4.81,
+  'SBIN': 4.67,
+  'INFY': 3.32,
+  'BAJFINANCE': 2.94,
+  'HINDUNILVR': 2.76,
+  'LT': 2.59,
+  'MARUTI': 2.48,
+  'HCLTECH': 2.27,
+  'M%26M': 2.21
+}
+
+const INDEX_MAJOR_SYMBOLS = Object.keys(INDEX_MAJOR_WEIGHTS)
+
 export default function StockTable({
   selectedSector,
   isReplayMode = false,
@@ -136,7 +154,7 @@ export default function StockTable({
       // Get symbols based on selected sector
       const allSymbols = selectedSector
         ? getStocksForSector(selectedSector)
-        : ['HDFCBANK', 'RELIANCE', 'ICICIBANK', 'INFY', 'TCS', 'ITC', 'AXISBANK', 'KOTAKBANK', 'SBIN']
+        : INDEX_MAJOR_SYMBOLS
 
       if (allSymbols.length === 0) return
 
@@ -277,7 +295,7 @@ export default function StockTable({
         // Background refresh - directly update with Groww data
         const allSymbols = selectedSector
           ? getStocksForSector(selectedSector)
-          : ['HDFCBANK', 'RELIANCE', 'ICICIBANK', 'INFY', 'TCS']
+          : INDEX_MAJOR_SYMBOLS
 
         if (allSymbols.length === 0) return
 
@@ -454,6 +472,9 @@ export default function StockTable({
                     <thead>
                       <tr className="border-b border-gray-200">
                         <th className="px-3 sm:px-4 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700">Symbol</th>
+                        {!selectedSector && (
+                          <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm font-semibold text-gray-700">Weight</th>
+                        )}
                         <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm font-semibold text-gray-700">Change</th>
                         <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm font-semibold text-gray-700">Close</th>
                         <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm font-semibold text-gray-700">Open</th>
@@ -491,6 +512,13 @@ export default function StockTable({
                                 <span className="font-bold text-gray-900 group-hover:text-black transition-colors">{stock.symbol}</span>
                               </div>
                             </td>
+                            {!selectedSector && (
+                              <td className="px-3 sm:px-4 py-2 text-right">
+                                <span className="font-semibold text-blue-600 text-xs sm:text-sm">
+                                  {INDEX_MAJOR_WEIGHTS[stock.symbol] ? `${INDEX_MAJOR_WEIGHTS[stock.symbol]}%` : '-'}
+                                </span>
+                              </td>
+                            )}
                             <td className="px-3 sm:px-4 py-2 text-right">
                               <div className={`inline-flex items-center justify-end gap-1.5 font-bold px-2 sm:px-3 py-1.5 rounded-lg transition-all duration-200 ${isPositive
                                 ? 'text-green-700 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200/50'
@@ -580,6 +608,14 @@ export default function StockTable({
                               </span>
                             </div>
                           </div>
+                          {!selectedSector && INDEX_MAJOR_WEIGHTS[stock.symbol] && (
+                            <div className="mb-2 px-1 flex items-center justify-between">
+                              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Index Weight</span>
+                              <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                                {INDEX_MAJOR_WEIGHTS[stock.symbol]}%
+                              </span>
+                            </div>
+                          )}
                           <div className="grid grid-cols-3 gap-2 text-xs">
                             <div>
                               <div className="text-gray-500">Close</div>
