@@ -48,8 +48,6 @@ export async function GET(request: NextRequest) {
         */
 
         // Check if within market hours (9:15 AM - 3:30 PM IST)
-        // DISABLED FOR TESTING - Allow breakout check at any time
-        /*
         const currentTimeInMinutes = istHour * 60 + istMinute
         const marketOpenTime = 9 * 60 + 15  // 9:15 AM
         const marketCloseTime = 15 * 60 + 30 // 3:30 PM
@@ -63,14 +61,12 @@ export async function GET(request: NextRequest) {
                 breakdowns: 0,
             })
         }
-        */
 
         const todayDate = istTime.toISOString().split('T')[0] // YYYY-MM-DD format
         console.log(`[BREAKOUT-CHECK] Checking breakouts/breakdowns for ${todayDate}`)
 
         // Clear breakdown/breakout tables at market open (9:15-9:16 AM)
-        // DISABLED FOR TESTING - Skip auto-clear at market open
-        /*
+        // This ensures we start fresh each day with correct previous day reference data
         const isMarketOpenWindow = currentTimeInMinutes >= marketOpenTime && currentTimeInMinutes < marketOpenTime + 1
 
         if (isMarketOpenWindow) {
@@ -97,7 +93,6 @@ export async function GET(request: NextRequest) {
                 // Continue with normal check even if clear fails
             }
         }
-        */
 
         // Auto-generate token if needed
         const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
