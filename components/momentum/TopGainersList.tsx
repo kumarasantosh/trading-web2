@@ -13,6 +13,8 @@ interface Stock {
     open?: number
     prevDayHigh?: number
     prevDayLow?: number
+    prevDayOpen?: number
+    prevDayClose?: number
 }
 
 interface PrevDayData {
@@ -57,7 +59,7 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
                 const data = await response.json()
 
                 if (data.success) {
-                    // Map initial data from DB (includes LTP from DB)
+                    // Map initial data from DB (includes LTP from DB and previous day data)
                     const dbGainers = (data.gainers || []).map((stock: any) => ({
                         symbol: stock.symbol,
                         name: stock.symbol,
@@ -65,7 +67,11 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
                         dayChange: stock.last_price - stock.open_price,
                         dayChangePerc: stock.percent_change,
                         open: stock.open_price,
-                        prevClose: stock.prev_close || stock.open_price
+                        prevClose: stock.prev_close || stock.open_price,
+                        prevDayHigh: stock.yesterday_high,
+                        prevDayLow: stock.yesterday_low,
+                        prevDayOpen: stock.yesterday_open,
+                        prevDayClose: stock.yesterday_close
                     }))
 
                     // Filter to only mapped sectors
@@ -121,11 +127,11 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
             }
         }
 
-        // Fetch Yahoo data for previous day info
+        // Fetch Yahoo data for previous day info (Fallback for missing DB data)
         const fetchPrevDayData = async (currentGainers: Stock[]) => {
             const symbolsToFetch = currentGainers
+                .filter((s: Stock) => !s.prevDayHigh && !fetchedSymbolsRef.current.has(s.symbol))
                 .map((s: Stock) => s.symbol)
-                .filter((symbol: string) => !fetchedSymbolsRef.current.has(symbol))
 
             if (symbolsToFetch.length > 0) {
                 symbolsToFetch.forEach((s: string) => fetchedSymbolsRef.current.add(s))
@@ -170,8 +176,9 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
             if (dbGainers.length > 0) {
                 // Update with DB data first
                 setGainers(dbGainers)
-                // Then fetch live LTP
+                // Then fetch live LTP and previous day data fallback
                 fetchLiveLTP(dbGainers)
+                fetchPrevDayData(dbGainers)
             }
         }
 
@@ -189,7 +196,14 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
     }
 
     const renderStockRow = (stock: Stock, index: number) => {
-        const prevDay = prevDayData[stock.symbol]
+        // Use data from DB if available, falling back to prevDayData state (though that's likely empty now)
+        const prevDay = (stock.prevDayHigh && stock.prevDayLow) ? {
+            high: stock.prevDayHigh,
+            low: stock.prevDayLow,
+            open: stock.prevDayOpen || 0,
+            close: stock.prevDayClose || 0
+        } : prevDayData[stock.symbol]
+
         const isAbovePrevClose = prevDay && stock.ltp > prevDay.close
         const isAbovePrevHigh = prevDay && stock.ltp > prevDay.high
         const isBelowPrevLow = prevDay && stock.ltp < prevDay.low

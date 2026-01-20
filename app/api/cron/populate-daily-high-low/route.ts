@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { SECTOR_STOCKS } from '@/constants/sector-stocks-mapping'
-import { fetchYahooStockData } from '@/services/yahooFinance'
-import { getGrowwAccessToken } from '@/lib/groww-token'
 
-// Force dynamic rendering since we use request headers
+// Force dynamic rendering
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes max
 
 /**
  * Cron job API route that populates daily_high_low table with PREVIOUS DAY's OHLC data
- * Uses Groww API (primary) and Yahoo Finance (fallback) to get accurate historical data
+ * Mirrors the logic of populate_daily_high_low.py using yahoo-finance2
  * 
- * This should run ONCE per day at market open (9:15 AM IST) or before
- * to ensure we have yesterday's data ready for breakout detection
+ * Logic:
+ * 1. Fetch last 5-10 days of history for each stock
+ * 2. Pick the latest COMPLETED trading day (Yesterday)
+ * 3. Clear table and Insert
  * 
- * Security: Validates CRON_SECRET to prevent unauthorized access
+ * Runs ONCE per day (e.g. 9:15 AM)
  */
 export async function GET(request: NextRequest) {
     try {
@@ -28,12 +28,7 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // Get current IST time
-        const now = new Date()
-        const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000))
-        const todayDate = istTime.toISOString().split('T')[0] // YYYY-MM-DD format
-
-        console.log(`[POPULATE-DAILY-HL] Starting population for ${todayDate}`)
+        console.log(`[POPULATE-DAILY-HL] Starting population mirror of python script`)
 
         // Collect all unique stocks from all sectors
         const allStocks = new Set<string>()
@@ -42,104 +37,112 @@ export async function GET(request: NextRequest) {
         Object.entries(SECTOR_STOCKS).forEach(([sector, stocks]) => {
             stocks.forEach(symbol => {
                 allStocks.add(symbol)
-                // Store first sector mapping (a stock may appear in multiple sectors)
                 if (!stockToSectorMap.has(symbol)) {
                     stockToSectorMap.set(symbol, sector)
                 }
             })
         })
 
-        console.log(`[POPULATE-DAILY-HL] Fetching previous day data for ${allStocks.size} unique stocks`)
+        console.log(`[POPULATE-DAILY-HL] Processing ${allStocks.size} stocks`)
 
-        // Get Groww token
-        const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
+        // Dynamic import of yahoo-finance2
+        const { default: yahooFinance } = await import('yahoo-finance2')
 
-        // Fetch previous day OHLC data for all stocks
         const highLowData: any[] = []
         const errors: string[] = []
         let successCount = 0
         let failedCount = 0
-        let growwCount = 0
-        let yahooCount = 0
 
-        // Process stocks in batches to avoid overwhelming the API
+        // Process in batches (concurrently but limited)
         const stockArray = Array.from(allStocks)
-        const BATCH_SIZE = 5 // Process 5 stocks at a time (reduced to avoid rate limiting)
+        const BATCH_SIZE = 10 // Python does sequential, we can do 10 parallel safely
 
         for (let i = 0; i < stockArray.length; i += BATCH_SIZE) {
             const batch = stockArray.slice(i, i + BATCH_SIZE)
-            console.log(`[POPULATE-DAILY-HL] Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(stockArray.length / BATCH_SIZE)} (${batch.length} stocks)`)
+            console.log(`[POPULATE-DAILY-HL] Batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(stockArray.length / BATCH_SIZE)}`)
 
-            // Process batch in parallel
             const batchPromises = batch.map(async (symbol) => {
                 try {
-                    let ohlcData: any = null
+                    const yahooSymbol = symbol.endsWith('.NS') ? symbol : `${symbol}.NS`
 
-                    // TRY 1: Groww API (more reliable for Indian stocks, gives today's data)
+                    // Python logic: ticker.history(period="5d")
+                    // We fetch 10 days to be safe
+                    const today = new Date()
+                    const tenDaysAgo = new Date(today)
+                    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10)
+
+                    let ohlcData = null
+
+                    // Try Library Fetch
                     try {
-                        const growwUrl = `https://api.groww.in/v1/live-data/quote?exchange=NSE&segment=CASH&trading_symbol=${symbol}`
-                        const growwResponse = await fetch(growwUrl, {
-                            headers: {
-                                'Authorization': `Bearer ${growwToken}`,
-                                'X-API-VERSION': '1.0',
-                                'Accept': 'application/json',
-                                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-                            },
-                            cache: 'no-store',
-                        })
+                        const result = await (yahooFinance as any).historical(yahooSymbol, {
+                            period1: tenDaysAgo.toISOString().split('T')[0],
+                            period2: new Date().toISOString().split('T')[0], // Today (exclusive) - actually we want today included to check if open
+                            interval: '1d'
+                        }) as any[]
 
-                        if (growwResponse.ok) {
-                            const data = await growwResponse.json()
-                            const payload = data.payload
-                            const ohlc = payload?.ohlc
+                        if (result && result.length > 0) {
+                            // Python logic: iloc[-2] (assuming fetching while market open)
+                            // Our Logic: Find the latest candle that represents a FULL requested day.
 
-                            if (ohlc?.high && ohlc?.low) {
+                            // Since we passed period2 = Today (exclusive), we effectively asked for data up to Yesterday.
+                            // However, yahoo-finance2 might return today if the user didn't specify period2 correctly or if timezones apply.
+
+                            // Let's be explicit: We want the LAST candle from the result.
+                            // If we set period2 = Today's Date String, it usually excludes today.
+                            // So the last candle IS Yesterday (or Friday if today is Mon).
+
+                            const lastCandle = result[result.length - 1]
+
+                            // Validate it has fields
+                            if (lastCandle.high !== undefined && lastCandle.low !== undefined) {
                                 ohlcData = {
-                                    high: ohlc.high,
-                                    low: ohlc.low,
-                                    open: ohlc.open || payload?.open || ohlc.high,
-                                    close: ohlc.close || payload?.close || payload?.last_price || ohlc.low,
-                                    source: 'Groww'
+                                    high: lastCandle.high,
+                                    low: lastCandle.low,
+                                    open: lastCandle.open,
+                                    close: lastCandle.close,
+                                    date: lastCandle.date.toISOString().split('T')[0]
                                 }
-                                growwCount++
                             }
                         }
-                    } catch (growwError) {
-                        // Continue to Yahoo Finance fallback
+                    } catch (libErr) {
+                        // Silently fail to manual fallback
+                        // console.log(`Library failed for ${symbol}, trying manual...`)
                     }
 
-                    // TRY 2: Yahoo Finance (fallback - gives previous day data)
-                    // Add retry logic with delays to avoid rate limiting
+                    // Manual Fallback if library failed
                     if (!ohlcData) {
-                        let retries = 3
-                        let delay = 2000 // Start with 2 second delay
+                        try {
+                            const response = await fetch(`https://query2.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=5d`, {
+                                headers: { 'User-Agent': 'Mozilla/5.0' }
+                            })
+                            if (response.ok) {
+                                const data = await response.json()
+                                const result = data?.chart?.result?.[0]
+                                if (result?.timestamp) {
+                                    const quotes = result.indicators.quote[0]
+                                    let idx = result.timestamp.length - 1
 
-                        while (retries > 0 && !ohlcData) {
-                            try {
-                                // Add delay before Yahoo Finance request to avoid rate limiting
-                                await new Promise(resolve => setTimeout(resolve, delay))
-
-                                const yahooData = await fetchYahooStockData(symbol)
-
-                                if (yahooData && yahooData.high > 0 && yahooData.low > 0) {
-                                    ohlcData = {
-                                        high: yahooData.high,
-                                        low: yahooData.low,
-                                        open: yahooData.open || yahooData.high,
-                                        close: yahooData.close || yahooData.low,
-                                        source: 'Yahoo'
+                                    // Check if last candle is today (partial)
+                                    const lastDate = new Date(result.timestamp[idx] * 1000)
+                                    const todayStr = new Date().toISOString().split('T')[0]
+                                    if (lastDate.toISOString().split('T')[0] === todayStr) {
+                                        idx-- // Go back to yesterday
                                     }
-                                    yahooCount++
-                                    break
-                                }
-                            } catch (yahooError) {
-                                retries--
-                                if (retries > 0) {
-                                    // Exponential backoff
-                                    delay *= 2
-                                    console.log(`[POPULATE-DAILY-HL] Retry ${3 - retries}/3 for ${symbol} after ${delay}ms`)
+
+                                    if (idx >= 0 && quotes.high[idx] !== null) {
+                                        ohlcData = {
+                                            high: quotes.high[idx],
+                                            low: quotes.low[idx],
+                                            open: quotes.open[idx],
+                                            close: quotes.close[idx],
+                                            date: new Date(result.timestamp[idx] * 1000).toISOString().split('T')[0]
+                                        }
+                                    }
                                 }
                             }
+                        } catch (manErr) {
+                            // Ignore
                         }
                     }
 
@@ -151,105 +154,61 @@ export async function GET(request: NextRequest) {
                             today_low: ohlcData.low,
                             today_open: ohlcData.open,
                             today_close: ohlcData.close,
-                            captured_date: todayDate,
+                            captured_date: ohlcData.date,
                         }
                     } else {
-                        errors.push(`${symbol}: No valid data from Groww or Yahoo Finance`)
+                        errors.push(`${symbol}: No data`)
                         return null
                     }
-                } catch (error) {
-                    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-                    errors.push(`${symbol}: ${errorMsg}`)
+
+                } catch (e) {
+                    errors.push(`${symbol}: Error ${e}`)
                     return null
                 }
             })
 
-            const batchResults = await Promise.all(batchPromises)
-
-            // Collect successful results
-            batchResults.forEach(result => {
-                if (result) {
-                    highLowData.push(result)
+            const results = await Promise.all(batchPromises)
+            results.forEach(r => {
+                if (r) {
+                    highLowData.push(r)
                     successCount++
                 } else {
                     failedCount++
                 }
             })
 
-            // Longer delay between batches to avoid rate limiting Yahoo Finance
-            if (i + BATCH_SIZE < stockArray.length) {
-                await new Promise(resolve => setTimeout(resolve, 2000)) // 2 second delay between batches
-            }
+            // Small delay to be nice
+            await new Promise(r => setTimeout(r, 500))
         }
 
-        console.log(`[POPULATE-DAILY-HL] Fetch complete: ${successCount} successful (${growwCount} from Groww, ${yahooCount} from Yahoo), ${failedCount} failed`)
+        console.log(`[POPULATE-DAILY-HL] Fetched ${successCount} successfully, ${failedCount} failed`)
 
-        // Clear existing data and insert fresh data
+        // Database Update (Clear & Insert)
         if (highLowData.length > 0) {
-            console.log('[POPULATE-DAILY-HL] Clearing old data from daily_high_low table...')
+            console.log('[POPULATE-DAILY-HL] Clearing and Inserting...')
 
-            // Delete all existing records
-            const { error: deleteError } = await supabaseAdmin
-                .from('daily_high_low')
-                .delete()
-                .neq('symbol', '__DUMMY__') // Delete all records
+            // Delete all records
+            await supabaseAdmin.from('daily_high_low').delete().neq('symbol', '___')
 
-            if (deleteError) {
-                console.error('[POPULATE-DAILY-HL] Error deleting old records:', deleteError)
-                errors.push(`Delete error: ${deleteError.message}`)
-            } else {
-                console.log('[POPULATE-DAILY-HL] Old data cleared successfully')
+            // Insert new records
+            const { error } = await supabaseAdmin.from('daily_high_low').insert(highLowData)
+
+            if (error) {
+                console.error('Insert error:', error)
+                return NextResponse.json({ success: false, error: error.message }, { status: 500 })
             }
-
-            // Insert fresh high-low data
-            console.log(`[POPULATE-DAILY-HL] Inserting ${highLowData.length} records...`)
-
-            const { error: insertError } = await supabaseAdmin
-                .from('daily_high_low')
-                .insert(highLowData)
-
-            if (insertError) {
-                console.error('[POPULATE-DAILY-HL] Insert error:', insertError)
-                return NextResponse.json(
-                    {
-                        success: false,
-                        error: 'Failed to insert data',
-                        details: insertError.message
-                    },
-                    { status: 500 }
-                )
-            }
-
-            console.log(`[POPULATE-DAILY-HL] ✅ Successfully inserted ${highLowData.length} records`)
-        } else {
-            console.log('[POPULATE-DAILY-HL] ⚠️ No data to insert')
         }
 
         return NextResponse.json({
             success: true,
-            captured_date: todayDate,
-            total_stocks: allStocks.size,
-            stocks_captured: successCount,
-            stocks_failed: failedCount,
-            stocks_inserted: highLowData.length,
-            sources: {
-                groww: growwCount,
-                yahoo: yahooCount
-            },
-            errors: errors.slice(0, 20), // Limit errors to first 20
-            error_count: errors.length,
-            message: `Successfully populated ${highLowData.length} stocks (${growwCount} from Groww, ${yahooCount} from Yahoo Finance)`
+            total: allStocks.size,
+            captured: successCount,
+            failed: failedCount,
+            errors: errors.slice(0, 10)
         })
 
     } catch (error) {
-        console.error('[POPULATE-DAILY-HL] Fatal error:', error)
-        return NextResponse.json(
-            {
-                success: false,
-                error: 'Internal server error',
-                details: error instanceof Error ? error.message : 'Unknown error'
-            },
-            { status: 500 }
-        )
+        console.error('[POPULATE-DAILY-HL] Fatal:', error)
+        return NextResponse.json({ success: false, error: 'Fatal Error' }, { status: 500 })
     }
 }

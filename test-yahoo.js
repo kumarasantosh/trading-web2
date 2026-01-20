@@ -1,30 +1,27 @@
-// Standalone test script to verify Yahoo Finance API
-async function testYahoo() {
-    const symbol = 'RELIANCE';
-    const exchange = 'NSE';
-    const suffix = exchange === 'NSE' ? '.NS' : '.BO';
-    const yahooSymbol = `${symbol}${suffix}`;
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=10d`;
+const pkg = require('yahoo-finance2');
 
-    console.log(`Fetching ${url}...`);
+console.log('Package keys:', Object.keys(pkg));
+console.log('Default keys:', pkg.default ? Object.keys(pkg.default) : 'No default');
+
+async function test() {
     try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.error('Fetch failed:', response.status, response.statusText);
-            const text = await response.text();
-            console.log('Response body:', text);
-            return;
+        const yahooFinance = pkg.default || pkg;
+        const symbol = 'RELIANCE.NS';
+        console.log('Testing historical fetch...');
+
+        try {
+            const result = await yahooFinance.historical(symbol, {
+                period1: '2025-01-01',
+                period2: '2025-01-05',
+                interval: '1d'
+            });
+            console.log('Success (default)! Result len:', result.length);
+        } catch (e) {
+            console.error('Error with default:', e.message);
         }
-        const data = await response.json();
-        console.log('Success!');
-        console.log('Data found:', !!data.chart?.result?.[0]);
-        if (data.chart?.result?.[0]) {
-            console.log('Symbol:', data.chart.result[0].meta.symbol);
-            console.log('Last Price:', data.chart.result[0].meta.regularMarketPrice);
-        }
-    } catch (e) {
-        console.error('Error:', e);
+    } catch (err) {
+        console.error('Fatal:', err);
     }
 }
 
-testYahoo();
+test();
