@@ -248,7 +248,6 @@ export async function GET(request: NextRequest) {
                                         prev_day_low: stock.today_low,
                                         prev_day_close: stock.today_close || 0,
                                         prev_day_open: stock.today_open || 0,
-                                        today_open: todayOpen, // Added current day open
                                         breakout_percentage: breakoutPercent,
                                         breakdown_percentage: 0,
                                         is_breakout: true,
@@ -283,7 +282,6 @@ export async function GET(request: NextRequest) {
                                         prev_day_low: stock.today_low,
                                         prev_day_close: stock.today_close || 0,
                                         prev_day_open: stock.today_open || 0,
-                                        today_open: todayOpen, // Added current day open
                                         breakout_percentage: 0,
                                         breakdown_percentage: breakdownPercent,
                                         is_breakout: false,
