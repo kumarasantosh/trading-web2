@@ -62,10 +62,10 @@ export async function GET(request: NextRequest) {
 
         // 3. Process Stocks
         const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || ''
-        const breakouts = []
-        const breakdowns = []
-        const snapshots = []
-        const errors = []
+        const breakouts: any[] = []
+        const breakdowns: any[] = []
+        const snapshots: any[] = []
+        const errors: string[] = []
 
         // Batch processing
         const BATCH_SIZE = 20
