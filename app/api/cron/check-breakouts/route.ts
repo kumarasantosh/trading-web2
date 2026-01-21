@@ -145,40 +145,10 @@ export async function GET(request: NextRequest) {
             console.log(`[BREAKOUT-CHECK] Sample daily_high_low data:`, JSON.stringify(sample))
         }
 
-        // === SYNC STEP: Update existing breakout_snapshots with latest daily_high_low values ===
-        // This ensures previous day values are always fresh, even if detected earlier with old data
-        console.log('[BREAKOUT-CHECK] Syncing existing breakout_snapshots with latest daily_high_low values...')
-
-        // Create a map of symbol -> daily_high_low data for quick lookup
+        // Create a map of symbol -> daily_high_low data for quick lookup (used in post-insert sync)
         const dailyHighLowMap = new Map(
             filteredData.map((stock: any) => [stock.symbol, stock])
         )
-
-        // Fetch existing snapshots
-        const { data: existingSnapshots } = await supabaseAdmin
-            .from('breakout_snapshots')
-            .select('symbol')
-
-        if (existingSnapshots && existingSnapshots.length > 0) {
-            let syncedCount = 0
-            for (const snapshot of existingSnapshots) {
-                const dailyData = dailyHighLowMap.get(snapshot.symbol)
-                if (dailyData) {
-                    await supabaseAdmin
-                        .from('breakout_snapshots')
-                        .update({
-                            prev_day_high: dailyData.today_high,
-                            prev_day_low: dailyData.today_low,
-                            prev_day_close: dailyData.today_close || 0,
-                            prev_day_open: dailyData.today_open || 0,
-                        })
-                        .eq('symbol', snapshot.symbol)
-                    syncedCount++
-                }
-            }
-            console.log(`[BREAKOUT-CHECK] ✅ Synced ${syncedCount} existing snapshots with latest daily_high_low data`)
-        }
-        // === END SYNC STEP ===
 
         const breakoutsToInsert: any[] = []
         const breakdownsToInsert: any[] = []
@@ -418,6 +388,34 @@ export async function GET(request: NextRequest) {
             }
         }
         // --- ATOMIC UPDATE END ---
+
+        // === POST-INSERT SYNC: Ensure all snapshots have correct prev_day values from daily_high_low ===
+        console.log('[BREAKOUT-CHECK] Syncing all breakout_snapshots with latest daily_high_low values...')
+
+        const { data: allSnapshots } = await supabaseAdmin
+            .from('breakout_snapshots')
+            .select('symbol')
+
+        if (allSnapshots && allSnapshots.length > 0) {
+            let syncedCount = 0
+            for (const snapshot of allSnapshots) {
+                const dailyData = dailyHighLowMap.get(snapshot.symbol)
+                if (dailyData) {
+                    await supabaseAdmin
+                        .from('breakout_snapshots')
+                        .update({
+                            prev_day_high: dailyData.today_high,
+                            prev_day_low: dailyData.today_low,
+                            prev_day_close: dailyData.today_close || 0,
+                            prev_day_open: dailyData.today_open || 0,
+                        })
+                        .eq('symbol', snapshot.symbol)
+                    syncedCount++
+                }
+            }
+            console.log(`[BREAKOUT-CHECK] ✅ Final sync: Updated ${syncedCount} snapshots with correct daily_high_low values`)
+        }
+        // === END POST-INSERT SYNC ===
 
         console.log(`[BREAKOUT-CHECK] ✅ Complete: ${breakoutCount} breakouts, ${breakdownCount} breakdowns, ${snapshotCount} snapshots persisted`)
 
