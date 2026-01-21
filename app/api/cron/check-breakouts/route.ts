@@ -52,6 +52,8 @@ export async function GET(request: NextRequest) {
         const marketOpenTime = 9 * 60 + 15  // 9:15 AM
         const marketCloseTime = 15 * 60 + 30 // 3:30 PM
 
+        // DISABLED - Allow cron to run at any time for testing/manual triggers
+        /*
         if (currentTimeInMinutes < marketOpenTime || currentTimeInMinutes > marketCloseTime) {
             console.log('[BREAKOUT-CHECK] Skipping - Outside market hours')
             return NextResponse.json({
@@ -61,6 +63,7 @@ export async function GET(request: NextRequest) {
                 breakdowns: 0,
             })
         }
+        */
 
         const todayDate = istTime.toISOString().split('T')[0] // YYYY-MM-DD format
         console.log(`[BREAKOUT-CHECK] Checking breakouts/breakdowns for ${todayDate}`)
@@ -130,6 +133,52 @@ export async function GET(request: NextRequest) {
         }
 
         console.log(`[BREAKOUT-CHECK] Checking ${filteredData.length} stocks`)
+
+        // Log sample data to verify fresh data from daily_high_low
+        if (filteredData.length > 0) {
+            const sample = filteredData.slice(0, 3).map((s: any) => ({
+                symbol: s.symbol,
+                today_high: s.today_high,
+                today_low: s.today_low,
+                today_close: s.today_close
+            }))
+            console.log(`[BREAKOUT-CHECK] Sample daily_high_low data:`, JSON.stringify(sample))
+        }
+
+        // === SYNC STEP: Update existing breakout_snapshots with latest daily_high_low values ===
+        // This ensures previous day values are always fresh, even if detected earlier with old data
+        console.log('[BREAKOUT-CHECK] Syncing existing breakout_snapshots with latest daily_high_low values...')
+
+        // Create a map of symbol -> daily_high_low data for quick lookup
+        const dailyHighLowMap = new Map(
+            filteredData.map((stock: any) => [stock.symbol, stock])
+        )
+
+        // Fetch existing snapshots
+        const { data: existingSnapshots } = await supabaseAdmin
+            .from('breakout_snapshots')
+            .select('symbol')
+
+        if (existingSnapshots && existingSnapshots.length > 0) {
+            let syncedCount = 0
+            for (const snapshot of existingSnapshots) {
+                const dailyData = dailyHighLowMap.get(snapshot.symbol)
+                if (dailyData) {
+                    await supabaseAdmin
+                        .from('breakout_snapshots')
+                        .update({
+                            prev_day_high: dailyData.today_high,
+                            prev_day_low: dailyData.today_low,
+                            prev_day_close: dailyData.today_close || 0,
+                            prev_day_open: dailyData.today_open || 0,
+                        })
+                        .eq('symbol', snapshot.symbol)
+                    syncedCount++
+                }
+            }
+            console.log(`[BREAKOUT-CHECK] ✅ Synced ${syncedCount} existing snapshots with latest daily_high_low data`)
+        }
+        // === END SYNC STEP ===
 
         const breakoutsToInsert: any[] = []
         const breakdownsToInsert: any[] = []
