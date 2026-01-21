@@ -3,8 +3,10 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { SECTOR_STOCKS } from '@/constants/sector-stocks-mapping'
 import { getGrowwAccessToken } from '@/lib/groww-token'
 
-// Force dynamic rendering
+// Force dynamic rendering and disable all caching
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store'
 export const maxDuration = 300
 
 /**
