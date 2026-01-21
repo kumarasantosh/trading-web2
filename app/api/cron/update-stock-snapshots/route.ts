@@ -147,10 +147,10 @@ export async function GET(request: NextRequest) {
                         ltp = ohlc.close || 0
                     }
 
-                    const open = ohlc.open || 0
-                    const high = ohlc.high || 0
-                    const low = ohlc.low || 0
-                    const close = ohlc.close || 0
+                    const open = payload.open || ohlc.open || 0
+                    const high = payload.high || ohlc.high || 0
+                    const low = payload.low || ohlc.low || 0
+                    const close = payload.close || payload.prevClose || ohlc.close || 0
                     const volume = payload.volume || 0
 
                     if (!ltp || !open || ltp <= 0 || open <= 0) {
