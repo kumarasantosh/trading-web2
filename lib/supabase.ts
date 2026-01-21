@@ -41,6 +41,12 @@ function createSupabaseClient(url: string | undefined, key: string | undefined, 
         auth: {
             autoRefreshToken: false,
             persistSession: false
+        },
+        global: {
+            // Force no-store to prevent caching of admin queries (critical for cron jobs)
+            fetch: (url, options) => {
+                return fetch(url, { ...options, cache: 'no-store' })
+            }
         }
     } : undefined)
 }
