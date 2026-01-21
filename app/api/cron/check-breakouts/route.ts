@@ -77,12 +77,8 @@ export async function GET(request: NextRequest) {
         for (const batch of batches) {
             const results = await Promise.all(batch.map(async (stock: any) => {
                 try {
-                    // Fetch Live Price for Stock
                     let ltp = 0
-                    let todayOpen = 0
-
-                    // Strategy: Groww New -> Groww Old -> NSE
-                    // ... (Using condensed logic for brevity but robustness) ...
+                    let liveOpen = 0
 
                     // 1. Groww New
                     try {
@@ -92,8 +88,8 @@ export async function GET(request: NextRequest) {
                         })
                         if (res.ok) {
                             const d = await res.json()
-                            ltp = d.payload?.ltp || d.payload?.last_price || 0
-                            todayOpen = d.payload?.open || d.payload?.ohlc?.open || 0
+                            ltp = d.payload?.last_price || 0
+                            liveOpen = d.payload?.ohlc?.open || d.payload?.open || 0
                         }
                     } catch (e) { }
 
@@ -104,7 +100,7 @@ export async function GET(request: NextRequest) {
                             if (res.ok) {
                                 const d = await res.json()
                                 ltp = d.ltp || d.last || 0
-                                if (!todayOpen) todayOpen = d.open || 0
+                                liveOpen = d.open || 0
                             }
                         } catch (e) { }
                     }
@@ -119,13 +115,10 @@ export async function GET(request: NextRequest) {
                             if (res.ok) {
                                 const d = await res.json()
                                 ltp = d.priceInfo?.lastPrice || 0
-                                if (!todayOpen) todayOpen = d.priceInfo?.open || 0
+                                liveOpen = d.priceInfo?.open || 0
                             }
                         } catch (e) { }
                     }
-
-                    // Fallback to yesterday's open if today's open is not available
-                    if (!todayOpen) todayOpen = stock.today_open || 0
 
                     if (ltp > 0) {
                         // Check Breakout
@@ -141,16 +134,15 @@ export async function GET(request: NextRequest) {
                                     breakout_percent: pct,
                                     breakout_date: todayDate,
                                     yesterday_open: stock.today_open || 0,
-                                    yesterday_close: stock.today_close || 0,
-                                    today_open: todayOpen
+                                    yesterday_close: stock.today_close || 0
                                 },
                                 snapshot: {
                                     symbol: stock.symbol,
                                     current_price: ltp,
-                                    prev_day_high: stock.today_high, // FROM DB
-                                    prev_day_low: stock.today_low,   // FROM DB
+                                    prev_day_high: stock.today_high,
+                                    prev_day_low: stock.today_low,
                                     prev_day_close: stock.today_close || 0,
-                                    prev_day_open: stock.today_open || 0,
+                                    prev_day_open: liveOpen || stock.today_open || 0,
                                     breakout_percentage: pct,
                                     breakdown_percentage: 0,
                                     is_breakout: true,
@@ -172,16 +164,15 @@ export async function GET(request: NextRequest) {
                                     breakdown_percent: pct,
                                     breakdown_date: todayDate,
                                     yesterday_open: stock.today_open || 0,
-                                    yesterday_close: stock.today_close || 0,
-                                    today_open: todayOpen
+                                    yesterday_close: stock.today_close || 0
                                 },
                                 snapshot: {
                                     symbol: stock.symbol,
                                     current_price: ltp,
-                                    prev_day_high: stock.today_high, // FROM DB
-                                    prev_day_low: stock.today_low,   // FROM DB
+                                    prev_day_high: stock.today_high,
+                                    prev_day_low: stock.today_low,
                                     prev_day_close: stock.today_close || 0,
-                                    prev_day_open: stock.today_open || 0,
+                                    prev_day_open: liveOpen || stock.today_open || 0,
                                     breakout_percentage: 0,
                                     breakdown_percentage: pct,
                                     is_breakout: false,
