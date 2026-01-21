@@ -114,6 +114,7 @@ export async function GET(request: NextRequest) {
         for (let i = 0; i < filteredData.length; i += BATCH_SIZE) {
             batches.push(filteredData.slice(i, i + BATCH_SIZE))
         }
+        //
 
         console.log(`[BREAKOUT-CHECK] Processing ${batches.length} batches of ${BATCH_SIZE} stocks`)
 
