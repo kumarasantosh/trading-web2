@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getGrowwAccessToken } from '@/lib/groww-token'
 
-// Force dynamic rendering since we use request headers
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
@@ -10,10 +9,9 @@ export const maxDuration = 300;
  * Cron job API route that checks for breakout/breakdown stocks during market hours
  * Runs every 1 minute during market hours (9:15 AM - 3:30 PM IST)
  * 
+ * CRITICAL FIX: All snapshots MUST use daily_high_low table for previous day values
  * Breakout: LTP > yesterday's high
  * Breakdown: LTP < yesterday's low
- * 
- * Security: Validates CRON_SECRET to prevent unauthorized access
  */
 export async function GET(request: NextRequest) {
     try {
@@ -26,65 +24,28 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // Check if within market hours (9:15 AM - 3:30 PM IST, Mon-Fri)
         const now = new Date()
         const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000))
         const istHour = istTime.getUTCHours()
         const istMinute = istTime.getUTCMinutes()
-        const dayOfWeek = istTime.getUTCDay() // 0 = Sunday, 6 = Saturday
-
-        // Check if it's a weekend
-        // DISABLED FOR TESTING
-        /*
-        if (dayOfWeek === 0 || dayOfWeek === 6) {
-            console.log('[BREAKOUT-CHECK] Skipping - Weekend')
-            return NextResponse.json({
-                success: true,
-                message: 'Weekend - market closed',
-                breakouts: 0,
-                breakdowns: 0,
-            })
-        }
-        */
-
-        // Check if within market hours (9:15 AM - 3:30 PM IST)
         const currentTimeInMinutes = istHour * 60 + istMinute
-        const marketOpenTime = 9 * 60 + 15  // 9:15 AM
-        const marketCloseTime = 15 * 60 + 30 // 3:30 PM
+        const marketOpenTime = 9 * 60 + 15
 
-        // DISABLED - Allow cron to run at any time for testing/manual triggers
-        /*
-        if (currentTimeInMinutes < marketOpenTime || currentTimeInMinutes > marketCloseTime) {
-            console.log('[BREAKOUT-CHECK] Skipping - Outside market hours')
-            return NextResponse.json({
-                success: true,
-                message: 'Outside market hours',
-                breakouts: 0,
-                breakdowns: 0,
-            })
-        }
-        */
-
-        const todayDate = istTime.toISOString().split('T')[0] // YYYY-MM-DD format
+        const todayDate = istTime.toISOString().split('T')[0]
         console.log(`[BREAKOUT-CHECK] Checking breakouts/breakdowns for ${todayDate}`)
 
-        // Clear breakdown/breakout tables at market open (9:15-9:16 AM)
-        // This ensures we start fresh each day with correct previous day reference data
+        // Clear tables at market open (9:15-9:16 AM)
         const isMarketOpenWindow = currentTimeInMinutes >= marketOpenTime && currentTimeInMinutes < marketOpenTime + 1
 
         if (isMarketOpenWindow) {
             console.log('[BREAKOUT-CHECK] Market open detected - clearing previous day breakdown/breakout data')
-
             try {
-                // Clear all three tables atomically
                 await Promise.all([
                     supabaseAdmin.from('breakout_stocks').delete().neq('symbol', ''),
                     supabaseAdmin.from('breakdown_stocks').delete().neq('symbol', ''),
                     supabaseAdmin.from('breakout_snapshots').delete().neq('symbol', '')
                 ])
-
-                console.log('[BREAKOUT-CHECK] ✅ Successfully cleared breakdown/breakout tables for fresh detection')
-
+                console.log('[BREAKOUT-CHECK] ✅ Successfully cleared breakdown/breakout tables')
                 return NextResponse.json({
                     success: true,
                     message: 'Market open - cleared breakdown/breakout tables',
@@ -93,15 +54,14 @@ export async function GET(request: NextRequest) {
                 })
             } catch (clearError) {
                 console.error('[BREAKOUT-CHECK] Error clearing tables:', clearError)
-                // Continue with normal check even if clear fails
             }
         }
 
         // Auto-generate token if needed
         const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
 
-        // Fetch yesterday's high-low data from database
-        console.log('[BREAKOUT-CHECK] Attempting to fetch from daily_high_low table...')
+        // ===== FETCH PREVIOUS DAY DATA FROM daily_high_low TABLE =====
+        console.log('[BREAKOUT-CHECK] Fetching previous day data from daily_high_low table...')
 
         const { data: highLowData, error: fetchError } = await supabaseAdmin
             .from('daily_high_low')
@@ -115,12 +75,12 @@ export async function GET(request: NextRequest) {
             )
         }
 
-        // Filter out indices (NIFTY, BANKNIFTY) - only analyze individual stocks
+        // Filter out indices
         const filteredData = (highLowData || []).filter(stock =>
             !['NIFTY', 'BANKNIFTY'].includes(stock.symbol)
         )
 
-        console.log(`[BREAKOUT-CHECK] Fetched ${highLowData?.length || 0} records, analyzing ${filteredData.length} stocks (excluded indices)`)
+        console.log(`[BREAKOUT-CHECK] Fetched ${highLowData?.length || 0} records, analyzing ${filteredData.length} stocks`)
 
         if (!filteredData || filteredData.length === 0) {
             console.log('[BREAKOUT-CHECK] No high-low data available - run EOD capture first')
@@ -132,31 +92,24 @@ export async function GET(request: NextRequest) {
             })
         }
 
-        console.log(`[BREAKOUT-CHECK] Checking ${filteredData.length} stocks`)
-
-        // Log sample data to verify fresh data from daily_high_low
+        // Log sample to verify correct previous day data
         if (filteredData.length > 0) {
             const sample = filteredData.slice(0, 3).map((s: any) => ({
                 symbol: s.symbol,
-                today_high: s.today_high,
-                today_low: s.today_low,
-                today_close: s.today_close
+                prev_high: s.today_high,
+                prev_low: s.today_low,
+                prev_close: s.today_close
             }))
-            console.log(`[BREAKOUT-CHECK] Sample daily_high_low data:`, JSON.stringify(sample))
+            console.log(`[BREAKOUT-CHECK] Sample previous day data:`, JSON.stringify(sample))
         }
-
-        // Create a map of symbol -> daily_high_low data for quick lookup (used in post-insert sync)
-        const dailyHighLowMap = new Map(
-            filteredData.map((stock: any) => [stock.symbol, stock])
-        )
 
         const breakoutsToInsert: any[] = []
         const breakdownsToInsert: any[] = []
         const snapshotsToInsert: any[] = []
         const errors: string[] = []
 
-        // Process stocks in parallel batches to avoid timeout
-        const BATCH_SIZE = 20 // Process 20 stocks at a time
+        // Process in batches
+        const BATCH_SIZE = 20
         const batches = []
         for (let i = 0; i < filteredData.length; i += BATCH_SIZE) {
             batches.push(filteredData.slice(i, i + BATCH_SIZE))
@@ -168,7 +121,6 @@ export async function GET(request: NextRequest) {
             const batch = batches[batchIndex]
             console.log(`[BREAKOUT-CHECK] Batch ${batchIndex + 1}/${batches.length}`)
 
-            // Process all stocks in this batch in parallel
             const batchPromises = batch.map(async (stock: any) => {
                 try {
                     let ltp = 0
@@ -193,10 +145,10 @@ export async function GET(request: NextRequest) {
                             todayOpen = data.payload?.open || 0
                         }
                     } catch (growwError) {
-                        console.log(`[BREAKOUT-CHECK] New Groww API failed for ${stock.symbol}, trying old Groww API`)
+                        // Silent fail, try next API
                     }
 
-                    // FALLBACK 2: OLD GROWW API (no auth required)
+                    // FALLBACK 2: OLD GROWW API
                     if (ltp === 0) {
                         try {
                             const oldGrowwUrl = `https://groww.in/v1/api/stocks_data/v1/tr_live_prices/exchange/NSE/segment/CASH/${stock.symbol}/latest`
@@ -211,14 +163,13 @@ export async function GET(request: NextRequest) {
                                 const oldData = await oldGrowwResponse.json()
                                 ltp = oldData.ltp || oldData.last || 0
                                 todayOpen = oldData.open || 0
-                                console.log(`[BREAKOUT-CHECK] ✅ ${stock.symbol} using old Groww API: ${ltp}`)
                             }
                         } catch (oldGrowwError) {
-                            console.log(`[BREAKOUT-CHECK] Old Groww API also failed for ${stock.symbol}, trying NSE`)
+                            // Silent fail, try next API
                         }
                     }
 
-                    // FALLBACK 3: NSE API (final fallback)
+                    // FALLBACK 3: NSE API
                     if (ltp === 0) {
                         try {
                             const nseUrl = `https://www.nseindia.com/api/quote-equity?symbol=${stock.symbol}`
@@ -235,7 +186,6 @@ export async function GET(request: NextRequest) {
                                 const nseData = await nseResponse.json()
                                 ltp = nseData.priceInfo?.lastPrice || 0
                                 todayOpen = nseData.priceInfo?.open || 0
-                                console.log(`[BREAKOUT-CHECK] ✅ ${stock.symbol} using NSE fallback: ${ltp}`)
                             }
                         } catch (nseError) {
                             console.log(`[BREAKOUT-CHECK] All APIs failed for ${stock.symbol}`)
@@ -243,9 +193,11 @@ export async function GET(request: NextRequest) {
                     }
 
                     if (ltp > 0) {
-                        // Check for BREAKOUT (LTP > yesterday's high)
+                        // Check for BREAKOUT (LTP > yesterday's high from daily_high_low)
                         if (ltp > stock.today_high) {
                             const breakoutPercent = ((ltp - stock.today_high) / stock.today_high) * 100
+                            console.log(`[BREAKOUT] ${stock.symbol}: ${ltp} > ${stock.today_high} (+${breakoutPercent.toFixed(2)}%)`)
+
                             return {
                                 type: 'breakout',
                                 data: {
@@ -263,6 +215,7 @@ export async function GET(request: NextRequest) {
                                     snapshot: {
                                         symbol: stock.symbol,
                                         current_price: ltp,
+                                        // CRITICAL: Use daily_high_low values directly
                                         prev_day_high: stock.today_high,
                                         prev_day_low: stock.today_low,
                                         prev_day_close: stock.today_close || 0,
@@ -277,9 +230,11 @@ export async function GET(request: NextRequest) {
                             }
                         }
 
-                        // Check for BREAKDOWN (LTP < yesterday's low)
+                        // Check for BREAKDOWN (LTP < yesterday's low from daily_high_low)
                         if (ltp < stock.today_low) {
                             const breakdownPercent = ((stock.today_low - ltp) / stock.today_low) * 100
+                            console.log(`[BREAKDOWN] ${stock.symbol}: ${ltp} < ${stock.today_low} (-${breakdownPercent.toFixed(2)}%)`)
+
                             return {
                                 type: 'breakdown',
                                 data: {
@@ -297,6 +252,7 @@ export async function GET(request: NextRequest) {
                                     snapshot: {
                                         symbol: stock.symbol,
                                         current_price: ltp,
+                                        // CRITICAL: Use daily_high_low values directly
                                         prev_day_high: stock.today_high,
                                         prev_day_low: stock.today_low,
                                         prev_day_close: stock.today_close || 0,
@@ -318,7 +274,6 @@ export async function GET(request: NextRequest) {
                 }
             })
 
-            // Wait for all stocks in this batch to complete
             const results = await Promise.all(batchPromises)
 
             // Collect results
@@ -334,20 +289,21 @@ export async function GET(request: NextRequest) {
                 }
             })
 
-            // Small delay between batches to avoid rate limiting
+            // Small delay between batches
             if (batchIndex < batches.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, 100))
             }
         }
 
-        // --- ATOMIC UPDATE START ---
-        // Clear OLD records just before inserting new ones to minimize "empty" time on UI
+        // === ATOMIC UPDATE START ===
         console.log('[BREAKOUT-CHECK] Clearing old records...')
-        await supabaseAdmin.from('breakout_stocks').delete().neq('symbol', '')
-        await supabaseAdmin.from('breakdown_stocks').delete().neq('symbol', '')
-        await supabaseAdmin.from('breakout_snapshots').delete().neq('symbol', '')
+        await Promise.all([
+            supabaseAdmin.from('breakout_stocks').delete().neq('symbol', ''),
+            supabaseAdmin.from('breakdown_stocks').delete().neq('symbol', ''),
+            supabaseAdmin.from('breakout_snapshots').delete().neq('symbol', '')
+        ])
 
-        // 2. Batch insert new records (if any)
+        // Batch insert new records
         let breakoutCount = 0
         let breakdownCount = 0
         let snapshotCount = 0
@@ -387,37 +343,9 @@ export async function GET(request: NextRequest) {
                 snapshotCount = snapshotsToInsert.length
             }
         }
-        // --- ATOMIC UPDATE END ---
 
-        // === POST-INSERT SYNC: Ensure all snapshots have correct prev_day values from daily_high_low ===
-        console.log('[BREAKOUT-CHECK] Syncing all breakout_snapshots with latest daily_high_low values...')
-
-        const { data: allSnapshots } = await supabaseAdmin
-            .from('breakout_snapshots')
-            .select('symbol')
-
-        if (allSnapshots && allSnapshots.length > 0) {
-            let syncedCount = 0
-            for (const snapshot of allSnapshots) {
-                const dailyData = dailyHighLowMap.get(snapshot.symbol)
-                if (dailyData) {
-                    await supabaseAdmin
-                        .from('breakout_snapshots')
-                        .update({
-                            prev_day_high: dailyData.today_high,
-                            prev_day_low: dailyData.today_low,
-                            prev_day_close: dailyData.today_close || 0,
-                            prev_day_open: dailyData.today_open || 0,
-                        })
-                        .eq('symbol', snapshot.symbol)
-                    syncedCount++
-                }
-            }
-            console.log(`[BREAKOUT-CHECK] ✅ Final sync: Updated ${syncedCount} snapshots with correct daily_high_low values`)
-        }
-        // === END POST-INSERT SYNC ===
-
-        console.log(`[BREAKOUT-CHECK] ✅ Complete: ${breakoutCount} breakouts, ${breakdownCount} breakdowns, ${snapshotCount} snapshots persisted`)
+        console.log(`[BREAKOUT-CHECK] ✅ Complete: ${breakoutCount} breakouts, ${breakdownCount} breakdowns, ${snapshotCount} snapshots`)
+        console.log(`[BREAKOUT-CHECK] ✅ All snapshots use daily_high_low table for previous day values`)
 
         return NextResponse.json({
             success: true,
@@ -426,7 +354,7 @@ export async function GET(request: NextRequest) {
             breakouts_detected: breakoutCount,
             breakdowns_detected: breakdownCount,
             snapshots_detected: snapshotCount,
-            errors: errors.slice(0, 10), // Limit errors to first 10
+            errors: errors.slice(0, 10),
             error_count: errors.length,
         })
 
