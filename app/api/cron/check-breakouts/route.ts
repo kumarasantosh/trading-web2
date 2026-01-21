@@ -428,6 +428,13 @@ export async function GET(request: NextRequest) {
             snapshots_detected: snapshotCount,
             errors: errors.slice(0, 10), // Limit errors to first 10
             error_count: errors.length,
+            debug: {
+                sample_data_fetched: filteredData.slice(0, 3).map((s: any) => ({
+                    symbol: s.symbol,
+                    high: s.today_high
+                })),
+                env_check_supabase_url: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 20) + '...'
+            }
         })
 
     } catch (error) {
