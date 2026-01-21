@@ -172,6 +172,9 @@ export default function BreakoutStocksPage() {
                             LTP
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Close
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             From Open
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
@@ -215,6 +218,11 @@ export default function BreakoutStocksPage() {
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="text-sm font-semibold text-gray-900">
                                 ₹{stock.ltp.toFixed(2)}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="text-sm font-semibold text-gray-600">
+                                ₹{stock.prevDayClose.toFixed(2)}
                               </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
@@ -280,6 +288,9 @@ export default function BreakoutStocksPage() {
                             LTP
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Close
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             From Open
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
@@ -309,7 +320,7 @@ export default function BreakoutStocksPage() {
                                   );
                                 })()}
                                 <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
-                                {/* Hover Tooltip for Previous Day Values */}
+                                {/* Hover Tooltip */}
                                 <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover:block bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-xl whitespace-nowrap">
                                   <div className="font-semibold mb-1 text-gray-300">Previous Day</div>
                                   <div className="flex flex-col gap-0.5">
@@ -323,6 +334,11 @@ export default function BreakoutStocksPage() {
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="text-sm font-semibold text-gray-900">
                                 ₹{stock.ltp.toFixed(2)}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="text-sm font-semibold text-gray-600">
+                                ₹{stock.prevDayClose.toFixed(2)}
                               </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
