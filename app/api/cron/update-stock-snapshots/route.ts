@@ -114,12 +114,12 @@ export async function GET(request: NextRequest) {
             // Fetch all stocks in this batch in parallel
             const batchPromises = batch.map(async (symbol) => {
                 try {
-                    const quoteUrl = `https://api.groww.in/v1/live-data/quote?exchange=NSE&segment=CASH&trading_symbol=${symbol}`
+                    // Use old Groww API which returns data at top level
+                    const quoteUrl = `https://groww.in/v1/api/stocks_data/v1/tr_live_prices/exchange/NSE/segment/CASH/${symbol}/latest`
                     const response = await fetch(quoteUrl, {
                         headers: {
                             'Accept': 'application/json',
                             'Authorization': `Bearer ${growwToken}`,
-                            'X-API-VERSION': '1.0',
                         },
                         cache: 'no-store',
                     })
@@ -131,15 +131,13 @@ export async function GET(request: NextRequest) {
                         return null
                     }
 
-                    const data = await response.json()
+                    const payload = await response.json()
 
-                    // Check if response is successful
-                    if (data.status !== 'SUCCESS' || !data.payload) {
-                        errors.push(`Invalid payload for ${symbol}`)
+                    // Old API returns data directly, no wrapper
+                    if (!payload || typeof payload !== 'object') {
+                        errors.push(`Invalid response for ${symbol}`)
                         return null
                     }
-
-                    const payload = data.payload
                     const ohlc = payload.ohlc || {}
 
                     // Extract values from quote response
