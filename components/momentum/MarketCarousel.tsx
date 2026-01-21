@@ -16,13 +16,19 @@ export default function MarketCarousel() {
   useEffect(() => {
     // Fetch market data from API
     fetchMarketData()
-    
+
     // Auto-scroll every 5 seconds
-    const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % markets.length)
+    const scrollInterval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % (markets.length || 1))
     }, 5000)
 
-    return () => clearInterval(interval)
+    // Refresh data every 5 seconds
+    const dataInterval = setInterval(fetchMarketData, 5000)
+
+    return () => {
+      clearInterval(scrollInterval)
+      clearInterval(dataInterval)
+    }
   }, [markets.length])
 
   const fetchMarketData = async () => {
@@ -91,17 +97,15 @@ export default function MarketCarousel() {
               </div>
               <div className="text-right">
                 <div className="text-sm text-gray-400 mb-1">Change</div>
-                <div className={`text-2xl font-bold flex items-center ${
-                  currentMarket.change >= 0 ? 'text-green-400' : 'text-red-400'
-                }`}>
+                <div className={`text-2xl font-bold flex items-center ${currentMarket.change >= 0 ? 'text-green-400' : 'text-red-400'
+                  }`}>
                   {currentMarket.change >= 0 ? '▲' : '▼'} {Math.abs(currentMarket.change).toFixed(2)}
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-sm text-gray-400 mb-1">% Change</div>
-                <div className={`text-2xl font-bold ${
-                  currentMarket.changePercent >= 0 ? 'text-green-400' : 'text-red-400'
-                }`}>
+                <div className={`text-2xl font-bold ${currentMarket.changePercent >= 0 ? 'text-green-400' : 'text-red-400'
+                  }`}>
                   {currentMarket.changePercent >= 0 ? '+' : ''}{currentMarket.changePercent.toFixed(2)}%
                 </div>
               </div>
@@ -126,9 +130,8 @@ export default function MarketCarousel() {
             <button
               key={index}
               onClick={() => goToSlide(index)}
-              className={`w-2 h-2 rounded-full transition-all ${
-                index === currentIndex ? 'bg-white w-8' : 'bg-white/40'
-              }`}
+              className={`w-2 h-2 rounded-full transition-all ${index === currentIndex ? 'bg-white w-8' : 'bg-white/40'
+                }`}
               aria-label={`Go to ${markets[index].name}`}
             />
           ))}

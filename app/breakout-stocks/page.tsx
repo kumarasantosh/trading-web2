@@ -184,7 +184,7 @@ export default function BreakoutStocksPage() {
                           <tr
                             key={stock.symbol}
                             onClick={() => handleStockClick(stock.symbol)}
-                            className="hover:bg-green-50 cursor-pointer transition-colors duration-150"
+                            className="hover:bg-green-50 cursor-pointer transition-colors duration-150 group relative"
                           >
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center gap-2">
@@ -197,11 +197,19 @@ export default function BreakoutStocksPage() {
                                   return (
                                     <div
                                       className={`w-2 h-2 rounded-full flex-shrink-0 ${isGreen ? 'bg-green-500' : 'bg-red-500'}`}
-                                      title={`Yesterday close (₹${stock.prevDayClose.toFixed(2)}) ${isGreen ? '>' : '<'} open (₹${stock.prevDayOpen.toFixed(2)})`}
                                     ></div>
                                   );
                                 })()}
                                 <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
+                                {/* Hover Tooltip for Previous Day Values */}
+                                <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover:block bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-xl whitespace-nowrap">
+                                  <div className="font-semibold mb-1 text-gray-300">Previous Day</div>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span>Close: <span className="font-bold text-white">₹{stock.prevDayClose.toFixed(2)}</span></span>
+                                    <span>High: <span className="font-bold text-green-400">₹{stock.prevDayHigh.toFixed(2)}</span></span>
+                                    <span>Low: <span className="font-bold text-red-400">₹{stock.prevDayLow.toFixed(2)}</span></span>
+                                  </div>
+                                </div>
                               </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
@@ -284,7 +292,7 @@ export default function BreakoutStocksPage() {
                           <tr
                             key={stock.symbol}
                             onClick={() => handleStockClick(stock.symbol)}
-                            className="hover:bg-red-50 cursor-pointer transition-colors duration-150"
+                            className="hover:bg-red-50 cursor-pointer transition-colors duration-150 group relative"
                           >
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center gap-2">
@@ -297,11 +305,19 @@ export default function BreakoutStocksPage() {
                                   return (
                                     <div
                                       className={`w-2 h-2 rounded-full flex-shrink-0 ${isGreen ? 'bg-green-500' : 'bg-red-500'}`}
-                                      title={`Yesterday close (₹${stock.prevDayClose.toFixed(2)}) ${isGreen ? '>' : '<'} open (₹${stock.prevDayOpen.toFixed(2)})`}
                                     ></div>
                                   );
                                 })()}
                                 <div className="text-sm font-bold text-gray-900">{stock.symbol}</div>
+                                {/* Hover Tooltip for Previous Day Values */}
+                                <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover:block bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-xl whitespace-nowrap">
+                                  <div className="font-semibold mb-1 text-gray-300">Previous Day</div>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span>Close: <span className="font-bold text-white">₹{stock.prevDayClose.toFixed(2)}</span></span>
+                                    <span>High: <span className="font-bold text-green-400">₹{stock.prevDayHigh.toFixed(2)}</span></span>
+                                    <span>Low: <span className="font-bold text-red-400">₹{stock.prevDayLow.toFixed(2)}</span></span>
+                                  </div>
+                                </div>
                               </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
