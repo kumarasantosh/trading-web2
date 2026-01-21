@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
 
         const { data: highLowData, error: fetchError } = await supabaseAdmin
             .from('daily_high_low')
-            .select('id, symbol, sector, today_high, today_low, today_open, today_close, captured_date')
+            .select('symbol, sector, today_high, today_low, today_open, today_close')
 
         if (fetchError) {
             console.error('[BREAKOUT-CHECK] Error fetching high-low data:', fetchError)
@@ -428,15 +428,6 @@ export async function GET(request: NextRequest) {
             snapshots_detected: snapshotCount,
             errors: errors.slice(0, 10), // Limit errors to first 10
             error_count: errors.length,
-            debug: {
-                sample_data_fetched: filteredData.slice(0, 3).map((s: any) => ({
-                    id: (s as any).id, // casting to any if type definition doesn't include id
-                    symbol: s.symbol,
-                    high: s.today_high,
-                    date: (s as any).captured_date
-                })),
-                env_check_supabase_url: process.env.NEXT_PUBLIC_SUPABASE_URL
-            }
         })
 
     } catch (error) {
