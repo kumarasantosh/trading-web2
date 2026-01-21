@@ -9,6 +9,7 @@ interface BreakoutStock {
   symbol: string
   name: string
   ltp: number
+  todayOpen: number
   dayChange: number
   dayChangePerc: number
   volume: number
@@ -62,6 +63,7 @@ export default function BreakoutStocksPage() {
                 symbol: s.symbol,
                 name: s.symbol,
                 ltp: ltp,
+                todayOpen: todayOpen,
                 dayChange: ltp - todayOpen,
                 dayChangePerc: changeFromOpen,
                 volume: s.volume || 0,
@@ -82,6 +84,7 @@ export default function BreakoutStocksPage() {
                 symbol: s.symbol,
                 name: s.symbol,
                 ltp: ltp,
+                todayOpen: todayOpen,
                 dayChange: ltp - todayOpen,
                 dayChangePerc: changeFromOpen,
                 volume: s.volume || 0,
@@ -161,7 +164,7 @@ export default function BreakoutStocksPage() {
                     <div className="text-gray-500 font-medium">No breakout stocks found.</div>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="">
                     <table className="w-full">
                       <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                         <tr>
@@ -175,7 +178,13 @@ export default function BreakoutStocksPage() {
                             Close
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Today Open
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             From Open
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Yday High
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             From Breakout
@@ -226,8 +235,18 @@ export default function BreakoutStocksPage() {
                               </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="text-sm font-semibold text-gray-600">
+                                ₹{stock.todayOpen.toFixed(2)}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
                               <div className={`text-sm font-bold ${stock.dayChangePerc >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                 {stock.dayChangePerc >= 0 ? '+' : ''}{stock.dayChangePerc.toFixed(2)}%
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="text-sm font-semibold text-gray-600">
+                                ₹{stock.prevDayHigh.toFixed(2)}
                               </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
@@ -277,7 +296,7 @@ export default function BreakoutStocksPage() {
                     <div className="text-gray-500 font-medium">No breakdown stocks found.</div>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="">
                     <table className="w-full">
                       <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                         <tr>
@@ -291,7 +310,13 @@ export default function BreakoutStocksPage() {
                             Close
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Today Open
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             From Open
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Yday Low
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             From Breakdown
@@ -342,8 +367,18 @@ export default function BreakoutStocksPage() {
                               </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="text-sm font-semibold text-gray-600">
+                                ₹{stock.todayOpen.toFixed(2)}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
                               <div className={`text-sm font-bold ${stock.dayChangePerc >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                 {stock.dayChangePerc >= 0 ? '+' : ''}{stock.dayChangePerc.toFixed(2)}%
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="text-sm font-semibold text-gray-600">
+                                ₹{stock.prevDayLow.toFixed(2)}
                               </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
