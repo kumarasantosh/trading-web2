@@ -141,8 +141,8 @@ export async function GET(request: NextRequest) {
                                     current_price: ltp,
                                     prev_day_high: stock.today_high, // FROM DB
                                     prev_day_low: stock.today_low,   // FROM DB
-                                    // prev_day_close: stock.today_close || 0,
-                                    // prev_day_open: stock.today_open || 0,
+                                    prev_day_close: stock.today_close || 0,
+                                    prev_day_open: stock.today_open || 0,
                                     breakout_percentage: pct,
                                     breakdown_percentage: 0,
                                     is_breakout: true,
@@ -171,8 +171,8 @@ export async function GET(request: NextRequest) {
                                     current_price: ltp,
                                     prev_day_high: stock.today_high, // FROM DB
                                     prev_day_low: stock.today_low,   // FROM DB
-                                    // prev_day_close: stock.today_close || 0,
-                                    // prev_day_open: stock.today_open || 0,
+                                    prev_day_close: stock.today_close || 0,
+                                    prev_day_open: stock.today_open || 0,
                                     breakout_percentage: 0,
                                     breakdown_percentage: pct,
                                     is_breakout: false,
