@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { SECTOR_STOCKS } from '@/constants/sector-stocks-mapping'
+import YahooFinance from 'yahoo-finance2'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -45,8 +46,8 @@ export async function GET(request: NextRequest) {
 
         console.log(`[POPULATE-DAILY-HL] Processing ${allStocks.size} stocks`)
 
-        // Dynamic import of yahoo-finance2
-        const { default: yahooFinance } = await import('yahoo-finance2')
+        // Instantiate YahooFinance
+        const yahooFinance = new YahooFinance()
 
         const highLowData: any[] = []
         const errors: string[] = []
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
 
                     // Try Library Fetch
                     try {
-                        const result = await (yahooFinance as any).historical(yahooSymbol, {
+                        const result = await yahooFinance.historical(yahooSymbol, {
                             period1: tenDaysAgo.toISOString().split('T')[0],
                             period2: new Date().toISOString().split('T')[0], // Today (exclusive) - actually we want today included to check if open
                             interval: '1d'
@@ -86,10 +87,15 @@ export async function GET(request: NextRequest) {
                             let idx = result.length - 1;
                             const todayStr = new Date().toISOString().split('T')[0];
 
+                            // Check last date
+                            const lastDate = result[idx].date.toISOString().split('T')[0];
+
                             // If the last candle is today, go back to yesterday
-                            if (result[idx].date.toISOString().split('T')[0] === todayStr) {
+                            if (lastDate === todayStr) {
                                 console.log(`[POPULATE-DAILY-HL] ${symbol}: Skipping today's candle (${todayStr}), moving to previous`);
                                 idx--;
+                            } else {
+                                // console.log(`[POPULATE-DAILY-HL] ${symbol}: Last candle is ${lastDate} (Today is ${todayStr}), keeping it.`);
                             }
 
                             if (idx >= 0) {
@@ -106,8 +112,7 @@ export async function GET(request: NextRequest) {
                             }
                         }
                     } catch (libErr) {
-                        // Silently fail to manual fallback
-                        // console.log(`Library failed for ${symbol}, trying manual...`)
+                        console.warn(`[POPULATE-DAILY-HL] Library failed for ${symbol}, trying manual... Error: ${libErr}`)
                     }
 
                     // Manual Fallback if library failed
@@ -126,6 +131,7 @@ export async function GET(request: NextRequest) {
                                     // Check if last candle is today (partial)
                                     const lastDate = new Date(result.timestamp[idx] * 1000)
                                     const todayStr = new Date().toISOString().split('T')[0]
+
                                     if (lastDate.toISOString().split('T')[0] === todayStr) {
                                         idx-- // Go back to yesterday
                                     }
