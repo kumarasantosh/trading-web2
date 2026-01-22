@@ -10,11 +10,11 @@
         },
         {
             "path": "/api/cron/populate-daily-high-low",
-            "schedule": "0 3 * * 1-5"
+            "schedule": "0 17 * * 1-5"
         },
         {
-            "path": "/api/cron/populate-daily-high-low",
-            "schedule": "45 3 * * 1-5"
+            "path": "/api/cron/populate-today-open",
+            "schedule": "46 3 * * 1-5"
         },
         {
             "path": "/api/cron/capture-market-data",
