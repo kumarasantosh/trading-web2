@@ -13,7 +13,7 @@
             "schedule": "0 17 * * 1-5"
         },
         {
-            "path": "/api/cron/populate-today-open",
+            "path": "/api/cron/populate-morning-open",
             "schedule": "46 3 * * 1-5"
         },
         {

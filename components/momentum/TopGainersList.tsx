@@ -15,6 +15,7 @@ interface Stock {
     prevDayLow?: number
     prevDayOpen?: number
     prevDayClose?: number
+    prevDaySentiment?: string
 }
 
 interface PrevDayData {
@@ -22,6 +23,7 @@ interface PrevDayData {
     low: number
     open: number
     close: number
+    sentiment?: string
 }
 
 interface TopGainersListProps {
@@ -71,7 +73,8 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
                         prevDayHigh: stock.yesterday_high,
                         prevDayLow: stock.yesterday_low,
                         prevDayOpen: stock.yesterday_open,
-                        prevDayClose: stock.yesterday_close
+                        prevDayClose: stock.yesterday_close,
+                        prevDaySentiment: stock.yesterday_sentiment
                     }))
 
                     // Filter to only mapped sectors
@@ -201,15 +204,22 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
             high: stock.prevDayHigh,
             low: stock.prevDayLow,
             open: stock.prevDayOpen || 0,
-            close: stock.prevDayClose || 0
+            close: stock.prevDayClose || 0,
+            sentiment: stock.prevDaySentiment
         } : prevDayData[stock.symbol]
 
         const isAbovePrevClose = prevDay && stock.ltp > prevDay.close
         const isAbovePrevHigh = prevDay && stock.ltp > prevDay.high
         const isBelowPrevLow = prevDay && stock.ltp < prevDay.low
-        const prevDayCloseVsOpen = prevDay && prevDay.close !== undefined && prevDay.open !== undefined
-            ? (prevDay.close > prevDay.open ? 'green' : prevDay.close < prevDay.open ? 'red' : null)
-            : null
+
+        let sentimentColor = null;
+        if (prevDay) {
+            if (prevDay.sentiment) {
+                sentimentColor = prevDay.sentiment === 'Green' ? 'green' : 'red';
+            } else if (prevDay.close !== undefined && prevDay.open !== undefined) {
+                sentimentColor = prevDay.close > prevDay.open ? 'green' : prevDay.close < prevDay.open ? 'red' : null;
+            }
+        }
 
         return (
             <div
@@ -251,13 +261,13 @@ export default function TopGainersList({ onStockClick }: TopGainersListProps) {
                 <div className="flex items-center justify-between gap-2 sm:gap-3 flex-1 min-w-0">
                     <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                         <span className="text-xs font-bold text-gray-400 w-5 sm:w-6 flex-shrink-0">{index + 1}</span>
-                        {prevDayCloseVsOpen === 'green' && (
+                        {sentimentColor === 'green' && (
                             <div className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"
-                                title={`Yesterday close (₹${prevDay.close.toFixed(2)}) > open (₹${prevDay.open.toFixed(2)})`}></div>
+                                title={`Previous Day Sentiment: Bullish`}></div>
                         )}
-                        {prevDayCloseVsOpen === 'red' && (
+                        {sentimentColor === 'red' && (
                             <div className="w-2 h-2 rounded-full flex-shrink-0 bg-red-500"
-                                title={`Yesterday close (₹${prevDay.close.toFixed(2)}) < open (₹${prevDay.open.toFixed(2)})`}></div>
+                                title={`Previous Day Sentiment: Bearish`}></div>
                         )}
                         <div className="font-semibold text-xs sm:text-sm text-gray-900 flex items-center gap-1">
                             {stock.symbol}

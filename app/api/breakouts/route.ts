@@ -22,8 +22,34 @@ export async function GET() {
         }
 
         // Separate into breakouts and breakdowns
-        const breakouts = (snapshotsData || [])
+        const breakoutsList = (snapshotsData || [])
             .filter((item: any) => item.is_breakout)
+
+        const breakdownsList = (snapshotsData || [])
+            .filter((item: any) => item.is_breakdown)
+
+        // Collect all symbols to fetch sentiment
+        const allSymbols = [...breakoutsList, ...breakdownsList].map(s => s.symbol)
+
+        let sentimentMap: Record<string, string> = {}
+        if (allSymbols.length > 0) {
+            const { data: sentData } = await supabaseAdmin
+                .from('daily_high_low')
+                .select('symbol, sentiment')
+                .in('symbol', allSymbols)
+                .order('captured_date', { ascending: false })
+
+            if (sentData) {
+                // Map symbol -> sentiment (using first occurrence which is latest due to order)
+                sentData.forEach(item => {
+                    if (!sentimentMap[item.symbol]) {
+                        sentimentMap[item.symbol] = item.sentiment
+                    }
+                })
+            }
+        }
+
+        const breakouts = breakoutsList
             .map((item: any) => ({
                 symbol: item.symbol,
                 ltp: item.current_price,
@@ -32,14 +58,14 @@ export async function GET() {
                 breakout_percent: item.breakout_percentage,
                 prev_day_open: item.prev_day_open,
                 prev_day_close: item.prev_day_close,
-                today_open: item.today_open || item.prev_day_open, // Use current day open if available
+                today_open: item.today_open || item.prev_day_open,
                 volume: item.volume,
                 detected_at: item.updated_at,
+                prev_day_sentiment: sentimentMap[item.symbol] || null
             }))
             .sort((a: any, b: any) => b.breakout_percent - a.breakout_percent)
 
-        const breakdowns = (snapshotsData || [])
-            .filter((item: any) => item.is_breakdown)
+        const breakdowns = breakdownsList
             .map((item: any) => ({
                 symbol: item.symbol,
                 ltp: item.current_price,
@@ -48,16 +74,17 @@ export async function GET() {
                 breakdown_percent: item.breakdown_percentage,
                 prev_day_open: item.prev_day_open,
                 prev_day_close: item.prev_day_close,
-                today_open: item.today_open || item.prev_day_low, // Use current day open if available
+                today_open: item.today_open || item.prev_day_low,
                 volume: item.volume,
                 detected_at: item.updated_at,
+                prev_day_sentiment: sentimentMap[item.symbol] || null
             }))
             .sort((a: any, b: any) => a.breakdown_percent - b.breakdown_percent)
 
         // Get the most recent update timestamp
         const latestUpdate = snapshotsData?.[0]?.updated_at || new Date().toISOString()
 
-        console.log(`[BREAKOUTS-API] Fetched ${breakouts.length} breakouts and ${breakdowns.length} breakdowns from breakout_snapshots`)
+        console.log(`[BREAKOUTS-API] Fetched ${breakouts.length} breakouts and ${breakdowns.length} breakdowns`)
 
         return NextResponse.json({
             success: true,

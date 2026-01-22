@@ -1,23 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { SECTOR_STOCKS } from '@/constants/sector-stocks-mapping'
-import YahooFinance from 'yahoo-finance2'
 import { getGrowwAccessToken } from '@/lib/groww-token'
 
-// Force dynamic rendering
-export const dynamic = 'force-dynamic';
-export const maxDuration = 300; // 5 minutes max
+// Force dynamic rendering and disable all caching
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store'
+export const maxDuration = 300
 
 /**
- * Cron job API route that populates daily_high_low table with PREVIOUS DAY's OHLC data
- * Mirrors the logic of populate_daily_high_low.py using yahoo-finance2
+ * Cron job API route that populates daily_high_low table.
+ * TIMING: Runs at 10:30 PM IST (Evening).
+ * PURPOSE: Captures the COMPLETED trading day's stats (High, Low, Close, Open).
+ *          Calculates Sentiment based on dayChange.
+ *          dayChange > 0 = Green, dayChange < 0 = Red.
  * 
- * Logic:
- * 1. Fetch last 5-10 days of history for each stock
- * 2. Pick the latest COMPLETED trading day (Yesterday)
- * 3. Clear table and Insert
- * 
- * Runs ONCE per day (e.g. 9:15 AM)
+ * Uses Groww Live API (same as update-stock-snapshots).
  */
 export async function GET(request: NextRequest) {
     try {
@@ -30,7 +29,22 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        console.log(`[POPULATE-DAILY-HL] Starting EOD population (10:30 PM logic)`)
+        console.log(`[POPULATE-DAILY-HL] Starting evening population using Groww Live API...`)
+
+        // Force refresh token from Supabase to avoid stale cache
+        const { forceRefreshFromSupabase } = await import('@/lib/groww-token');
+        let growwToken = await forceRefreshFromSupabase();
+
+        // Fallback to regular method if force refresh fails
+        if (!growwToken) {
+            console.log('[POPULATE-DAILY-HL] Force refresh failed, using fallback');
+            growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || '';
+        }
+
+        if (!growwToken) {
+            console.error('[POPULATE-DAILY-HL] No Groww Token available')
+            return NextResponse.json({ error: 'No Groww Token' }, { status: 500 })
+        }
 
         // Collect all unique stocks from all sectors
         const allStocks = new Set<string>()
@@ -45,134 +59,131 @@ export async function GET(request: NextRequest) {
             })
         })
 
-        console.log(`[POPULATE-DAILY-HL] Processing ${allStocks.size} stocks`)
+        const symbols = Array.from(allStocks)
+        console.log(`[POPULATE-DAILY-HL] Processing ${symbols.length} stocks`)
 
-        // Instantiate YahooFinance
-        const yahooFinance = new YahooFinance()
+        // Get today's date in IST for captured_date
+        const now = new Date()
+        const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000))
+        const todayDate = istTime.toISOString().split('T')[0]
 
         const highLowData: any[] = []
         const errors: string[] = []
         let successCount = 0
         let failedCount = 0
 
-        // Process in batches
-        const stockArray = Array.from(allStocks)
-        const BATCH_SIZE = 10
+        // Process in batches (same as update-stock-snapshots)
+        const BATCH_SIZE = 3
 
-        for (let i = 0; i < stockArray.length; i += BATCH_SIZE) {
-            const batch = stockArray.slice(i, i + BATCH_SIZE)
+        for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
+            const batch = symbols.slice(i, i + BATCH_SIZE)
+            console.log(`[POPULATE-DAILY-HL] Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(symbols.length / BATCH_SIZE)}`)
 
             const batchPromises = batch.map(async (symbol) => {
                 try {
-                    const yahooSymbol = symbol.endsWith('.NS') ? symbol : `${symbol}.NS`
+                    // Use Groww Live API (same as update-stock-snapshots)
+                    const quoteUrl = `https://groww.in/v1/api/stocks_data/v1/tr_live_prices/exchange/NSE/segment/CASH/${symbol}/latest`
+                    const response = await fetch(quoteUrl, {
+                        headers: {
+                            'Accept': 'application/json',
+                            'Authorization': `Bearer ${growwToken}`,
+                        },
+                        cache: 'no-store',
+                    })
 
-                    // Fetch 10 days to ensure we have enough history for sentiment
-                    const today = new Date()
-                    const tenDaysAgo = new Date(today)
-                    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10)
-
-                    let ohlcData: any = null
-                    let sentiment: 'green' | 'red' | null = null
-
-                    // Fetch Historical Data
-                    try {
-                        const result = await yahooFinance.historical(yahooSymbol, {
-                            period1: tenDaysAgo.toISOString().split('T')[0],
-                            // period2 defaults to now, capturing today if available
-                            interval: '1d'
-                        }) as any[]
-
-                        if (result && result.length > 0) {
-                            // We want the LATEST completed candle. 
-                            // If running at 10:30 PM, the last candle should be "Today".
-
-                            const lastIndex = result.length - 1;
-                            const currentCandle = result[lastIndex];
-
-                            // To calculate sentiment, we need the PREVIOUS candle
-                            const prevCandle = lastIndex > 0 ? result[lastIndex - 1] : null;
-
-                            if (currentCandle && currentCandle.close !== null) {
-                                ohlcData = {
-                                    high: currentCandle.high,
-                                    low: currentCandle.low,
-                                    open: currentCandle.open,
-                                    close: currentCandle.close,
-                                    date: currentCandle.date.toISOString().split('T')[0]
-                                }
-
-                                if (prevCandle && prevCandle.close !== null) {
-                                    // Sentiment: Green if Close > PrevClose, Red if Close < PrevClose, else (neutral) we default to red or green? 
-                                    // User request: "dayChange > zero is green if < zero is red"
-                                    const change = currentCandle.close - prevCandle.close;
-                                    sentiment = change >= 0 ? 'green' : 'red';
-                                }
-                            }
-                        }
-                    } catch (libErr) {
-                        console.warn(`[POPULATE-DAILY-HL] Library failed for ${symbol}: ${libErr}`)
-                    }
-
-                    if (ohlcData) {
-                        return {
-                            symbol: symbol,
-                            sector: stockToSectorMap.get(symbol) || 'Unknown',
-                            today_high: ohlcData.high,
-                            today_low: ohlcData.low,
-                            today_open: ohlcData.open,
-                            today_close: ohlcData.close,
-                            sentiment: sentiment || 'green', // Default to green if unknown, or maybe null? User wants green/red.
-                            captured_date: ohlcData.date,
-                        }
-                    } else {
-                        errors.push(`${symbol}: No data`)
+                    if (!response.ok) {
+                        errors.push(`HTTP ${response.status} for ${symbol}`)
                         return null
                     }
 
-                } catch (e) {
-                    errors.push(`${symbol}: Error ${e}`)
+                    const payload = await response.json()
+
+                    if (!payload || typeof payload !== 'object') {
+                        errors.push(`Invalid response for ${symbol}`)
+                        return null
+                    }
+
+                    const ohlc = payload.ohlc || {}
+
+                    // Extract values
+                    let ltp = payload.ltp || payload.last_price || 0
+                    if (ltp === 0) {
+                        ltp = ohlc.close || 0
+                    }
+
+                    const open = payload.open || ohlc.open || 0
+                    const high = payload.high || ohlc.high || 0
+                    const low = payload.low || ohlc.low || 0
+                    const close = ltp // Use LTP as close at EOD
+
+                    if (!ltp || !open || ltp <= 0 || open <= 0) {
+                        errors.push(`Invalid data for ${symbol}: ltp=${ltp}, open=${open}`)
+                        return null
+                    }
+
+                    // Use dayChange directly from API response
+                    const dayChange = payload.dayChange || payload.change || 0
+
+                    // Sentiment: dayChange > 0 = Green, dayChange < 0 = Red
+                    const sentiment = dayChange >= 0 ? 'Green' : 'Red'
+
+                    return {
+                        symbol: symbol,
+                        sector: stockToSectorMap.get(symbol) || 'Unknown',
+                        today_high: high,
+                        today_low: low,
+                        today_open: open,
+                        today_close: close,
+                        sentiment: sentiment,
+                        captured_date: todayDate,
+                    }
+
+                } catch (error) {
+                    errors.push(`${symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`)
                     return null
                 }
             })
 
-            const results = await Promise.all(batchPromises)
-            results.forEach(r => {
-                if (r) {
-                    highLowData.push(r)
+            const batchResults = await Promise.all(batchPromises)
+
+            batchResults.forEach(result => {
+                if (result) {
+                    highLowData.push(result)
                     successCount++
                 } else {
                     failedCount++
                 }
             })
 
-            // Respect rate limits
-            await new Promise(r => setTimeout(r, 200))
+            // Add delay between batches to avoid rate limiting
+            if (i + BATCH_SIZE < symbols.length) {
+                await new Promise(resolve => setTimeout(resolve, 2000))
+            }
         }
 
-        console.log(`[POPULATE-DAILY-HL] Fetched ${successCount} successfully`)
+        console.log(`[POPULATE-DAILY-HL] Fetched ${successCount} successfully, ${failedCount} failed`)
 
         // Database Update (Clear & Insert)
         if (highLowData.length > 0) {
-            // Delete all records to ensure fresh snapshot
-            // Note: If we want to keep history, we shouldn't delete everything. 
-            // But the current logic (mirroring python) clears the table ("daily_high_low" usually implies a single day snapshot).
-            // Retaining the 'delete all' logic as per previous behavior, but we might want to change this to 'upsert' based on date?
-            // User request implies "Run a cron job and store to table". 
-            // Existing code did `delete().neq('symbol', '___')`. I will stick to that to avoid stale data accumulating if schema assumes uniqueness.
+            console.log('[POPULATE-DAILY-HL] Clearing and Inserting...')
 
+            // Delete all records to ensure we only keep the latest reference set
             await supabaseAdmin.from('daily_high_low').delete().neq('symbol', '___')
 
+            // Insert new records
             const { error } = await supabaseAdmin.from('daily_high_low').insert(highLowData)
 
             if (error) {
                 console.error('Insert error:', error)
                 return NextResponse.json({ success: false, error: error.message }, { status: 500 })
             }
+
+            console.log(`[POPULATE-DAILY-HL] ✅ Inserted ${highLowData.length} stocks in database`)
         }
 
         return NextResponse.json({
             success: true,
-            total: allStocks.size,
+            total: symbols.length,
             captured: successCount,
             failed: failedCount,
             errors: errors.slice(0, 10)

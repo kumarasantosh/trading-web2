@@ -105,7 +105,7 @@ export async function GET() {
         if (symbols.length > 0) {
             const { data: prevData, error: prevError } = await supabaseAdmin
                 .from('daily_high_low')
-                .select('symbol, today_high, today_low, today_open, today_close')
+                .select('symbol, today_high, today_low, today_open, today_close, sentiment')
                 .in('symbol', symbols)
                 .order('captured_date', { ascending: false })
 
@@ -118,7 +118,8 @@ export async function GET() {
                             yesterday_high: item.today_high,
                             yesterday_low: item.today_low,
                             yesterday_open: item.today_open,
-                            yesterday_close: item.today_close
+                            yesterday_close: item.today_close,
+                            yesterday_sentiment: item.sentiment
                         }
                     }
                 })
@@ -159,12 +160,15 @@ export async function GET() {
                     if (result && result.length > 0) {
                         // Get the last available candle (which should be previous trading day)
                         const lastCandle = result[result.length - 1]
+                        const sentiment = (lastCandle.close >= lastCandle.open) ? 'Green' : 'Red';
+
                         return {
                             ...stock,
                             yesterday_high: lastCandle.high,
                             yesterday_low: lastCandle.low,
                             yesterday_open: lastCandle.open,
-                            yesterday_close: lastCandle.close
+                            yesterday_close: lastCandle.close,
+                            yesterday_sentiment: sentiment
                         }
                     }
                 } catch (err) {
@@ -203,12 +207,14 @@ export async function GET() {
                                     }
 
                                     if (lastIdx >= 0) {
+                                        const sentiment = (quotes.close[lastIdx] >= quotes.open[lastIdx]) ? 'Green' : 'Red';
                                         return {
                                             ...stock,
                                             yesterday_high: quotes.high[lastIdx],
                                             yesterday_low: quotes.low[lastIdx],
                                             yesterday_open: quotes.open[lastIdx],
-                                            yesterday_close: quotes.close[lastIdx]
+                                            yesterday_close: quotes.close[lastIdx],
+                                            yesterday_sentiment: sentiment
                                         }
                                     }
                                 }

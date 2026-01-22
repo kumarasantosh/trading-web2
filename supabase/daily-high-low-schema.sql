@@ -11,7 +11,10 @@ CREATE TABLE IF NOT EXISTS daily_high_low (
   sector VARCHAR(100),
   today_high DECIMAL(10, 2) NOT NULL,
   today_low DECIMAL(10, 2) NOT NULL,
-  captured_date DATE NOT NULL, -- Date when this was captured (becomes "yesterday" for next session)
+  today_open DECIMAL(10, 2), -- Start of Day Open (or updated next morning)
+  today_close DECIMAL(10, 2), -- EOD Close
+  sentiment VARCHAR(20), -- 'Bullish' or 'Bearish' based on Day Change
+  captured_date DATE NOT NULL, -- Date when this was captured
   captured_at TIMESTAMPTZ DEFAULT NOW(),
   
   -- Ensure only one record per stock per date

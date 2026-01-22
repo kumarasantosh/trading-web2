@@ -19,6 +19,7 @@ interface BreakoutStock {
   prevDayOpen: number
   is52WeekHigh?: boolean
   isBreakout?: boolean
+  prevDaySentiment?: string
 }
 
 export default function BreakoutStocksPage() {
@@ -71,6 +72,7 @@ export default function BreakoutStocksPage() {
                 prevDayLow: parseFloat(s.yesterday_low),
                 prevDayClose: parseFloat(s.prev_day_close || s.yesterday_high),
                 prevDayOpen: parseFloat(s.prev_day_open || s.yesterday_high),
+                prevDaySentiment: s.prev_day_sentiment,
                 isBreakout: true,
               }
             }).sort((a: BreakoutStock, b: BreakoutStock) => b.dayChangePerc - a.dayChangePerc)
@@ -92,6 +94,7 @@ export default function BreakoutStocksPage() {
                 prevDayLow: parseFloat(s.yesterday_low),
                 prevDayClose: parseFloat(s.prev_day_close || s.yesterday_low),
                 prevDayOpen: parseFloat(s.prev_day_open || s.yesterday_low),
+                prevDaySentiment: s.prev_day_sentiment,
                 isBreakout: false,
               }
             }).sort((a: BreakoutStock, b: BreakoutStock) => a.dayChangePerc - b.dayChangePerc)
@@ -202,13 +205,24 @@ export default function BreakoutStocksPage() {
                               <div className="flex items-center gap-2">
                                 {/* Previous Day Sentiment Circle */}
                                 {(() => {
-                                  const isGreen = stock.prevDayClose > stock.prevDayOpen;
-                                  const isRed = stock.prevDayClose < stock.prevDayOpen;
+                                  let isGreen = false;
+                                  let isRed = false;
+
+                                  if (stock.prevDaySentiment) {
+                                    isGreen = stock.prevDaySentiment === 'Green';
+                                    isRed = stock.prevDaySentiment === 'Red';
+                                  } else {
+                                    // Fallback
+                                    isGreen = stock.prevDayClose > stock.prevDayOpen;
+                                    isRed = stock.prevDayClose < stock.prevDayOpen;
+                                  }
+
                                   if (!isGreen && !isRed) return null;
 
                                   return (
                                     <div
                                       className={`w-2 h-2 rounded-full flex-shrink-0 ${isGreen ? 'bg-green-500' : 'bg-red-500'}`}
+                                      title={`Previous Day Sentiment: ${isGreen ? 'Bullish' : 'Bearish'}`}
                                     ></div>
                                   );
                                 })()}
@@ -334,13 +348,24 @@ export default function BreakoutStocksPage() {
                               <div className="flex items-center gap-2">
                                 {/* Previous Day Sentiment Circle */}
                                 {(() => {
-                                  const isGreen = stock.prevDayClose > stock.prevDayOpen;
-                                  const isRed = stock.prevDayClose < stock.prevDayOpen;
+                                  let isGreen = false;
+                                  let isRed = false;
+
+                                  if (stock.prevDaySentiment) {
+                                    isGreen = stock.prevDaySentiment === 'Green';
+                                    isRed = stock.prevDaySentiment === 'Red';
+                                  } else {
+                                    // Fallback
+                                    isGreen = stock.prevDayClose > stock.prevDayOpen;
+                                    isRed = stock.prevDayClose < stock.prevDayOpen;
+                                  }
+
                                   if (!isGreen && !isRed) return null;
 
                                   return (
                                     <div
                                       className={`w-2 h-2 rounded-full flex-shrink-0 ${isGreen ? 'bg-green-500' : 'bg-red-500'}`}
+                                      title={`Previous Day Sentiment: ${isGreen ? 'Bullish' : 'Bearish'}`}
                                     ></div>
                                   );
                                 })()}
