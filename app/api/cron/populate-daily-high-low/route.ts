@@ -72,9 +72,20 @@ export async function GET(request: NextRequest) {
                     const tenDaysAgo = new Date(today)
                     tenDaysAgo.setDate(tenDaysAgo.getDate() - 10)
 
-                    let ohlcData = null
+                    let ohlcData: any = null
+                    let quoteData: any = null
 
-                    // Try Library Fetch
+                    // 1. Fetch Live Quote for Today's Open
+                    try {
+                        const quote = await yahooFinance.quote(yahooSymbol);
+                        if (quote) {
+                            quoteData = quote;
+                        }
+                    } catch (qErr) {
+                        // console.warn(`[POPULATE-DAILY-HL] Quote failed for ${symbol}: ${qErr}`);
+                    }
+
+                    // 2. Fetch Historical for Yesterday's Data
                     try {
                         const result = await yahooFinance.historical(yahooSymbol, {
                             period1: tenDaysAgo.toISOString().split('T')[0],
@@ -153,12 +164,15 @@ export async function GET(request: NextRequest) {
                     }
 
                     if (ohlcData) {
+                        // MERGE LOGIC: overwrite open with Quote if available
+                        const finalOpen = (quoteData && quoteData.regularMarketOpen) ? quoteData.regularMarketOpen : ohlcData.open;
+
                         return {
                             symbol: symbol,
                             sector: stockToSectorMap.get(symbol) || 'Unknown',
                             today_high: ohlcData.high,
                             today_low: ohlcData.low,
-                            today_open: ohlcData.open,
+                            today_open: finalOpen,
                             today_close: ohlcData.close,
                             captured_date: ohlcData.date,
                         }
