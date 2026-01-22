@@ -83,13 +83,21 @@ export async function GET(request: NextRequest) {
                 try {
                     // Use Groww Live API (same as update-stock-snapshots)
                     const quoteUrl = `https://groww.in/v1/api/stocks_data/v1/tr_live_prices/exchange/NSE/segment/CASH/${symbol}/latest`
-                    const response = await fetch(quoteUrl, {
+                    let response = await fetch(quoteUrl, {
                         headers: {
                             'Accept': 'application/json',
                             'Authorization': `Bearer ${growwToken}`,
                         },
                         cache: 'no-store',
                     })
+
+                    // Retry without auth header on 401 (public endpoint fallback)
+                    if (response.status === 401) {
+                        response = await fetch(quoteUrl, {
+                            headers: { 'Accept': 'application/json' },
+                            cache: 'no-store',
+                        })
+                    }
 
                     if (!response.ok) {
                         errors.push(`HTTP ${response.status} for ${symbol}`)
