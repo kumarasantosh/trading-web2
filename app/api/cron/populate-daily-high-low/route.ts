@@ -121,8 +121,14 @@ export async function GET(request: NextRequest) {
                         return null
                     }
 
-                    // Use dayChange directly from API response
-                    const dayChange = payload.dayChange || payload.change || 0
+                    // Get dayChange from API - try multiple field names
+                    // Fallback: calculate from prevClose if API doesn't provide it
+                    const prevClose = payload.prevClose || payload.previousClose || payload.close || ohlc.close || open
+                    let dayChange = payload.dayChange || payload.change || payload.priceChange || 0
+
+                    if (dayChange === 0 && prevClose > 0) {
+                        dayChange = ltp - prevClose
+                    }
 
                     // Sentiment: dayChange > 0 = Green, dayChange < 0 = Red
                     const sentiment = dayChange >= 0 ? 'Green' : 'Red'
