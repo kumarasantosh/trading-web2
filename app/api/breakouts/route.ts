@@ -74,7 +74,7 @@ export async function GET() {
                 breakdown_percent: item.breakdown_percentage,
                 prev_day_open: item.prev_day_open,
                 prev_day_close: item.prev_day_close,
-                today_open: item.today_open || item.prev_day_low,
+                today_open: item.today_open || item.prev_day_open,
                 volume: item.volume,
                 detected_at: item.updated_at,
                 prev_day_sentiment: sentimentMap[item.symbol] || null

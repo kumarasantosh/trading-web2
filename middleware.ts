@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { NextResponse } from 'next/server'
 
 // Define public routes (accessible without authentication)
 const isPublicRoute = createRouteMatcher([
@@ -21,7 +22,7 @@ export default clerkMiddleware(async (auth, req) => {
 
     // Redirect logged-in users from landing page to momentum
     if (userId && url.pathname === '/') {
-        return Response.redirect(new URL('/momentum', req.url))
+        return NextResponse.redirect(new URL('/momentum', req.url))
     }
 
     // Protect all routes except public ones

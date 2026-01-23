@@ -52,13 +52,9 @@ export async function GET(request: NextRequest) {
             s: s.symbol, h: s.today_high
         }))))
 
-        // 2. Clear Tables (Atomic Reset)
-        // We clear first to ensure no stale snapshots remain
-        await Promise.all([
-            supabaseAdmin.from('breakout_stocks').delete().neq('symbol', ''),
-            supabaseAdmin.from('breakdown_stocks').delete().neq('symbol', ''),
-            supabaseAdmin.from('breakout_snapshots').delete().neq('symbol', '')
-        ])
+        // 2. Clear Tables (Atomic Reset) -> REMOVED to prevent zero-results during fetch
+        // We will cleanup old records at the end instead
+        console.log('[BREAKOUT-CHECK] Skipped initial delete to maintain availability')
 
         // 3. Process Stocks
         const growwToken = await getGrowwAccessToken() || process.env.GROWW_API_TOKEN || ''
@@ -208,6 +204,26 @@ export async function GET(request: NextRequest) {
         if (breakouts.length) await supabaseAdmin.from('breakout_stocks').upsert(breakouts, { onConflict: 'symbol,breakout_date' })
         if (breakdowns.length) await supabaseAdmin.from('breakdown_stocks').upsert(breakdowns, { onConflict: 'symbol,breakdown_date' })
         if (snapshots.length) await supabaseAdmin.from('breakout_snapshots').upsert(snapshots, { onConflict: 'symbol' })
+
+        // 5. Cleanup Stale Snapshots
+        // Delete items from breakout_snapshots that were NOT updated in this run
+        // We use the 'now' timestamp recorded at the start. existing records will have older updated_at.
+        // newly upserted records have current time.
+        const cleanupThreshold = now.toISOString()
+        // Logic: if updated_at < now (the start of this function), it means it wasn't touched in this batch run?
+        // Wait, 'snapshots' items have 'updated_at: new Date().toISOString()'.
+        // So any item NOT in 'snapshots' will have an OLD updated_at.
+        // Safest is to delete anything with updated_at < todayDate's start?
+        // Or simply updated_at < (now - slight buffer).
+        // Let's use the 'now' variable from line 23.
+
+        console.log('[BREAKOUT-CHECK] Cleaning up stale snapshots...')
+        const { error: cleanupError } = await supabaseAdmin
+            .from('breakout_snapshots')
+            .delete()
+            .lt('updated_at', now.toISOString()) // Delete anything older than the start of this job
+
+        if (cleanupError) console.error('[BREAKOUT-CHECK] Cleanup error:', cleanupError)
 
         console.log(`[BREAKOUT-CHECK] Done. Breakouts: ${breakouts.length}, Snapshots: ${snapshots.length}`)
 

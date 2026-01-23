@@ -79,7 +79,7 @@ export default function BreakoutStocksPage() {
 
             const mappedBreakdowns: BreakoutStock[] = (newApiData.breakdowns || []).map((s: any) => {
               const ltp = parseFloat(s.ltp)
-              const todayOpen = parseFloat(s.today_open || s.yesterday_low)
+              const todayOpen = parseFloat(s.today_open || s.yesterday_open || s.prev_day_open || s.yesterday_low)
               const changeFromOpen = ((ltp - todayOpen) / todayOpen) * 100
 
               return {
@@ -93,7 +93,7 @@ export default function BreakoutStocksPage() {
                 prevDayHigh: parseFloat(s.yesterday_high),
                 prevDayLow: parseFloat(s.yesterday_low),
                 prevDayClose: parseFloat(s.prev_day_close || s.yesterday_low),
-                prevDayOpen: parseFloat(s.prev_day_open || s.yesterday_low),
+                prevDayOpen: parseFloat(s.prev_day_open || s.yesterday_open || s.yesterday_low),
                 prevDaySentiment: s.prev_day_sentiment,
                 isBreakout: false,
               }
