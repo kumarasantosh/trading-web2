@@ -1,0 +1,791 @@
+'use client'
+
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, PieChart, Pie, Cell, Legend, Rectangle } from 'recharts'
+import TopNavigation from '@/components/momentum/TopNavigation'
+import TimelineSlider from '@/components/momentum/TimelineSlider'
+import Footer from '@/components/Footer'
+
+interface OptionChainData {
+    strikePrice: number
+    callOI: number
+    putOI: number
+    callOIChange: number
+    putOIChange: number
+}
+
+export default function IndexAnalysisPage() {
+    const [data, setData] = useState<OptionChainData[]>([])
+    const [niftySpot, setNiftySpot] = useState<number>(0)
+    const [pcr, setPcr] = useState<number>(0)
+    const [loading, setLoading] = useState(true)
+    const [symbol, setSymbol] = useState('NIFTY')
+    const [expiryDate, setExpiryDate] = useState('')
+    const [availableExpiries, setAvailableExpiries] = useState<string[]>([])
+    const [oiTotals, setOiTotals] = useState<{ callOI: number, putOI: number }>({ callOI: 0, putOI: 0 })
+    const [oiChangeTotals, setOiChangeTotals] = useState<{ callOIChange: number, putOIChange: number }>({ callOIChange: 0, putOIChange: 0 })
+    const [dataCaptureTime, setDataCaptureTime] = useState<Date | null>(null)
+    const hasDataRef = useRef(false)
+    const [selectedTime, setSelectedTime] = useState<Date>(new Date())
+    const [isReplayMode, setIsReplayMode] = useState(false)
+    const [noDataForTime, setNoDataForTime] = useState(false)
+    const isReplayModeRef = useRef(isReplayMode)
+    isReplayModeRef.current = isReplayMode
+    const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+    const indices = ['NIFTY', 'BANKNIFTY', 'FINNIFTY']
+
+    // Format number with L suffix (Lakhs)
+    const formatLakhs = (value: number): string => {
+        const lakhs = Math.abs(value) / 100000
+        if (lakhs >= 100) return `${(lakhs / 100).toFixed(1)}Cr`
+        return `${lakhs.toFixed(2)}L`
+    }
+
+    // Fetch expiry dates
+    const fetchExpiryDates = useCallback(async () => {
+        try {
+            const response = await fetch(`/api/option-chain/expiries?symbol=${symbol}`)
+            if (!response.ok) return
+            const result = await response.json()
+            if (result.expiries && Array.isArray(result.expiries) && result.expiries.length > 0) {
+                setAvailableExpiries(result.expiries)
+                setExpiryDate(prev => prev || result.expiries[0])
+            }
+        } catch (error) {
+            console.error('Error fetching expiry dates:', error)
+        }
+    }, [symbol])
+
+    // Process option chain data
+    const processOptionChainData = useCallback((apiData: any, currentExpiry?: string) => {
+        try {
+            const underlyingValue = apiData?.records?.underlyingValue || apiData?.underlyingValue || apiData?.spotPrice || 0
+            setNiftySpot(underlyingValue)
+
+            let dataArray = apiData?.records?.data || apiData?.data || []
+
+            // If data is in optionChain format (keyed by strike), convert to array
+            if ((!Array.isArray(dataArray) || dataArray.length === 0) && apiData?.optionChain) {
+                dataArray = Object.values(apiData.optionChain)
+            }
+
+            if (!Array.isArray(dataArray) || dataArray.length === 0) {
+                console.warn('[IndexAnalysis] No data array found in response')
+                setData([])
+                return
+            }
+
+            // Extract available expiry dates from data if not already set
+            const expirySet = new Set<string>()
+            dataArray.forEach((item: any) => {
+                const exp = item.expiryDate || item.expiryDates
+                if (exp) expirySet.add(exp)
+            })
+            const expiries = Array.from(expirySet).sort()
+            if (expiries.length > 0 && availableExpiries.length === 0) {
+                setAvailableExpiries(expiries)
+            }
+
+            // Determine which expiry to filter by
+            const expiryToFilter = currentExpiry || expiryDate || (expiries.length > 0 ? expiries[0] : '')
+
+            // Auto-set expiry if not yet selected
+            if (!expiryDate && expiryToFilter) {
+                setExpiryDate(expiryToFilter)
+            }
+
+            // Filter by expiry
+            if (expiryToFilter && dataArray.length > 0) {
+                const filtered = dataArray.filter((item: any) => {
+                    const itemExpiry = item.expiryDate || item.expiryDates
+                    if (!itemExpiry) return true
+                    return itemExpiry === expiryToFilter
+                })
+                if (filtered.length > 0) dataArray = filtered
+            }
+
+            const processedData: OptionChainData[] = []
+            let totalPutOI = 0
+            let totalCallOI = 0
+            let totalPutOIChange = 0
+            let totalCallOIChange = 0
+
+            dataArray.forEach((item: any) => {
+                if (!item) return
+                const strikePrice = item.strikePrice || 0
+                const ceData = item.CE || {}
+                const peData = item.PE || {}
+
+                const callOI = ceData.openInterest || 0
+                const putOI = peData.openInterest || 0
+                const callOIChange = ceData.changeinOpenInterest || 0
+                const putOIChange = peData.changeinOpenInterest || 0
+
+                totalCallOI += callOI
+                totalPutOI += putOI
+                totalCallOIChange += callOIChange
+                totalPutOIChange += putOIChange
+
+                if (strikePrice > 0) {
+                    processedData.push({
+                        strikePrice: Number(strikePrice),
+                        callOI: Number(callOI),
+                        putOI: Number(putOI),
+                        callOIChange: Number(callOIChange),
+                        putOIChange: Number(putOIChange),
+                    })
+                }
+            })
+
+            const calculatedPCR = totalCallOI > 0 ? totalPutOI / totalCallOI : 0
+            setPcr(calculatedPCR)
+            setOiTotals({ callOI: totalCallOI, putOI: totalPutOI })
+            setOiChangeTotals({ callOIChange: totalCallOIChange, putOIChange: totalPutOIChange })
+
+            processedData.sort((a, b) => a.strikePrice - b.strikePrice)
+
+            let filteredData = processedData
+            if (underlyingValue > 0 && processedData.length > 0) {
+                filteredData = processedData.filter(item =>
+                    Math.abs(item.strikePrice - underlyingValue) <= 500
+                )
+                if (filteredData.length === 0) filteredData = processedData
+            }
+
+            setData(filteredData)
+            if (filteredData.length > 0) hasDataRef.current = true
+        } catch (error) {
+            console.error('Error processing option chain data:', error)
+            setData([])
+        }
+    }, [expiryDate, availableExpiries.length])
+
+    // Fetch option chain data
+    const fetchOptionChainData = useCallback(async () => {
+        if (isReplayModeRef.current) return
+        try {
+            const isInitialLoad = !hasDataRef.current
+            if (isInitialLoad) setLoading(true)
+
+            const url = `/api/option-chain?symbol=${symbol}${expiryDate ? `&expiryDate=${expiryDate}` : ''}`
+            const response = await fetch(url)
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch data: ${response.statusText}`)
+            }
+
+            const result = await response.json()
+            if (isReplayModeRef.current) { setLoading(false); return }
+            processOptionChainData(result, expiryDate)
+            setDataCaptureTime(new Date())
+            hasDataRef.current = true
+        } catch (error) {
+            console.error('Error fetching option chain:', error)
+            if (!hasDataRef.current) setData([])
+        } finally {
+            setLoading(false)
+        }
+    }, [symbol, expiryDate, processOptionChainData])
+
+    // Fetch historical data for a specific time (replay mode)
+    const fetchHistoricalDataForTime = useCallback(async (time: Date) => {
+        try {
+            setLoading(true)
+            setNoDataForTime(false)
+            setData([])
+            setDataCaptureTime(null)
+
+            const start = new Date(time)
+            start.setMinutes(start.getMinutes() - 2)
+            const end = new Date(time)
+            end.setMinutes(end.getMinutes() + 2)
+
+            const startISO = start.toISOString()
+            const endISO = end.toISOString()
+            const targetTimestamp = time.getTime()
+            const MAX_TIME_DIFF_MS = 1.5 * 60 * 1000
+
+            const response = await fetch(
+                `/api/option-chain/save?symbol=${symbol}&expiryDate=${expiryDate}&start=${startISO}&end=${endISO}`
+            )
+
+            if (!response.ok) {
+                setNoDataForTime(true)
+                setData([])
+                setLoading(false)
+                return
+            }
+
+            const result = await response.json()
+            if (result.snapshots && result.snapshots.length > 0) {
+                const closest = result.snapshots.reduce((prev: any, curr: any) => {
+                    const prevDiff = Math.abs(new Date(prev.captured_at).getTime() - targetTimestamp)
+                    const currDiff = Math.abs(new Date(curr.captured_at).getTime() - targetTimestamp)
+                    return currDiff < prevDiff ? curr : prev
+                })
+
+                const timeDiff = Math.abs(new Date(closest.captured_at).getTime() - targetTimestamp)
+                if (timeDiff > MAX_TIME_DIFF_MS) {
+                    setNoDataForTime(true)
+                    setData([])
+                    setLoading(false)
+                    return
+                }
+
+                const snapshotTime = new Date(closest.captured_at)
+                processOptionChainData(closest.option_chain_data)
+                setNiftySpot(closest.nifty_spot || 0)
+                setDataCaptureTime(snapshotTime)
+                setNoDataForTime(false)
+            } else {
+                setNoDataForTime(true)
+                setData([])
+            }
+        } catch (error) {
+            console.error('Error fetching historical data:', error)
+            setNoDataForTime(true)
+            setData([])
+        } finally {
+            setLoading(false)
+        }
+    }, [symbol, expiryDate, processOptionChainData])
+
+    // Handle time change from timeline slider
+    const handleTimeChange = useCallback((time: Date) => {
+        setSelectedTime(time)
+        if (isReplayMode) {
+            fetchHistoricalDataForTime(time)
+        }
+    }, [fetchHistoricalDataForTime, isReplayMode])
+
+    // Handle replay mode change
+    const handleReplayModeChange = useCallback((enabled: boolean) => {
+        setIsReplayMode(enabled)
+        if (enabled) {
+            setData([])
+            setNoDataForTime(false)
+            setDataCaptureTime(null)
+        } else {
+            setNoDataForTime(false)
+            setDataCaptureTime(null)
+            fetchOptionChainData()
+        }
+    }, [fetchOptionChainData])
+
+    // Fetch expiry dates on symbol change
+    useEffect(() => {
+        const timeoutId = setTimeout(() => fetchExpiryDates(), 500)
+        return () => clearTimeout(timeoutId)
+    }, [fetchExpiryDates])
+
+    // Reset on symbol change
+    useEffect(() => {
+        setExpiryDate('')
+        setAvailableExpiries([])
+        setLoading(true)
+        setData([])
+        hasDataRef.current = false
+    }, [symbol])
+
+    // Fetch data on mount and auto-refresh
+    useEffect(() => {
+        if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
+        if (!isReplayMode) {
+            fetchOptionChainData()
+            intervalRef.current = setInterval(() => {
+                if (!isReplayModeRef.current) fetchOptionChainData()
+            }, 300000)
+        }
+        return () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null } }
+    }, [fetchOptionChainData, isReplayMode])
+
+    // Fetch on expiry change
+    useEffect(() => {
+        if (expiryDate && symbol) fetchOptionChainData()
+    }, [expiryDate, symbol, fetchOptionChainData])
+
+    // Find ATM strike (closest to spot price)
+    const atmStrike = useMemo(() => {
+        if (data.length === 0 || niftySpot === 0) return 0
+        return data.reduce((prev, curr) =>
+            Math.abs(curr.strikePrice - niftySpot) < Math.abs(prev.strikePrice - niftySpot) ? curr : prev
+        ).strikePrice
+    }, [data, niftySpot])
+
+    // Prepare chart data: positive change = right (buildup), negative = left (unwinding)
+    const compassData = data.map(d => ({
+        strikePrice: d.strikePrice,
+        callOIChange: d.callOIChange,
+        putOIChange: d.putOIChange,
+        isATM: d.strikePrice === atmStrike,
+    }))
+
+    // Prepare donut chart data for Change in PVC
+    const pvcDonutData = [
+        { name: 'Change Pt O', value: Math.abs(oiChangeTotals.putOIChange), color: '#10b981' },
+        { name: 'Change Cl O', value: Math.abs(oiChangeTotals.callOIChange), color: '#ef4444' },
+    ]
+
+    // Prepare data for PVC Ratio Net
+    const pvrNetData = [
+        { name: 'Total Pt O', value: oiTotals.putOI, color: '#10b981' },
+        { name: 'Total Cl O', value: oiTotals.callOI, color: '#ef4444' },
+    ]
+
+    // Custom label for donut
+    const renderDonutLabel = ({ name, percent }: any) => {
+        return `${(percent * 100).toFixed(0)}%`
+    }
+
+    return (
+        <div className="min-h-screen bg-[#0d1117] text-gray-200">
+            {/* Top Navigation */}
+            <div className="relative z-50">
+                <TopNavigation hideTopMovers={true} />
+            </div>
+
+            {/* Header Bar */}
+            <div className="bg-[#161b22] border-b border-gray-700/50">
+                <div className="px-4 lg:px-8 py-3 flex items-center justify-between">
+                    <h1 className="text-lg font-bold tracking-wider text-white uppercase">
+                        Index Analysis
+                    </h1>
+                    <div className="flex items-center gap-4">
+                        {dataCaptureTime && (
+                            <span className="text-xs text-gray-400">
+                                Last updated: {dataCaptureTime.toLocaleTimeString('en-IN', {
+                                    timeZone: 'Asia/Kolkata',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                    hour12: true
+                                })}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Index Tabs */}
+            <div className="bg-[#161b22] border-b border-gray-700/50">
+                <div className="px-4 lg:px-8 flex items-center gap-1">
+                    {indices.map((idx) => (
+                        <button
+                            key={idx}
+                            onClick={() => setSymbol(idx)}
+                            className={`px-5 py-2.5 text-sm font-semibold transition-all duration-200 border-b-2 ${symbol === idx
+                                ? 'text-blue-400 border-blue-400 bg-blue-400/10'
+                                : 'text-gray-400 border-transparent hover:text-gray-200 hover:bg-gray-700/30'
+                                }`}
+                        >
+                            {idx}
+                        </button>
+                    ))}
+
+                    {/* Expiry selector */}
+                    {availableExpiries.length > 0 && (
+                        <div className="ml-auto flex items-center gap-2">
+                            <span className="text-xs text-gray-500">Expiry:</span>
+                            <select
+                                value={expiryDate}
+                                onChange={(e) => setExpiryDate(e.target.value)}
+                                className="bg-[#21262d] text-gray-300 text-xs px-3 py-1.5 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
+                            >
+                                {availableExpiries.map(exp => (
+                                    <option key={exp} value={exp}>{exp}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Spot Price Bar */}
+            <div className="bg-[#161b22]/60 border-b border-gray-800/50">
+                <div className="px-4 lg:px-8 py-2 flex items-center gap-6 text-sm">
+                    <span className="text-gray-400">
+                        {symbol} Spot: <span className="text-white font-bold">{niftySpot.toFixed(2)}</span>
+                    </span>
+                    <span className="text-gray-400">
+                        PCR: <span className={`font-bold ${pcr >= 1 ? 'text-emerald-400' : 'text-red-400'}`}>{pcr.toFixed(4)}</span>
+                    </span>
+                    <span className="text-gray-400">
+                        Sentiment: <span className={`font-bold ${pcr >= 1 ? 'text-emerald-400' : pcr >= 0.7 ? 'text-yellow-400' : 'text-red-400'}`}>
+                            {pcr >= 1 ? '🟢 Bullish' : pcr >= 0.7 ? '🟡 Neutral' : '🔴 Bearish'}
+                        </span>
+                    </span>
+                </div>
+            </div>
+
+            {/* Main Content */}
+            <div className="px-4 lg:px-8 py-6">
+                {loading && data.length === 0 ? (
+                    <div className="flex items-center justify-center h-96">
+                        <div className="text-center">
+                            <div className="inline-block w-10 h-10 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mb-4"></div>
+                            <p className="text-gray-400 text-sm">Loading {symbol} data...</p>
+                        </div>
+                    </div>
+                ) : data.length === 0 ? (
+                    <div className="flex items-center justify-center h-96">
+                        <p className="text-gray-500 text-sm">No data available. Please check the symbol and expiry date.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+                        {/* OI Compass — Main Chart (3 cols) */}
+                        <div className="xl:col-span-3 bg-[#161b22] rounded-xl border border-gray-700/50 p-5">
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>
+                                    OI Compass <span className="text-xs text-gray-500 font-normal ml-1">(Change in OI)</span>
+                                </h2>
+                                <div className="flex items-center gap-4 text-xs">
+                                    <span className="flex items-center gap-1.5">
+                                        <span className="w-3 h-1.5 rounded bg-red-500 inline-block"></span>
+                                        <span className="text-gray-400">Call OI Chg</span>
+                                    </span>
+                                    <span className="flex items-center gap-1.5">
+                                        <span className="w-3 h-1.5 rounded bg-emerald-500 inline-block"></span>
+                                        <span className="text-gray-400">Put OI Chg</span>
+                                    </span>
+                                    <span className="flex items-center gap-1.5">
+                                        <span className="w-5 h-3 rounded bg-amber-500/20 border border-amber-500/40 inline-block"></span>
+                                        <span className="text-gray-400">ATM</span>
+                                    </span>
+                                    <span className="text-gray-500 ml-2">→ Right = Buildup &nbsp; ← Left = Unwinding</span>
+                                </div>
+                            </div>
+
+                            <ResponsiveContainer width="100%" height={550}>
+                                <BarChart
+                                    data={compassData}
+                                    layout="vertical"
+                                    margin={{ top: 10, right: 30, left: 60, bottom: 10 }}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#21262d" horizontal={false} />
+                                    <XAxis
+                                        type="number"
+                                        tick={{ fontSize: 10, fill: '#6b7280' }}
+                                        tickFormatter={(value) => {
+                                            const lakhs = Math.abs(value) / 100000
+                                            return `${value < 0 ? '-' : ''}${lakhs.toFixed(0)}L`
+                                        }}
+                                        axisLine={{ stroke: '#30363d' }}
+                                    />
+                                    <YAxis
+                                        type="category"
+                                        dataKey="strikePrice"
+                                        tick={({ x, y, payload }: any) => {
+                                            const isATM = payload.value === atmStrike
+                                            return (
+                                                <text
+                                                    x={x}
+                                                    y={y}
+                                                    textAnchor="end"
+                                                    dominantBaseline="middle"
+                                                    fill={isATM ? '#f59e0b' : '#8b949e'}
+                                                    fontSize={isATM ? 12 : 10}
+                                                    fontWeight={isATM ? 'bold' : 'normal'}
+                                                >
+                                                    {isATM ? `▶ ${payload.value}` : payload.value}
+                                                </text>
+                                            )
+                                        }}
+                                        width={65}
+                                        axisLine={{ stroke: '#30363d' }}
+                                        interval={0}
+                                    />
+                                    <Tooltip
+                                        cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                                        wrapperStyle={{ zIndex: 1000 }}
+                                        content={({ active, payload, label }: any) => {
+                                            if (!active || !payload || payload.length === 0) return null
+                                            const isATM = Number(label) === atmStrike
+                                            return (
+                                                <div style={{
+                                                    backgroundColor: '#1c2128',
+                                                    border: '1px solid #30363d',
+                                                    borderRadius: '8px',
+                                                    padding: '10px 14px',
+                                                    fontSize: '12px',
+                                                    color: '#e6edf3',
+                                                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                                    minWidth: '180px',
+                                                }}>
+                                                    <p style={{ fontWeight: 'bold', marginBottom: '6px', color: isATM ? '#f59e0b' : '#e6edf3' }}>
+                                                        Strike: {label}{isATM ? ' ⭐ ATM' : ''}
+                                                    </p>
+                                                    {payload.map((item: any, i: number) => {
+                                                        const val = item.value
+                                                        const lakhs = Math.abs(val) / 100000
+                                                        const direction = val > 0 ? '📈 Buildup' : val < 0 ? '📉 Unwinding' : '—'
+                                                        const color = item.dataKey === 'callOIChange' ? '#ef4444' : '#10b981'
+                                                        const name = item.dataKey === 'callOIChange' ? 'Call OI Chg' : 'Put OI Chg'
+                                                        return (
+                                                            <p key={i} style={{ margin: '3px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: color, display: 'inline-block', flexShrink: 0 }}></span>
+                                                                <span style={{ color: '#9ca3af' }}>{name}:</span>
+                                                                <span style={{ fontWeight: 'bold', color }}>{val < 0 ? '-' : ''}{lakhs.toFixed(2)}L</span>
+                                                                <span style={{ color: '#6b7280', fontSize: '10px' }}>{direction}</span>
+                                                            </p>
+                                                        )
+                                                    })}
+                                                </div>
+                                            )
+                                        }}
+                                    />
+                                    <ReferenceLine
+                                        x={0}
+                                        stroke="#484f58"
+                                        strokeWidth={1}
+                                    />
+                                    <ReferenceLine
+                                        y={atmStrike.toString()}
+                                        stroke="#f59e0b"
+                                        strokeDasharray="5 5"
+                                        strokeWidth={2}
+                                        label={{ value: 'ATM', fill: '#f59e0b', fontSize: 10, position: 'right' }}
+                                    />
+                                    <Bar dataKey="callOIChange" barSize={7} radius={[2, 2, 2, 2]}>
+                                        {compassData.map((entry, index) => (
+                                            <Cell
+                                                key={`call-${index}`}
+                                                fill={entry.callOIChange >= 0 ? '#ef4444' : '#ef444480'}
+                                                stroke={entry.isATM ? '#f59e0b' : 'none'}
+                                                strokeWidth={entry.isATM ? 1 : 0}
+                                            />
+                                        ))}
+                                    </Bar>
+                                    <Bar dataKey="putOIChange" barSize={7} radius={[2, 2, 2, 2]}>
+                                        {compassData.map((entry, index) => (
+                                            <Cell
+                                                key={`put-${index}`}
+                                                fill={entry.putOIChange >= 0 ? '#10b981' : '#10b98180'}
+                                                stroke={entry.isATM ? '#f59e0b' : 'none'}
+                                                strokeWidth={entry.isATM ? 1 : 0}
+                                            />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+
+                            {/* Timeline Slider */}
+                            <div className="mt-4 pt-4 border-t border-gray-700/50">
+                                <TimelineSlider
+                                    selectedTime={selectedTime}
+                                    onTimeChange={handleTimeChange}
+                                    isReplayMode={isReplayMode}
+                                    onReplayModeChange={handleReplayModeChange}
+                                    intervalMinutes={3}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Right Sidebar (1 col) */}
+                        <div className="xl:col-span-1 flex flex-col gap-6">
+                            {/* Change in PVC — Donut Chart */}
+                            <div className="bg-[#161b22] rounded-xl border border-gray-700/50 p-5">
+                                <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-purple-400 inline-block"></span>
+                                    Change in PVC
+                                </h3>
+
+                                {(pvcDonutData[0].value > 0 || pvcDonutData[1].value > 0) ? (
+                                    <>
+                                        <ResponsiveContainer width="100%" height={200}>
+                                            <PieChart>
+                                                <Pie
+                                                    data={pvcDonutData}
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    innerRadius={50}
+                                                    outerRadius={80}
+                                                    paddingAngle={3}
+                                                    dataKey="value"
+                                                    label={renderDonutLabel}
+                                                    labelLine={false}
+                                                >
+                                                    {pvcDonutData.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip
+                                                    contentStyle={{
+                                                        backgroundColor: '#1c2128',
+                                                        border: '1px solid #30363d',
+                                                        borderRadius: '8px',
+                                                        color: '#e6edf3',
+                                                        fontSize: '12px'
+                                                    }}
+                                                    formatter={(value: number, name: string) => [formatLakhs(value), name]}
+                                                />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+
+                                        <div className="mt-3 space-y-2">
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="flex items-center gap-2">
+                                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                                                    <span className="text-gray-400">Change Pt O</span>
+                                                </span>
+                                                <span className="text-emerald-400 font-semibold">{formatLakhs(oiChangeTotals.putOIChange)}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="flex items-center gap-2">
+                                                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
+                                                    <span className="text-gray-400">Change Cl O</span>
+                                                </span>
+                                                <span className="text-red-400 font-semibold">{formatLakhs(oiChangeTotals.callOIChange)}</span>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="text-center text-gray-500 text-xs py-8">No change data</div>
+                                )}
+                            </div>
+
+                            {/* PVC Ratio Net — Bar Chart */}
+                            <div className="bg-[#161b22] rounded-xl border border-gray-700/50 p-5">
+                                <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>
+                                    PVC Ratio Net
+                                </h3>
+
+                                {(oiTotals.putOI > 0 || oiTotals.callOI > 0) ? (
+                                    <>
+                                        <ResponsiveContainer width="100%" height={180}>
+                                            <BarChart
+                                                data={[
+                                                    { name: 'Put OI', value: oiTotals.putOI, fill: '#10b981' },
+                                                    { name: 'Call OI', value: oiTotals.callOI, fill: '#ef4444' },
+                                                ]}
+                                                margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
+                                            >
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#21262d" vertical={false} />
+                                                <XAxis
+                                                    type="category"
+                                                    dataKey="name"
+                                                    tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: 'bold' }}
+                                                    axisLine={{ stroke: '#30363d' }}
+                                                />
+                                                <YAxis
+                                                    type="number"
+                                                    tick={{ fontSize: 9, fill: '#6b7280' }}
+                                                    tickFormatter={(value) => {
+                                                        const lakhs = value / 100000
+                                                        return `${lakhs.toFixed(0)}L`
+                                                    }}
+                                                    axisLine={{ stroke: '#30363d' }}
+                                                    width={40}
+                                                />
+                                                <Tooltip
+                                                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                                                    wrapperStyle={{ zIndex: 1000 }}
+                                                    content={({ active, payload, label }: any) => {
+                                                        if (!active || !payload || payload.length === 0) return null
+                                                        return (
+                                                            <div style={{
+                                                                backgroundColor: '#1c2128',
+                                                                border: '1px solid #30363d',
+                                                                borderRadius: '8px',
+                                                                padding: '10px 14px',
+                                                                fontSize: '12px',
+                                                                color: '#e6edf3',
+                                                                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                                            }}>
+                                                                <p style={{ margin: '3px 0' }}>
+                                                                    <span style={{ color: payload[0]?.payload?.fill, fontWeight: 'bold' }}>
+                                                                        {label}:
+                                                                    </span>{' '}
+                                                                    {formatLakhs(payload[0]?.value)}
+                                                                </p>
+                                                            </div>
+                                                        )
+                                                    }}
+                                                />
+                                                <Bar dataKey="value" barSize={40} radius={[4, 4, 0, 0]}>
+                                                    {[
+                                                        { fill: '#10b981' },
+                                                        { fill: '#ef4444' },
+                                                    ].map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+
+                                        <div className="mt-3 space-y-2">
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="flex items-center gap-2">
+                                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                                                    <span className="text-gray-400">Total Put OI</span>
+                                                </span>
+                                                <span className="text-emerald-400 font-bold">{formatLakhs(oiTotals.putOI)}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="flex items-center gap-2">
+                                                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
+                                                    <span className="text-gray-400">Total Call OI</span>
+                                                </span>
+                                                <span className="text-red-400 font-bold">{formatLakhs(oiTotals.callOI)}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* PCR & Sentiment */}
+                                        <div className="mt-3 pt-3 border-t border-gray-700/50">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-xs text-gray-500">PCR</span>
+                                                <span className={`text-lg font-extrabold ${pcr >= 1 ? 'text-emerald-400' : pcr >= 0.7 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                                    {pcr.toFixed(4)}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs text-gray-500">Net OI Diff</span>
+                                                <span className={`text-sm font-bold ${oiTotals.putOI - oiTotals.callOI > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                    {oiTotals.putOI - oiTotals.callOI > 0 ? '+' : ''}{formatLakhs(oiTotals.putOI - oiTotals.callOI)}
+                                                </span>
+                                            </div>
+                                            <p className="text-[10px] text-gray-600 mt-1">
+                                                {oiTotals.putOI > oiTotals.callOI
+                                                    ? 'Put writers dominant — Bullish undertone'
+                                                    : 'Call writers dominant — Bearish undertone'
+                                                }
+                                            </p>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="text-center text-gray-500 text-xs py-8">No data</div>
+                                )}
+                            </div>
+
+                            {/* Market Sentiment Card */}
+                            <div className={`rounded-xl border p-5 ${pcr >= 1
+                                ? 'bg-emerald-500/10 border-emerald-500/30'
+                                : pcr >= 0.7
+                                    ? 'bg-yellow-500/10 border-yellow-500/30'
+                                    : 'bg-red-500/10 border-red-500/30'
+                                }`}>
+                                <div className="text-center">
+                                    <div className="text-2xl mb-2">
+                                        {pcr >= 1 ? '🟢' : pcr >= 0.7 ? '🟡' : '🔴'}
+                                    </div>
+                                    <h4 className={`text-sm font-bold ${pcr >= 1 ? 'text-emerald-400' : pcr >= 0.7 ? 'text-yellow-400' : 'text-red-400'
+                                        }`}>
+                                        {pcr >= 1 ? 'Bullish Sentiment' : pcr >= 0.7 ? 'Neutral Sentiment' : 'Bearish Sentiment'}
+                                    </h4>
+                                    <p className="text-[10px] text-gray-500 mt-1">
+                                        Based on PCR {pcr.toFixed(2)} & OI distribution
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+
+            <Footer />
+        </div>
+    )
+}
