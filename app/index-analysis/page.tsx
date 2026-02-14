@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, PieChart, Pie, Cell, Legend, Rectangle } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, PieChart, Pie, Cell, Legend, Rectangle, LineChart, Line } from 'recharts'
 import TopNavigation from '@/components/momentum/TopNavigation'
-import TimelineSlider from '@/components/momentum/TimelineSlider'
 import Footer from '@/components/Footer'
 
 interface OptionChainData {
@@ -29,6 +28,8 @@ export default function IndexAnalysisPage() {
     const [selectedTime, setSelectedTime] = useState<Date>(new Date())
     const [isReplayMode, setIsReplayMode] = useState(false)
     const [noDataForTime, setNoDataForTime] = useState(false)
+    const [oiTrendData, setOiTrendData] = useState<{ time: string, putOI: number, callOI: number, pcr: number, label: string }[]>([])
+    const [oiTrendWindow, setOiTrendWindow] = useState<number>(15) // minutes
     const isReplayModeRef = useRef(isReplayMode)
     isReplayModeRef.current = isReplayMode
     const intervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -196,8 +197,9 @@ export default function IndexAnalysisPage() {
             setData([])
             setDataCaptureTime(null)
 
+            // Wider window to capture the selected snapshot + the previous one
             const start = new Date(time)
-            start.setMinutes(start.getMinutes() - 2)
+            start.setMinutes(start.getMinutes() - 10)
             const end = new Date(time)
             end.setMinutes(end.getMinutes() + 2)
 
@@ -219,7 +221,13 @@ export default function IndexAnalysisPage() {
 
             const result = await response.json()
             if (result.snapshots && result.snapshots.length > 0) {
-                const closest = result.snapshots.reduce((prev: any, curr: any) => {
+                // Sort by captured_at ascending
+                const sorted = result.snapshots.sort((a: any, b: any) =>
+                    new Date(a.captured_at).getTime() - new Date(b.captured_at).getTime()
+                )
+
+                // Find the closest snapshot to the selected time
+                const closest = sorted.reduce((prev: any, curr: any) => {
                     const prevDiff = Math.abs(new Date(prev.captured_at).getTime() - targetTimestamp)
                     const currDiff = Math.abs(new Date(curr.captured_at).getTime() - targetTimestamp)
                     return currDiff < prevDiff ? curr : prev
@@ -231,6 +239,45 @@ export default function IndexAnalysisPage() {
                     setData([])
                     setLoading(false)
                     return
+                }
+
+                // Find the previous snapshot (one before closest)
+                const closestIdx = sorted.findIndex((s: any) => s.captured_at === closest.captured_at)
+                const prevSnapshot = closestIdx > 0 ? sorted[closestIdx - 1] : null
+
+                if (prevSnapshot) {
+                    // Compute OI delta between the two snapshots
+                    const currentData = closest.option_chain_data
+                    const prevData = prevSnapshot.option_chain_data
+
+                    const currentArray = currentData?.records?.data || currentData?.data || (currentData?.optionChain ? Object.values(currentData.optionChain) : [])
+                    const prevArray = prevData?.records?.data || prevData?.data || (prevData?.optionChain ? Object.values(prevData.optionChain) : [])
+
+                    // Build a map of previous OI by strike
+                    const prevOIMap: Record<number, { callOI: number; putOI: number }> = {}
+                    if (Array.isArray(prevArray)) {
+                        prevArray.forEach((item: any) => {
+                            if (!item) return
+                            const strike = item.strikePrice || 0
+                            prevOIMap[strike] = {
+                                callOI: item.CE?.openInterest || 0,
+                                putOI: item.PE?.openInterest || 0,
+                            }
+                        })
+                    }
+
+                    // Override changeinOpenInterest with actual delta
+                    if (Array.isArray(currentArray)) {
+                        currentArray.forEach((item: any) => {
+                            if (!item) return
+                            const strike = item.strikePrice || 0
+                            const prev = prevOIMap[strike]
+                            if (prev) {
+                                if (item.CE) item.CE.changeinOpenInterest = (item.CE.openInterest || 0) - prev.callOI
+                                if (item.PE) item.PE.changeinOpenInterest = (item.PE.openInterest || 0) - prev.putOI
+                            }
+                        })
+                    }
                 }
 
                 const snapshotTime = new Date(closest.captured_at)
@@ -300,6 +347,53 @@ export default function IndexAnalysisPage() {
         return () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null } }
     }, [fetchOptionChainData, isReplayMode])
 
+    // Fetch OI trendline data (fallback to last saved data if market closed)
+    // Shows OI addition (delta between snapshots) instead of total volumes
+    const fetchOiTrendline = useCallback(async () => {
+        try {
+            const todayStr = new Date().toISOString().split('T')[0]
+            const res = await fetch(`/api/oi-trendline?symbol=${symbol}&date=${todayStr}`)
+            if (!res.ok) return
+            const json = await res.json()
+            if (json.success && Array.isArray(json.data) && json.data.length > 1) {
+                // Compute deltas between consecutive snapshots
+                const computeDeltas = (entries: any[]) => {
+                    return entries.slice(1).map((d: any, i: number) => ({
+                        time: d.time,
+                        putOI: d.putOI - entries[i].putOI,
+                        callOI: d.callOI - entries[i].callOI,
+                        pcr: d.pcr,
+                        label: new Date(d.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }),
+                    }))
+                }
+
+                // Filter by selected time window
+                const now = new Date()
+                const cutoff = new Date(now.getTime() - oiTrendWindow * 60 * 1000)
+                const recentRaw = json.data.filter((d: any) => new Date(d.time) >= cutoff)
+
+                if (recentRaw.length > 1) {
+                    setOiTrendData(computeDeltas(recentRaw))
+                } else {
+                    // Market is closed — use last N snapshots based on window
+                    const snapshotCount = Math.ceil(oiTrendWindow / 3) + 1
+                    const lastRaw = json.data.slice(-snapshotCount)
+                    if (lastRaw.length > 1) {
+                        setOiTrendData(computeDeltas(lastRaw))
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Error fetching OI trendline:', e)
+        }
+    }, [symbol, oiTrendWindow])
+
+    useEffect(() => {
+        fetchOiTrendline()
+        const trendInterval = setInterval(fetchOiTrendline, 180000) // refresh every 3 min
+        return () => clearInterval(trendInterval)
+    }, [fetchOiTrendline])
+
     // Fetch on expiry change
     useEffect(() => {
         if (expiryDate && symbol) fetchOptionChainData()
@@ -314,12 +408,15 @@ export default function IndexAnalysisPage() {
     }, [data, niftySpot])
 
     // Prepare chart data: positive change = right (buildup), negative = left (unwinding)
-    const compassData = data.map(d => ({
-        strikePrice: d.strikePrice,
-        callOIChange: d.callOIChange,
-        putOIChange: d.putOIChange,
-        isATM: d.strikePrice === atmStrike,
-    }))
+    // Sort strikes descending so highest appears at top
+    const compassData = [...data]
+        .sort((a, b) => b.strikePrice - a.strikePrice)
+        .map(d => ({
+            strikePrice: d.strikePrice,
+            callOIChange: d.callOIChange,
+            putOIChange: d.putOIChange,
+            isATM: d.strikePrice === atmStrike,
+        }))
 
     // Prepare donut chart data for Change in PVC
     const pvcDonutData = [
@@ -570,15 +667,152 @@ export default function IndexAnalysisPage() {
                                 </BarChart>
                             </ResponsiveContainer>
 
-                            {/* Timeline Slider */}
+                            {/* OI Addition */}
                             <div className="mt-4 pt-4 border-t border-gray-700/50">
-                                <TimelineSlider
-                                    selectedTime={selectedTime}
-                                    onTimeChange={handleTimeChange}
-                                    isReplayMode={isReplayMode}
-                                    onReplayModeChange={handleReplayModeChange}
-                                    intervalMinutes={3}
-                                />
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span>
+                                        OI Addition
+                                    </h3>
+                                    <select
+                                        value={oiTrendWindow}
+                                        onChange={(e) => setOiTrendWindow(Number(e.target.value))}
+                                        className="bg-[#0d1117] border border-gray-700 rounded-md text-xs text-gray-300 px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                                    >
+                                        <option value={15}>15 Min</option>
+                                        <option value={30}>30 Min</option>
+                                        <option value={60}>1 Hr</option>
+                                        <option value={120}>2 Hr</option>
+                                        <option value={240}>4 Hr</option>
+                                    </select>
+                                </div>
+
+                                {oiTrendData.length > 0 ? (() => {
+                                    const totalPutAdd = oiTrendData.reduce((sum, d) => sum + d.putOI, 0)
+                                    const totalCallAdd = oiTrendData.reduce((sum, d) => sum + d.callOI, 0)
+                                    const summaryBarData = [
+                                        { name: 'Put', value: totalPutAdd, fill: '#10b981' },
+                                        { name: 'Call', value: totalCallAdd, fill: '#ef4444' },
+                                    ]
+                                    return (
+                                        <>
+                                            <div className="flex gap-2">
+                                                {/* Line chart — per-interval deltas */}
+                                                <div style={{ width: '80%' }} className="min-w-0">
+                                                    <ResponsiveContainer width="100%" height={180}>
+                                                        <LineChart data={oiTrendData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                                                            <CartesianGrid strokeDasharray="3 3" stroke="#21262d" />
+                                                            <XAxis
+                                                                dataKey="label"
+                                                                tick={{ fontSize: 8, fill: '#6b7280' }}
+                                                                axisLine={{ stroke: '#30363d' }}
+                                                            />
+                                                            <YAxis
+                                                                tick={{ fontSize: 8, fill: '#6b7280' }}
+                                                                tickFormatter={(v) => `${(v / 100000).toFixed(0)}L`}
+                                                                axisLine={{ stroke: '#30363d' }}
+                                                                width={35}
+                                                                domain={[(dataMin: number) => Math.floor(dataMin * 0.95), (dataMax: number) => Math.ceil(dataMax * 1.05)]}
+                                                            />
+                                                            <Tooltip
+                                                                wrapperStyle={{ zIndex: 1000 }}
+                                                                content={({ active, payload, label }: any) => {
+                                                                    if (!active || !payload || payload.length === 0) return null
+                                                                    return (
+                                                                        <div style={{
+                                                                            backgroundColor: '#1c2128',
+                                                                            border: '1px solid #30363d',
+                                                                            borderRadius: '8px',
+                                                                            padding: '10px 14px',
+                                                                            fontSize: '12px',
+                                                                            color: '#e6edf3',
+                                                                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                                                            minWidth: '150px',
+                                                                        }}>
+                                                                            <p style={{ margin: 0, fontWeight: 'bold', marginBottom: '6px' }}>🕐 {label}</p>
+                                                                            {payload.map((item: any, i: number) => {
+                                                                                const val = item.value
+                                                                                const arrow = val > 0 ? '▲' : val < 0 ? '▼' : '—'
+                                                                                return (
+                                                                                    <p key={i} style={{ margin: '3px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: item.color, display: 'inline-block' }}></span>
+                                                                                        <span style={{ color: '#9ca3af' }}>{item.dataKey === 'putOI' ? 'Put OI' : 'Call OI'}:</span>
+                                                                                        <span style={{ fontWeight: 'bold', color: val > 0 ? '#10b981' : val < 0 ? '#ef4444' : '#6b7280' }}>{arrow} {val > 0 ? '+' : ''}{formatLakhs(val)}</span>
+                                                                                    </p>
+                                                                                )
+                                                                            })}
+                                                                        </div>
+                                                                    )
+                                                                }}
+                                                            />
+                                                            <Line type="monotone" dataKey="putOI" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} name="Put OI" />
+                                                            <Line type="monotone" dataKey="callOI" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} name="Call OI" />
+                                                        </LineChart>
+                                                    </ResponsiveContainer>
+                                                </div>
+
+                                                {/* Summary bar — total additions */}
+                                                <div style={{ width: '20%' }} className="flex-shrink-0">
+                                                    <ResponsiveContainer width="100%" height={180}>
+                                                        <BarChart data={summaryBarData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                                                            <XAxis
+                                                                dataKey="name"
+                                                                tick={{ fontSize: 9, fill: '#9ca3af', fontWeight: 'bold' }}
+                                                                axisLine={{ stroke: '#30363d' }}
+                                                            />
+                                                            <YAxis hide />
+                                                            <Tooltip
+                                                                wrapperStyle={{ zIndex: 1000 }}
+                                                                content={({ active, payload }: any) => {
+                                                                    if (!active || !payload || payload.length === 0) return null
+                                                                    const d = payload[0]
+                                                                    const val = d?.value || 0
+                                                                    return (
+                                                                        <div style={{
+                                                                            backgroundColor: '#1c2128',
+                                                                            border: '1px solid #30363d',
+                                                                            borderRadius: '8px',
+                                                                            padding: '8px 12px',
+                                                                            fontSize: '11px',
+                                                                            color: '#e6edf3',
+                                                                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                                                        }}>
+                                                                            <p style={{ margin: 0, color: d?.payload?.fill, fontWeight: 'bold' }}>
+                                                                                {d?.payload?.name} OI: {val > 0 ? '+' : ''}{formatLakhs(val)}
+                                                                                {val >= 0 ? ' ▲' : ' ▼'}
+                                                                            </p>
+                                                                        </div>
+                                                                    )
+                                                                }}
+                                                            />
+                                                            <Bar dataKey="value" barSize={28} radius={[4, 4, 0, 0]}>
+                                                                {summaryBarData.map((entry, index) => (
+                                                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                                                ))}
+                                                            </Bar>
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="flex items-center gap-1">
+                                                        <span className="w-3 h-0.5 bg-emerald-500 inline-block rounded"></span>
+                                                        Put OI
+                                                    </span>
+                                                    <span className="flex items-center gap-1">
+                                                        <span className="w-3 h-0.5 bg-red-500 inline-block rounded"></span>
+                                                        Call OI
+                                                    </span>
+                                                </div>
+                                                <span>{oiTrendData.length} snapshots</span>
+                                            </div>
+                                        </>
+                                    )
+                                })() : (
+                                    <div className="text-center text-gray-500 text-xs py-8">No trend data available</div>
+                                )}
                             </div>
                         </div>
 
@@ -611,14 +845,31 @@ export default function IndexAnalysisPage() {
                                                     ))}
                                                 </Pie>
                                                 <Tooltip
-                                                    contentStyle={{
-                                                        backgroundColor: '#1c2128',
-                                                        border: '1px solid #30363d',
-                                                        borderRadius: '8px',
-                                                        color: '#e6edf3',
-                                                        fontSize: '12px'
+                                                    wrapperStyle={{ zIndex: 1000 }}
+                                                    content={({ active, payload }: any) => {
+                                                        if (!active || !payload || payload.length === 0) return null
+                                                        const item = payload[0]?.payload
+                                                        if (!item) return null
+                                                        return (
+                                                            <div style={{
+                                                                backgroundColor: '#1c2128',
+                                                                border: '1px solid #30363d',
+                                                                borderRadius: '8px',
+                                                                padding: '10px 14px',
+                                                                fontSize: '12px',
+                                                                color: '#e6edf3',
+                                                                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                                                minWidth: '140px',
+                                                            }}>
+                                                                <p style={{ margin: 0, fontWeight: 'bold', color: item.color }}>
+                                                                    {item.name}
+                                                                </p>
+                                                                <p style={{ margin: '4px 0 0', fontSize: '14px', fontWeight: 'bold' }}>
+                                                                    {formatLakhs(item.value)}
+                                                                </p>
+                                                            </div>
+                                                        )
                                                     }}
-                                                    formatter={(value: number, name: string) => [formatLakhs(value), name]}
                                                 />
                                             </PieChart>
                                         </ResponsiveContainer>
@@ -644,6 +895,8 @@ export default function IndexAnalysisPage() {
                                     <div className="text-center text-gray-500 text-xs py-8">No change data</div>
                                 )}
                             </div>
+
+
 
                             {/* PVC Ratio Net — Bar Chart */}
                             <div className="bg-[#161b22] rounded-xl border border-gray-700/50 p-5">
@@ -779,6 +1032,7 @@ export default function IndexAnalysisPage() {
                                     </p>
                                 </div>
                             </div>
+
                         </div>
                     </div>
                 )}
