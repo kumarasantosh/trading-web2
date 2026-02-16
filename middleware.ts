@@ -11,6 +11,7 @@ const isPublicRoute = createRouteMatcher([
     '/risk-disclosure(.*)', // Risk Disclosure page
     '/terms-conditions(.*)', // Terms & Conditions page
     '/privacy-policy(.*)', // Privacy Policy page
+    '/hiddennewchart(.*)', // Hidden New Chart page
     '/sign-in(.*)', // Sign-in pages (automatically public)
     '/sign-up(.*)', // Sign-up pages (automatically public)
     '/api(.*)', // All API routes (for cron jobs, webhooks, etc.)

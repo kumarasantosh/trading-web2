@@ -11,6 +11,8 @@ interface OptionChainData {
     putOI: number
     callOIChange: number
     putOIChange: number
+    callVolume: number
+    putVolume: number
 }
 
 export default function IndexAnalysisPage() {
@@ -122,6 +124,8 @@ export default function IndexAnalysisPage() {
                 const putOI = peData.openInterest || 0
                 const callOIChange = ceData.changeinOpenInterest || 0
                 const putOIChange = peData.changeinOpenInterest || 0
+                const callVolume = ceData.totalTradedVolume || 0
+                const putVolume = peData.totalTradedVolume || 0
 
                 totalCallOI += callOI
                 totalPutOI += putOI
@@ -135,6 +139,8 @@ export default function IndexAnalysisPage() {
                         putOI: Number(putOI),
                         callOIChange: Number(callOIChange),
                         putOIChange: Number(putOIChange),
+                        callVolume: Number(callVolume),
+                        putVolume: Number(putVolume),
                     })
                 }
             })
@@ -896,7 +902,136 @@ export default function IndexAnalysisPage() {
                                 )}
                             </div>
 
+                            {/* ATM ±2 Volume Widget */}
+                            <div className="bg-[#161b22] rounded-xl border border-gray-700/50 p-5">
+                                <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-sky-400 inline-block"></span>
+                                    ATM - {data.length > 0 && niftySpot > 0
+                                        ? [...data].sort((a, b) => Math.abs(a.strikePrice - niftySpot) - Math.abs(b.strikePrice - niftySpot))[0]?.strikePrice
+                                        : '...'
+                                    }
+                                </h3>
 
+                                {(() => {
+                                    if (data.length === 0 || niftySpot === 0) {
+                                        return <div className="text-center text-gray-500 text-xs py-8">No data</div>
+                                    }
+
+                                    // Find ATM strike
+                                    const sorted = [...data].sort((a, b) =>
+                                        Math.abs(a.strikePrice - niftySpot) - Math.abs(b.strikePrice - niftySpot)
+                                    )
+                                    const atmStrike = sorted[0]?.strikePrice || 0
+                                    const allStrikes = Array.from(new Set(data.map(d => d.strikePrice))).sort((a, b) => a - b)
+                                    const atmIdx = allStrikes.indexOf(atmStrike)
+                                    if (atmIdx === -1) return <div className="text-center text-gray-500 text-xs py-8">No ATM data</div>
+
+                                    // Get ATM-2 to ATM+2
+                                    const startIdx = Math.max(0, atmIdx - 2)
+                                    const endIdx = Math.min(allStrikes.length - 1, atmIdx + 2)
+                                    const nearStrikes = allStrikes.slice(startIdx, endIdx + 1)
+                                    const strikeDataMap = new Map(data.map(d => [d.strikePrice, d]))
+
+                                    const volumeBarData = nearStrikes.map(strike => {
+                                        const d = strikeDataMap.get(strike)
+                                        return {
+                                            strike: String(strike),
+                                            putVol: d?.putVolume || 0,
+                                            callVol: d?.callVolume || 0,
+                                            isATM: strike === atmStrike,
+                                        }
+                                    })
+
+                                    const totalPutVol = volumeBarData.reduce((s, d) => s + d.putVol, 0)
+                                    const totalCallVol = volumeBarData.reduce((s, d) => s + d.callVol, 0)
+
+                                    return (
+                                        <>
+                                            <ResponsiveContainer width="100%" height={180}>
+                                                <BarChart data={volumeBarData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#21262d" vertical={false} />
+                                                    <XAxis
+                                                        dataKey="strike"
+                                                        tick={(props: any) => {
+                                                            const { x, y, payload } = props
+                                                            const item = volumeBarData.find(d => d.strike === payload.value)
+                                                            const isATM = item?.isATM
+                                                            return (
+                                                                <text x={x} y={y + 12} textAnchor="middle" fontSize={9}
+                                                                    fill={isATM ? '#22d3ee' : '#6b7280'}
+                                                                    fontWeight={isATM ? 'bold' : 'normal'}>
+                                                                    {payload.value}{isATM ? ' ★' : ''}
+                                                                </text>
+                                                            )
+                                                        }}
+                                                        axisLine={{ stroke: '#30363d' }}
+                                                    />
+                                                    <YAxis
+                                                        tick={{ fontSize: 8, fill: '#6b7280' }}
+                                                        tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
+                                                        axisLine={{ stroke: '#30363d' }}
+                                                        width={35}
+                                                    />
+                                                    <Tooltip
+                                                        wrapperStyle={{ zIndex: 1000 }}
+                                                        content={({ active, payload, label }: any) => {
+                                                            if (!active || !payload || payload.length === 0) return null
+                                                            const isATM = payload[0]?.payload?.isATM
+                                                            return (
+                                                                <div style={{
+                                                                    backgroundColor: '#1c2128',
+                                                                    border: '1px solid #30363d',
+                                                                    borderRadius: '8px',
+                                                                    padding: '10px 14px',
+                                                                    fontSize: '12px',
+                                                                    color: '#e6edf3',
+                                                                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                                                }}>
+                                                                    <p style={{ margin: 0, fontWeight: 'bold', marginBottom: '6px' }}>
+                                                                        Strike {label} {isATM ? '(ATM)' : ''}
+                                                                    </p>
+                                                                    {payload.map((item: any, i: number) => (
+                                                                        <p key={i} style={{ margin: '3px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: item.color, display: 'inline-block' }}></span>
+                                                                            <span style={{ color: '#9ca3af' }}>{item.dataKey === 'putVol' ? 'Put Vol' : 'Call Vol'}:</span>
+                                                                            <span style={{ fontWeight: 'bold', color: item.color }}>{(item.value / 1000).toFixed(1)}K</span>
+                                                                        </p>
+                                                                    ))}
+                                                                </div>
+                                                            )
+                                                        }}
+                                                    />
+                                                    <Bar dataKey="putVol" fill="#10b981" barSize={12} radius={[2, 2, 0, 0]} name="Put Vol" />
+                                                    <Bar dataKey="callVol" fill="#ef4444" barSize={12} radius={[2, 2, 0, 0]} name="Call Vol" />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+
+                                            <div className="mt-3 space-y-1.5">
+                                                <div className="flex items-center justify-between text-xs">
+                                                    <span className="flex items-center gap-2">
+                                                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                                                        <span className="text-gray-400">Total Put Vol</span>
+                                                    </span>
+                                                    <span className="text-emerald-400 font-bold">{(totalPutVol / 1000).toFixed(1)}K</span>
+                                                </div>
+                                                <div className="flex items-center justify-between text-xs">
+                                                    <span className="flex items-center gap-2">
+                                                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
+                                                        <span className="text-gray-400">Total Call Vol</span>
+                                                    </span>
+                                                    <span className="text-red-400 font-bold">{(totalCallVol / 1000).toFixed(1)}K</span>
+                                                </div>
+                                                <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-700/50">
+                                                    <span className="text-gray-500">Vol Ratio (P/C)</span>
+                                                    <span className={`font-bold ${totalCallVol > 0 && (totalPutVol / totalCallVol) >= 1 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                        {totalCallVol > 0 ? (totalPutVol / totalCallVol).toFixed(2) : '—'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )
+                                })()}
+                            </div>
 
                             {/* PVC Ratio Net — Bar Chart */}
                             <div className="bg-[#161b22] rounded-xl border border-gray-700/50 p-5">
