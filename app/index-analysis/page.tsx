@@ -1141,11 +1141,25 @@ export default function IndexAnalysisPage() {
                                             {/* Summary bar — total additions */}
                                             <div style={{ width: '20%' }} className="flex-shrink-0">
                                                 <ResponsiveContainer width="100%" height={180}>
-                                                    <BarChart data={summaryBarData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                                                    <BarChart data={summaryBarData} margin={{ top: 5, right: 5, left: 0, bottom: 30 }}>
                                                         <XAxis
                                                             dataKey="name"
-                                                            tick={{ fontSize: 9, fill: '#9ca3af', fontWeight: 'bold' }}
                                                             axisLine={{ stroke: '#30363d' }}
+                                                            tick={({ x, y, payload }) => {
+                                                                const item = summaryBarData.find(d => d.name === payload.value)
+                                                                const val = item?.value || 0
+                                                                const color = item?.fill || '#9ca3af'
+                                                                return (
+                                                                    <g transform={`translate(${x},${y})`}>
+                                                                        <text x={0} y={15} textAnchor="middle" fill={color} fontSize={12} fontWeight="bold">
+                                                                            {val < 0 ? '-' : ''}{formatLakhs(val)}
+                                                                        </text>
+                                                                        <text x={0} y={30} textAnchor="middle" fill="#9ca3af" fontSize={11} fontWeight="bold">
+                                                                            {payload.value}
+                                                                        </text>
+                                                                    </g>
+                                                                )
+                                                            }}
                                                         />
                                                         <YAxis hide />
                                                         <Tooltip
