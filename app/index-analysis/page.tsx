@@ -35,9 +35,48 @@ export default function IndexAnalysisPage() {
     const isReplayModeRef = useRef(isReplayMode)
     isReplayModeRef.current = isReplayMode
     const [atmViewMode, setAtmViewMode] = useState<'volume' | 'oiChange'>('oiChange')
+    // Add state for OI Compass View Mode
+    const [oiCompassMode, setOiCompassMode] = useState<'change' | 'total'>('change')
     const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
     const indices = ['NIFTY', 'BANKNIFTY', 'FINNIFTY']
+
+    // Calculate Max Pain, Support, and Resistance
+    const { maxPain, support1, support2, resistance1, resistance2 } = useMemo(() => {
+        if (data.length === 0) return { maxPain: 0, support1: 0, support2: 0, resistance1: 0, resistance2: 0 }
+
+        // Max Pain Calculation
+        let minTotalLoss = Number.MAX_VALUE
+        let maxPainStrike = 0
+
+        // Use all available strikes for calculation to be accurate
+        data.forEach(candidate => {
+            let totalLoss = 0
+            const candidatePrice = candidate.strikePrice
+            data.forEach(item => {
+                const callLoss = Math.max(0, candidatePrice - item.strikePrice) * item.callOI
+                const putLoss = Math.max(0, item.strikePrice - candidatePrice) * item.putOI
+                totalLoss += callLoss + putLoss
+            })
+
+            if (totalLoss < minTotalLoss) {
+                minTotalLoss = totalLoss
+                maxPainStrike = candidatePrice
+            }
+        })
+
+        // Support and Resistance
+        const sortedByCallOI = [...data].sort((a, b) => b.callOI - a.callOI)
+        const sortedByPutOI = [...data].sort((a, b) => b.putOI - a.putOI)
+
+        return {
+            maxPain: maxPainStrike,
+            resistance1: sortedByCallOI[0]?.strikePrice || 0,
+            resistance2: sortedByCallOI[1]?.strikePrice || 0,
+            support1: sortedByPutOI[0]?.strikePrice || 0,
+            support2: sortedByPutOI[1]?.strikePrice || 0
+        }
+    }, [data])
 
     // Format number with L suffix (Lakhs)
     const formatLakhs = (value: number): string => {
@@ -156,7 +195,7 @@ export default function IndexAnalysisPage() {
             let filteredData = processedData
             if (underlyingValue > 0 && processedData.length > 0) {
                 filteredData = processedData.filter(item =>
-                    Math.abs(item.strikePrice - underlyingValue) <= 500
+                    Math.abs(item.strikePrice - underlyingValue) <= 800
                 )
                 if (filteredData.length === 0) filteredData = processedData
             }
@@ -204,7 +243,6 @@ export default function IndexAnalysisPage() {
             setData([])
             setDataCaptureTime(null)
 
-            // Wider window to capture the selected snapshot + the previous one
             const start = new Date(time)
             start.setMinutes(start.getMinutes() - 10)
             const end = new Date(time)
@@ -228,12 +266,10 @@ export default function IndexAnalysisPage() {
 
             const result = await response.json()
             if (result.snapshots && result.snapshots.length > 0) {
-                // Sort by captured_at ascending
                 const sorted = result.snapshots.sort((a: any, b: any) =>
                     new Date(a.captured_at).getTime() - new Date(b.captured_at).getTime()
                 )
 
-                // Find the closest snapshot to the selected time
                 const closest = sorted.reduce((prev: any, curr: any) => {
                     const prevDiff = Math.abs(new Date(prev.captured_at).getTime() - targetTimestamp)
                     const currDiff = Math.abs(new Date(curr.captured_at).getTime() - targetTimestamp)
@@ -248,19 +284,16 @@ export default function IndexAnalysisPage() {
                     return
                 }
 
-                // Find the previous snapshot (one before closest)
                 const closestIdx = sorted.findIndex((s: any) => s.captured_at === closest.captured_at)
                 const prevSnapshot = closestIdx > 0 ? sorted[closestIdx - 1] : null
 
                 if (prevSnapshot) {
-                    // Compute OI delta between the two snapshots
                     const currentData = closest.option_chain_data
                     const prevData = prevSnapshot.option_chain_data
 
                     const currentArray = currentData?.records?.data || currentData?.data || (currentData?.optionChain ? Object.values(currentData.optionChain) : [])
                     const prevArray = prevData?.records?.data || prevData?.data || (prevData?.optionChain ? Object.values(prevData.optionChain) : [])
 
-                    // Build a map of previous OI by strike
                     const prevOIMap: Record<number, { callOI: number; putOI: number }> = {}
                     if (Array.isArray(prevArray)) {
                         prevArray.forEach((item: any) => {
@@ -273,7 +306,6 @@ export default function IndexAnalysisPage() {
                         })
                     }
 
-                    // Override changeinOpenInterest with actual delta
                     if (Array.isArray(currentArray)) {
                         currentArray.forEach((item: any) => {
                             if (!item) return
@@ -355,7 +387,6 @@ export default function IndexAnalysisPage() {
     }, [fetchOptionChainData, isReplayMode])
 
     // Fetch OI trendline data (fallback to last saved data if market closed)
-    // Shows OI addition (delta between snapshots) instead of total volumes
     const fetchOiTrendline = useCallback(async () => {
         try {
             const todayStr = new Date().toISOString().split('T')[0]
@@ -363,7 +394,6 @@ export default function IndexAnalysisPage() {
             if (!res.ok) return
             const json = await res.json()
             if (json.success && Array.isArray(json.data) && json.data.length > 1) {
-                // Compute deltas between consecutive snapshots
                 const computeDeltas = (entries: any[]) => {
                     return entries.slice(1).map((d: any, i: number) => ({
                         time: d.time,
@@ -374,7 +404,6 @@ export default function IndexAnalysisPage() {
                     }))
                 }
 
-                // Filter by selected time window
                 const now = new Date()
                 const cutoff = new Date(now.getTime() - oiTrendWindow * 60 * 1000)
                 const recentRaw = json.data.filter((d: any) => new Date(d.time) >= cutoff)
@@ -382,7 +411,6 @@ export default function IndexAnalysisPage() {
                 if (recentRaw.length > 1) {
                     setOiTrendData(computeDeltas(recentRaw))
                 } else {
-                    // Market is closed — use last N snapshots based on window
                     const snapshotCount = Math.ceil(oiTrendWindow / 3) + 1
                     const lastRaw = json.data.slice(-snapshotCount)
                     if (lastRaw.length > 1) {
@@ -416,12 +444,15 @@ export default function IndexAnalysisPage() {
 
     // Prepare chart data: positive change = right (buildup), negative = left (unwinding)
     // Sort strikes descending so highest appears at top
+    // For Total OI, we just map callOI and putOI.
     const compassData = [...data]
         .sort((a, b) => b.strikePrice - a.strikePrice)
         .map(d => ({
             strikePrice: d.strikePrice,
             callOIChange: d.callOIChange,
             putOIChange: d.putOIChange,
+            callOI: d.callOI,
+            putOI: d.putOI,
             isATM: d.strikePrice === atmStrike,
         }))
 
@@ -507,7 +538,7 @@ export default function IndexAnalysisPage() {
 
             {/* Spot Price Bar */}
             <div className="bg-[#161b22]/60 border-b border-gray-800/50">
-                <div className="px-4 lg:px-8 py-2 flex items-center gap-6 text-sm">
+                <div className="px-4 lg:px-8 py-2 flex items-center gap-6 text-sm overflow-x-auto whitespace-nowrap">
                     <span className="text-gray-400">
                         {symbol} Spot: <span className="text-white font-bold">{niftySpot.toFixed(2)}</span>
                     </span>
@@ -518,6 +549,22 @@ export default function IndexAnalysisPage() {
                         Sentiment: <span className={`font-bold ${pcr >= 1 ? 'text-emerald-400' : pcr >= 0.7 ? 'text-yellow-400' : 'text-red-400'}`}>
                             {pcr >= 1 ? '🟢 Bullish' : pcr >= 0.7 ? '🟡 Neutral' : '🔴 Bearish'}
                         </span>
+                    </span>
+                    <div className="w-px h-4 bg-gray-700 mx-2 hidden lg:block"></div>
+                    <span className="text-gray-400">
+                        Max Pain: <span className="text-white font-bold">{maxPain}</span>
+                    </span>
+                    <span className="text-gray-400">
+                        R1: <span className="text-red-400 font-bold">{resistance1}</span>
+                    </span>
+                    <span className="text-gray-400">
+                        R2: <span className="text-red-400 font-bold">{resistance2}</span>
+                    </span>
+                    <span className="text-gray-400">
+                        S1: <span className="text-emerald-400 font-bold">{support1}</span>
+                    </span>
+                    <span className="text-gray-400">
+                        S2: <span className="text-emerald-400 font-bold">{support2}</span>
                     </span>
                 </div>
             </div>
@@ -538,28 +585,56 @@ export default function IndexAnalysisPage() {
                 ) : (
                     <div className="flex flex-col gap-6">
                         {/* ROW 1: 3 columns — 60% / 20% / 20% */}
-                        <div className="grid grid-cols-1 xl:grid-cols-[3fr_1fr_1fr] gap-6">
+                        <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-6">
                             {/* OI Compass — Main Chart (60%) */}
                             <div className="bg-[#161b22] rounded-xl border border-gray-700/50 p-5">
                                 <div className="flex items-center justify-between mb-4">
-                                    <h2 className="text-base font-bold text-white flex items-center gap-2">
-                                        <span className="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>
-                                        OI Compass <span className="text-xs text-gray-500 font-normal ml-1">(Change in OI)</span>
-                                    </h2>
+                                    <div className="flex items-center gap-4">
+                                        <h2 className="text-base font-bold text-white flex items-center gap-2">
+                                            <span className="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>
+                                            OI Compass
+                                            <span className="text-xs text-gray-500 font-normal ml-1">
+                                                ({oiCompassMode === 'change' ? 'Change in OI' : 'Total OI'})
+                                            </span>
+                                        </h2>
+                                        {/* Compass Mode Toggle */}
+                                        <div className="flex bg-[#21262d] rounded-lg p-0.5 ml-2">
+                                            <button
+                                                onClick={() => setOiCompassMode('change')}
+                                                className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all ${oiCompassMode === 'change'
+                                                    ? 'bg-blue-500/20 text-blue-400 shadow-sm'
+                                                    : 'text-gray-400 hover:text-gray-200'
+                                                    }`}
+                                            >
+                                                Change in OI
+                                            </button>
+                                            <button
+                                                onClick={() => setOiCompassMode('total')}
+                                                className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all ${oiCompassMode === 'total'
+                                                    ? 'bg-blue-500/20 text-blue-400 shadow-sm'
+                                                    : 'text-gray-400 hover:text-gray-200'
+                                                    }`}
+                                            >
+                                                Total OI
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <div className="flex items-center gap-4 text-xs">
                                         <span className="flex items-center gap-1.5">
                                             <span className="w-3 h-1.5 rounded bg-red-500 inline-block"></span>
-                                            <span className="text-gray-400">Call OI Chg</span>
+                                            <span className="text-gray-400">{oiCompassMode === 'change' ? 'Call OI Chg' : 'Call OI'}</span>
                                         </span>
                                         <span className="flex items-center gap-1.5">
                                             <span className="w-3 h-1.5 rounded bg-emerald-500 inline-block"></span>
-                                            <span className="text-gray-400">Put OI Chg</span>
+                                            <span className="text-gray-400">{oiCompassMode === 'change' ? 'Put OI Chg' : 'Put OI'}</span>
                                         </span>
                                         <span className="flex items-center gap-1.5">
                                             <span className="w-5 h-3 rounded bg-amber-500/20 border border-amber-500/40 inline-block"></span>
                                             <span className="text-gray-400">ATM</span>
                                         </span>
-                                        <span className="text-gray-500 ml-2">→ Right = Buildup &nbsp; ← Left = Unwinding</span>
+                                        {oiCompassMode === 'change' && (
+                                            "")}
                                     </div>
                                 </div>
 
@@ -568,6 +643,7 @@ export default function IndexAnalysisPage() {
                                         data={compassData}
                                         layout="vertical"
                                         margin={{ top: 10, right: 30, left: 60, bottom: 10 }}
+                                        stackOffset="sign" // Important for handling negative values in 'change' mode correctly if needed, though here we use separate bars usually
                                     >
                                         <CartesianGrid strokeDasharray="3 3" stroke="#21262d" horizontal={false} />
                                         <XAxis
@@ -625,15 +701,21 @@ export default function IndexAnalysisPage() {
                                                         {payload.map((item: any, i: number) => {
                                                             const val = item.value
                                                             const lakhs = Math.abs(val) / 100000
-                                                            const direction = val > 0 ? '📈 Buildup' : val < 0 ? '📉 Unwinding' : '—'
-                                                            const color = item.dataKey === 'callOIChange' ? '#ef4444' : '#10b981'
-                                                            const name = item.dataKey === 'callOIChange' ? 'Call OI Chg' : 'Put OI Chg'
+                                                            // Direction only relevant for change mode usually, but valid for all
+                                                            const direction = oiCompassMode === 'change'
+                                                                ? (val > 0 ? '📈 Buildup' : val < 0 ? '📉 Unwinding' : '—')
+                                                                : ''
+                                                            const color = (item.dataKey === 'callOIChange' || item.dataKey === 'callOI') ? '#ef4444' : '#10b981'
+                                                            const name = oiCompassMode === 'change'
+                                                                ? (item.dataKey === 'callOIChange' ? 'Call OI Chg' : 'Put OI Chg')
+                                                                : (item.dataKey === 'callOI' ? 'Total Call OI' : 'Total Put OI')
+
                                                             return (
                                                                 <p key={i} style={{ margin: '3px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: color, display: 'inline-block', flexShrink: 0 }}></span>
                                                                     <span style={{ color: '#9ca3af' }}>{name}:</span>
                                                                     <span style={{ fontWeight: 'bold', color }}>{val < 0 ? '-' : ''}{lakhs.toFixed(2)}L</span>
-                                                                    <span style={{ color: '#6b7280', fontSize: '10px' }}>{direction}</span>
+                                                                    {direction && <span style={{ color: '#6b7280', fontSize: '10px' }}>{direction}</span>}
                                                                 </p>
                                                             )
                                                         })}
@@ -653,21 +735,39 @@ export default function IndexAnalysisPage() {
                                             strokeWidth={2}
                                             label={{ value: 'ATM', fill: '#f59e0b', fontSize: 10, position: 'right' }}
                                         />
-                                        <Bar dataKey="callOIChange" barSize={7} radius={[2, 2, 2, 2]}>
+                                        <Bar
+                                            dataKey={oiCompassMode === 'change' ? "callOIChange" : "callOI"}
+                                            barSize={7}
+                                            radius={[2, 2, 2, 2]}
+                                            fill="#ef4444"
+                                        >
                                             {compassData.map((entry, index) => (
                                                 <Cell
                                                     key={`call-${index}`}
-                                                    fill={entry.callOIChange >= 0 ? '#ef4444' : '#ef444480'}
+                                                    fill={
+                                                        oiCompassMode === 'change'
+                                                            ? (entry.callOIChange >= 0 ? '#ef4444' : '#ef444480')
+                                                            : '#ef4444'
+                                                    }
                                                     stroke={entry.isATM ? '#f59e0b' : 'none'}
                                                     strokeWidth={entry.isATM ? 1 : 0}
                                                 />
                                             ))}
                                         </Bar>
-                                        <Bar dataKey="putOIChange" barSize={7} radius={[2, 2, 2, 2]}>
+                                        <Bar
+                                            dataKey={oiCompassMode === 'change' ? "putOIChange" : "putOI"}
+                                            barSize={7}
+                                            radius={[2, 2, 2, 2]}
+                                            fill="#10b981"
+                                        >
                                             {compassData.map((entry, index) => (
                                                 <Cell
                                                     key={`put-${index}`}
-                                                    fill={entry.putOIChange >= 0 ? '#10b981' : '#10b98180'}
+                                                    fill={
+                                                        oiCompassMode === 'change'
+                                                            ? (entry.putOIChange >= 0 ? '#10b981' : '#10b98180')
+                                                            : '#10b981'
+                                                    }
                                                     stroke={entry.isATM ? '#f59e0b' : 'none'}
                                                     strokeWidth={entry.isATM ? 1 : 0}
                                                 />
@@ -675,86 +775,161 @@ export default function IndexAnalysisPage() {
                                         </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>
-                            </div>
+                            </div >
 
-                            {/* Column 2 (20%): Change in PVC + ATM */}
+
+                            {/* Column 2 (40%): Merged PVC Widget + ATM + Sentiment */}
                             <div className="flex flex-col gap-6">
-                                {/* Change in PVC — Donut Chart */}
-                                <div className="flex-1 bg-[#161b22] rounded-xl border border-gray-700/50 p-5">
+                                {/* Merged PVC Widget (Change in PVC + PVC Ratio Net) */}
+                                <div className="bg-[#161b22] rounded-xl border border-gray-700/50 p-5">
                                     <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                                         <span className="w-2 h-2 rounded-full bg-purple-400 inline-block"></span>
-                                        Change in PVC
+                                        PVC Analysis
                                     </h3>
 
-                                    {(pvcDonutData[0].value > 0 || pvcDonutData[1].value > 0) ? (
-                                        <>
-                                            <ResponsiveContainer width="100%" height={220}>
-                                                <PieChart margin={{ top: 15, bottom: 5 }}>
-                                                    <Pie
-                                                        data={pvcDonutData}
-                                                        cx="50%"
-                                                        cy="50%"
-                                                        innerRadius={45}
-                                                        outerRadius={70}
-                                                        paddingAngle={3}
-                                                        dataKey="value"
-                                                        label={renderDonutLabel}
-                                                        labelLine={false}
-                                                    >
-                                                        {pvcDonutData.map((entry, index) => (
-                                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                                        ))}
-                                                    </Pie>
-                                                    <Tooltip
-                                                        wrapperStyle={{ zIndex: 1000 }}
-                                                        content={({ active, payload }: any) => {
-                                                            if (!active || !payload || payload.length === 0) return null
-                                                            const item = payload[0]?.payload
-                                                            if (!item) return null
-                                                            return (
-                                                                <div style={{
-                                                                    backgroundColor: '#1c2128',
-                                                                    border: '1px solid #30363d',
-                                                                    borderRadius: '8px',
-                                                                    padding: '10px 14px',
-                                                                    fontSize: '12px',
-                                                                    color: '#e6edf3',
-                                                                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                                                                    minWidth: '140px',
-                                                                }}>
-                                                                    <p style={{ margin: 0, fontWeight: 'bold', color: item.color }}>
-                                                                        {item.name}
-                                                                    </p>
-                                                                    <p style={{ margin: '4px 0 0', fontSize: '14px', fontWeight: 'bold' }}>
-                                                                        {formatLakhs(item.value)}
-                                                                    </p>
-                                                                </div>
-                                                            )
-                                                        }}
-                                                    />
-                                                </PieChart>
-                                            </ResponsiveContainer>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {/* Left: Change in PVC */}
+                                        <div>
+                                            <h4 className="text-xs font-semibold text-gray-400 mb-2">Change in PVC</h4>
+                                            {(pvcDonutData[0].value > 0 || pvcDonutData[1].value > 0) ? (
+                                                <>
+                                                    <ResponsiveContainer width="100%" height={160}>
+                                                        <PieChart margin={{ top: 0, bottom: 0 }}>
+                                                            <Pie
+                                                                data={pvcDonutData}
+                                                                cx="50%"
+                                                                cy="50%"
+                                                                innerRadius={35}
+                                                                outerRadius={55}
+                                                                paddingAngle={3}
+                                                                dataKey="value"
+                                                                label={renderDonutLabel}
+                                                                labelLine={false}
+                                                            >
+                                                                {pvcDonutData.map((entry, index) => (
+                                                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                                                ))}
+                                                            </Pie>
+                                                            <Tooltip
+                                                                wrapperStyle={{ zIndex: 1000 }}
+                                                                content={({ active, payload }: any) => {
+                                                                    if (!active || !payload || payload.length === 0) return null
+                                                                    const item = payload[0]?.payload
+                                                                    if (!item) return null
+                                                                    return (
+                                                                        <div style={{
+                                                                            backgroundColor: '#1c2128',
+                                                                            border: '1px solid #30363d',
+                                                                            borderRadius: '8px',
+                                                                            padding: '8px',
+                                                                            fontSize: '11px',
+                                                                            color: '#e6edf3',
+                                                                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                                                        }}>
+                                                                            <p style={{ margin: 0, fontWeight: 'bold', color: item.color }}>
+                                                                                {item.name}: {formatLakhs(item.value)}
+                                                                            </p>
+                                                                        </div>
+                                                                    )
+                                                                }}
+                                                            />
+                                                        </PieChart>
+                                                    </ResponsiveContainer>
+                                                    <div className="mt-2 space-y-1">
+                                                        <div className="flex items-center justify-between text-[10px]">
+                                                            <span className="text-gray-400">Put Chg</span>
+                                                            <span className="text-emerald-400 font-semibold">{formatLakhs(oiChangeTotals.putOIChange)}</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between text-[10px]">
+                                                            <span className="text-gray-400">Call Chg</span>
+                                                            <span className="text-red-400 font-semibold">{formatLakhs(oiChangeTotals.callOIChange)}</span>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="text-center text-gray-500 text-xs py-8">No data</div>
+                                            )}
+                                        </div>
 
-                                            <div className="mt-3 space-y-2">
-                                                <div className="flex items-center justify-between text-xs">
-                                                    <span className="flex items-center gap-2">
-                                                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
-                                                        <span className="text-gray-400">Change Pt O</span>
-                                                    </span>
-                                                    <span className="text-emerald-400 font-semibold">{formatLakhs(oiChangeTotals.putOIChange)}</span>
-                                                </div>
-                                                <div className="flex items-center justify-between text-xs">
-                                                    <span className="flex items-center gap-2">
-                                                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
-                                                        <span className="text-gray-400">Change Cl O</span>
-                                                    </span>
-                                                    <span className="text-red-400 font-semibold">{formatLakhs(oiChangeTotals.callOIChange)}</span>
-                                                </div>
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <div className="text-center text-gray-500 text-xs py-8">No change data</div>
-                                    )}
+                                        {/* Right: PVC Ratio Net */}
+                                        <div className="border-l border-gray-700/50 pl-4">
+                                            <h4 className="text-xs font-semibold text-gray-400 mb-2">Net PVC Ratio</h4>
+                                            {(oiTotals.putOI > 0 || oiTotals.callOI > 0) ? (
+                                                <>
+                                                    <ResponsiveContainer width="100%" height={160}>
+                                                        <BarChart
+                                                            data={[
+                                                                { name: 'Put OI', value: oiTotals.putOI, fill: '#10b981' },
+                                                                { name: 'Call OI', value: oiTotals.callOI, fill: '#ef4444' },
+                                                            ]}
+                                                            margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+                                                        >
+                                                            <CartesianGrid strokeDasharray="3 3" stroke="#21262d" vertical={false} />
+                                                            <XAxis
+                                                                dataKey="name"
+                                                                tick={{ fontSize: 10, fill: '#9ca3af' }}
+                                                                axisLine={{ stroke: '#30363d' }}
+                                                                interval={0}
+                                                            />
+                                                            <YAxis
+                                                                tick={{ fontSize: 9, fill: '#6b7280' }}
+                                                                tickFormatter={(value) => `${(value / 100000).toFixed(0)}L`}
+                                                                axisLine={{ stroke: '#30363d' }}
+                                                                width={35}
+                                                            />
+                                                            <Tooltip
+                                                                cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                                                                wrapperStyle={{ zIndex: 1000 }}
+                                                                content={({ active, payload, label }: any) => {
+                                                                    if (!active || !payload || payload.length === 0) return null
+                                                                    return (
+                                                                        <div style={{
+                                                                            backgroundColor: '#1c2128',
+                                                                            border: '1px solid #30363d',
+                                                                            borderRadius: '8px',
+                                                                            padding: '8px',
+                                                                            fontSize: '11px',
+                                                                            color: '#e6edf3',
+                                                                        }}>
+                                                                            <span style={{ color: payload[0]?.payload?.fill, fontWeight: 'bold' }}>
+                                                                                {label}:
+                                                                            </span>{' '}
+                                                                            {formatLakhs(payload[0]?.value)}
+                                                                        </div>
+                                                                    )
+                                                                }}
+                                                            />
+                                                            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                                                {[
+                                                                    { fill: '#10b981' },
+                                                                    { fill: '#ef4444' },
+                                                                ].map((entry, index) => (
+                                                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                                                ))}
+                                                            </Bar>
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
+
+                                                    <div className="mt-2 text-[10px] space-y-1">
+                                                        <div className="flex justify-between">
+                                                            <span className="text-gray-500">PCR</span>
+                                                            <span className={`font-bold ${pcr >= 1 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                {pcr.toFixed(2)}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-gray-500">Net Diff</span>
+                                                            <span className={`font-bold ${oiTotals.putOI - oiTotals.callOI > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                {formatLakhs(oiTotals.putOI - oiTotals.callOI)}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="text-center text-gray-500 text-xs py-8">No data</div>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* ATM ±2 Volume/OI Change Widget */}
@@ -789,273 +964,166 @@ export default function IndexAnalysisPage() {
                                         </div>
                                     </div>
 
-                                    {(() => {
-                                        if (data.length === 0 || niftySpot === 0) {
-                                            return <div className="text-center text-gray-500 text-xs py-8">No data</div>
-                                        }
-
-                                        // Find ATM strike
-                                        const sorted = [...data].sort((a, b) =>
-                                            Math.abs(a.strikePrice - niftySpot) - Math.abs(b.strikePrice - niftySpot)
-                                        )
-                                        const atmStrike = sorted[0]?.strikePrice || 0
-                                        const allStrikes = Array.from(new Set(data.map(d => d.strikePrice))).sort((a, b) => a - b)
-                                        const atmIdx = allStrikes.indexOf(atmStrike)
-                                        if (atmIdx === -1) return <div className="text-center text-gray-500 text-xs py-8">No ATM data</div>
-
-                                        // Get ATM-2 to ATM+2
-                                        const startIdx = Math.max(0, atmIdx - 2)
-                                        const endIdx = Math.min(allStrikes.length - 1, atmIdx + 2)
-                                        const nearStrikes = allStrikes.slice(startIdx, endIdx + 1)
-                                        const strikeDataMap = new Map(data.map(d => [d.strikePrice, d]))
-
-                                        const chartData = nearStrikes.map(strike => {
-                                            const d = strikeDataMap.get(strike)
-                                            return {
-                                                strike: String(strike),
-                                                putVal: atmViewMode === 'oiChange' ? (d?.putOIChange || 0) : (d?.putVolume || 0),
-                                                callVal: atmViewMode === 'oiChange' ? (d?.callOIChange || 0) : (d?.callVolume || 0),
-                                                isATM: strike === atmStrike,
+                                    {
+                                        (() => {
+                                            if (data.length === 0 || niftySpot === 0) {
+                                                return <div className="text-center text-gray-500 text-xs py-8">No data</div>
                                             }
-                                        })
 
-                                        const totalPutVal = chartData.reduce((s, d) => s + d.putVal, 0)
-                                        const totalCallVal = chartData.reduce((s, d) => s + d.callVal, 0)
+                                            // Find ATM strike
+                                            const sorted = [...data].sort((a, b) =>
+                                                Math.abs(a.strikePrice - niftySpot) - Math.abs(b.strikePrice - niftySpot)
+                                            )
+                                            const atmStrike = sorted[0]?.strikePrice || 0
+                                            const allStrikes = Array.from(new Set(data.map(d => d.strikePrice))).sort((a, b) => a - b)
+                                            const atmIdx = allStrikes.indexOf(atmStrike)
+                                            if (atmIdx === -1) return <div className="text-center text-gray-500 text-xs py-8">No ATM data</div>
 
-                                        const label = atmViewMode === 'oiChange' ? 'OI Chg' : 'Vol'
+                                            // Get ATM-2 to ATM+2
+                                            const startIdx = Math.max(0, atmIdx - 4)
+                                            const endIdx = Math.min(allStrikes.length - 1, atmIdx + 4)
+                                            const nearStrikes = allStrikes.slice(startIdx, endIdx + 1)
+                                            const strikeDataMap = new Map(data.map(d => [d.strikePrice, d]))
 
-                                        return (
-                                            <>
-                                                <ResponsiveContainer width="100%" height={180}>
-                                                    <BarChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                                                        <CartesianGrid strokeDasharray="3 3" stroke="#21262d" vertical={false} />
-                                                        <XAxis
-                                                            dataKey="strike"
-                                                            tick={(props: any) => {
-                                                                const { x, y, payload } = props
-                                                                const item = chartData.find(d => d.strike === payload.value)
-                                                                const isATM = item?.isATM
-                                                                return (
-                                                                    <text x={x} y={y + 12} textAnchor="middle" fontSize={9}
-                                                                        fill={isATM ? '#22d3ee' : '#6b7280'}
-                                                                        fontWeight={isATM ? 'bold' : 'normal'}>
-                                                                        {payload.value}{isATM ? ' ★' : ''}
-                                                                    </text>
-                                                                )
-                                                            }}
-                                                            axisLine={{ stroke: '#30363d' }}
-                                                        />
-                                                        <YAxis
-                                                            tick={{ fontSize: 8, fill: '#6b7280' }}
-                                                            tickFormatter={(v) => `${(v / 100000).toFixed(0)}L`}
-                                                            axisLine={{ stroke: '#30363d' }}
-                                                            width={35}
-                                                        />
-                                                        <Tooltip
-                                                            wrapperStyle={{ zIndex: 1000 }}
-                                                            content={({ active, payload, label }: any) => {
-                                                                if (!active || !payload || payload.length === 0) return null
-                                                                const isATM = payload[0]?.payload?.isATM
-                                                                return (
-                                                                    <div style={{
-                                                                        backgroundColor: '#1c2128',
-                                                                        border: '1px solid #30363d',
-                                                                        borderRadius: '8px',
-                                                                        padding: '10px 14px',
-                                                                        fontSize: '12px',
-                                                                        color: '#e6edf3',
-                                                                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                                                                    }}>
-                                                                        <p style={{ margin: 0, fontWeight: 'bold', marginBottom: '6px' }}>
-                                                                            Strike {label} {isATM ? '(ATM)' : ''}
-                                                                        </p>
-                                                                        {payload.map((item: any, i: number) => (
-                                                                            <p key={i} style={{ margin: '3px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: item.color, display: 'inline-block' }}></span>
-                                                                                <span style={{ color: '#9ca3af' }}>{item.dataKey === 'putVal' ? `Put ${label}` : `Call ${label}`}:</span>
-                                                                                <span style={{ fontWeight: 'bold', color: item.color }}>{(item.value / 100000).toFixed(2)}L</span>
+                                            const chartData = nearStrikes.map(strike => {
+                                                const d = strikeDataMap.get(strike)
+                                                return {
+                                                    strike: String(strike),
+                                                    putVal: atmViewMode === 'oiChange' ? (d?.putOIChange || 0) : (d?.putVolume || 0),
+                                                    callVal: atmViewMode === 'oiChange' ? (d?.callOIChange || 0) : (d?.callVolume || 0),
+                                                    isATM: strike === atmStrike,
+                                                }
+                                            })
+
+                                            const totalPutVal = chartData.reduce((s, d) => s + d.putVal, 0)
+                                            const totalCallVal = chartData.reduce((s, d) => s + d.callVal, 0)
+
+                                            const label = atmViewMode === 'oiChange' ? 'OI Chg' : 'Vol'
+
+                                            return (
+                                                <>
+                                                    <ResponsiveContainer width="100%" height={180}>
+                                                        <BarChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                                                            <CartesianGrid strokeDasharray="3 3" stroke="#21262d" vertical={false} />
+                                                            <XAxis
+                                                                dataKey="strike"
+                                                                tick={(props: any) => {
+                                                                    const { x, y, payload } = props
+                                                                    const item = chartData.find(d => d.strike === payload.value)
+                                                                    const isATM = item?.isATM
+                                                                    return (
+                                                                        <text x={x} y={y + 12} textAnchor="middle" fontSize={9}
+                                                                            fill={isATM ? '#22d3ee' : '#6b7280'}
+                                                                            fontWeight={isATM ? 'bold' : 'normal'}>
+                                                                            {payload.value}{isATM ? ' ★' : ''}
+                                                                        </text>
+                                                                    )
+                                                                }}
+                                                                axisLine={{ stroke: '#30363d' }}
+                                                            />
+                                                            <YAxis
+                                                                tick={{ fontSize: 8, fill: '#6b7280' }}
+                                                                tickFormatter={(v) => `${(v / 100000).toFixed(0)}L`}
+                                                                axisLine={{ stroke: '#30363d' }}
+                                                                width={35}
+                                                            />
+                                                            <Tooltip
+                                                                wrapperStyle={{ zIndex: 1000 }}
+                                                                content={({ active, payload, label }: any) => {
+                                                                    if (!active || !payload || payload.length === 0) return null
+                                                                    const isATM = payload[0]?.payload?.isATM
+                                                                    return (
+                                                                        <div style={{
+                                                                            backgroundColor: '#1c2128',
+                                                                            border: '1px solid #30363d',
+                                                                            borderRadius: '8px',
+                                                                            padding: '10px 14px',
+                                                                            fontSize: '12px',
+                                                                            color: '#e6edf3',
+                                                                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                                                        }}>
+                                                                            <p style={{ margin: 0, fontWeight: 'bold', marginBottom: '6px' }}>
+                                                                                Strike {label} {isATM ? '(ATM)' : ''}
                                                                             </p>
-                                                                        ))}
-                                                                    </div>
-                                                                )
-                                                            }}
-                                                        />
-                                                        <ReferenceLine y={0} stroke="#30363d" />
-                                                        <Bar dataKey="putVal" fill="#10b981" barSize={12} radius={[2, 2, 0, 0]} name={`Put ${label}`} />
-                                                        <Bar dataKey="callVal" fill="#ef4444" barSize={12} radius={[2, 2, 0, 0]} name={`Call ${label}`} />
-                                                    </BarChart>
-                                                </ResponsiveContainer>
+                                                                            {payload.map((item: any, i: number) => (
+                                                                                <p key={i} style={{ margin: '3px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: item.color, display: 'inline-block' }}></span>
+                                                                                    <span style={{ color: '#9ca3af' }}>{item.dataKey === 'putVal' ? `Put ${label}` : `Call ${label}`}:</span>
+                                                                                    <span style={{ fontWeight: 'bold', color: item.color }}>{(item.value / 100000).toFixed(2)}L</span>
+                                                                                </p>
+                                                                            ))}
+                                                                        </div>
+                                                                    )
+                                                                }}
+                                                            />
+                                                            <ReferenceLine y={0} stroke="#30363d" />
+                                                            <Bar dataKey="putVal" fill="#10b981" barSize={12} radius={[2, 2, 0, 0]} name={`Put ${label}`} />
+                                                            <Bar dataKey="callVal" fill="#ef4444" barSize={12} radius={[2, 2, 0, 0]} name={`Call ${label}`} />
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
 
-                                                <div className="mt-3 space-y-1.5">
-                                                    <div className="flex items-center justify-between text-xs">
-                                                        <span className="flex items-center gap-2">
-                                                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
-                                                            <span className="text-gray-400">Total Put {label}</span>
-                                                        </span>
-                                                        <span className="text-emerald-400 font-bold">{(totalPutVal / 100000).toFixed(2)}L</span>
+                                                    <div className="mt-3 space-y-1.5">
+                                                        <div className="flex items-center justify-between text-xs">
+                                                            <span className="flex items-center gap-2">
+                                                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                                                                <span className="text-gray-400">Total Put {label}</span>
+                                                            </span>
+                                                            <span className="text-emerald-400 font-bold">{(totalPutVal / 100000).toFixed(2)}L</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between text-xs">
+                                                            <span className="flex items-center gap-2">
+                                                                <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
+                                                                <span className="text-gray-400">Total Call {label}</span>
+                                                            </span>
+                                                            <span className="text-red-400 font-bold">{(totalCallVal / 100000).toFixed(2)}L</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-700/50">
+                                                            <span className="text-gray-500">{label} Ratio (P/C)</span>
+                                                            <span className={`font-bold ${totalCallVal > 0 && (totalPutVal / totalCallVal) >= 1 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                {totalCallVal !== 0 ? (totalPutVal / totalCallVal).toFixed(2) : '—'}
+                                                            </span>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex items-center justify-between text-xs">
-                                                        <span className="flex items-center gap-2">
-                                                            <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
-                                                            <span className="text-gray-400">Total Call {label}</span>
-                                                        </span>
-                                                        <span className="text-red-400 font-bold">{(totalCallVal / 100000).toFixed(2)}L</span>
-                                                    </div>
-                                                    <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-700/50">
-                                                        <span className="text-gray-500">{label} Ratio (P/C)</span>
-                                                        <span className={`font-bold ${totalCallVal > 0 && (totalPutVal / totalCallVal) >= 1 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                            {totalCallVal !== 0 ? (totalPutVal / totalCallVal).toFixed(2) : '—'}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </>
-                                        )
-                                    })()}
-                                </div>
-                            </div>
 
-                            {/* Column 3 (20%): PVC Ratio Net + Sentiment */}
-                            <div className="flex flex-col gap-6">
-                                {/* PVC Ratio Net — Bar Chart */}
-                                <div className="flex-1 bg-[#161b22] rounded-xl border border-gray-700/50 p-5">
-                                    <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                                        <span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>
-                                        PVC Ratio Net
-                                    </h3>
-
-                                    {(oiTotals.putOI > 0 || oiTotals.callOI > 0) ? (
-                                        <>
-                                            <ResponsiveContainer width="100%" height={180}>
-                                                <BarChart
-                                                    data={[
-                                                        { name: 'Put OI', value: oiTotals.putOI, fill: '#10b981' },
-                                                        { name: 'Call OI', value: oiTotals.callOI, fill: '#ef4444' },
-                                                    ]}
-                                                    margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
-                                                >
-                                                    <CartesianGrid strokeDasharray="3 3" stroke="#21262d" vertical={false} />
-                                                    <XAxis
-                                                        type="category"
-                                                        dataKey="name"
-                                                        tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: 'bold' }}
-                                                        axisLine={{ stroke: '#30363d' }}
-                                                    />
-                                                    <YAxis
-                                                        type="number"
-                                                        tick={{ fontSize: 9, fill: '#6b7280' }}
-                                                        tickFormatter={(value) => {
-                                                            const lakhs = value / 100000
-                                                            return `${lakhs.toFixed(0)}L`
-                                                        }}
-                                                        axisLine={{ stroke: '#30363d' }}
-                                                        width={40}
-                                                    />
-                                                    <Tooltip
-                                                        cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                                                        wrapperStyle={{ zIndex: 1000 }}
-                                                        content={({ active, payload, label }: any) => {
-                                                            if (!active || !payload || payload.length === 0) return null
-                                                            return (
-                                                                <div style={{
-                                                                    backgroundColor: '#1c2128',
-                                                                    border: '1px solid #30363d',
-                                                                    borderRadius: '8px',
-                                                                    padding: '10px 14px',
-                                                                    fontSize: '12px',
-                                                                    color: '#e6edf3',
-                                                                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                                                                }}>
-                                                                    <p style={{ margin: '3px 0' }}>
-                                                                        <span style={{ color: payload[0]?.payload?.fill, fontWeight: 'bold' }}>
-                                                                            {label}:
-                                                                        </span>{' '}
-                                                                        {formatLakhs(payload[0]?.value)}
-                                                                    </p>
+                                                    {/* Merged Sentiment Section */}
+                                                    <div className="mt-4 pt-3 border-t border-gray-700/50">
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div className="flex flex-col justify-center">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <span className="text-lg">{pcr >= 1 ? '🟢' : pcr >= 0.7 ? '🟡' : '🔴'}</span>
+                                                                    <span className={`text-sm font-bold ${pcr >= 1 ? 'text-emerald-400' : pcr >= 0.7 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                                                        {pcr >= 1 ? 'Bullish' : pcr >= 0.7 ? 'Neutral' : 'Bearish'}
+                                                                    </span>
                                                                 </div>
-                                                            )
-                                                        }}
-                                                    />
-                                                    <Bar dataKey="value" barSize={40} radius={[4, 4, 0, 0]}>
-                                                        {[
-                                                            { fill: '#10b981' },
-                                                            { fill: '#ef4444' },
-                                                        ].map((entry, index) => (
-                                                            <Cell key={`cell-${index}`} fill={entry.fill} />
-                                                        ))}
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
+                                                                <p className="text-[10px] text-gray-500">PCR: <span className="text-gray-300 font-semibold">{pcr.toFixed(2)}</span></p>
+                                                            </div>
 
-                                            <div className="mt-3 space-y-2">
-                                                <div className="flex items-center justify-between text-xs">
-                                                    <span className="flex items-center gap-2">
-                                                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
-                                                        <span className="text-gray-400">Total Put OI</span>
-                                                    </span>
-                                                    <span className="text-emerald-400 font-bold">{formatLakhs(oiTotals.putOI)}</span>
-                                                </div>
-                                                <div className="flex items-center justify-between text-xs">
-                                                    <span className="flex items-center gap-2">
-                                                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
-                                                        <span className="text-gray-400">Total Call OI</span>
-                                                    </span>
-                                                    <span className="text-red-400 font-bold">{formatLakhs(oiTotals.callOI)}</span>
-                                                </div>
-                                            </div>
-
-                                            {/* PCR & Sentiment */}
-                                            <div className="mt-3 pt-3 border-t border-gray-700/50">
-                                                <div className="flex items-center justify-between mb-1">
-                                                    <span className="text-xs text-gray-500">PCR</span>
-                                                    <span className={`text-lg font-extrabold ${pcr >= 1 ? 'text-emerald-400' : pcr >= 0.7 ? 'text-yellow-400' : 'text-red-400'}`}>
-                                                        {pcr.toFixed(4)}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-xs text-gray-500">Net OI Diff</span>
-                                                    <span className={`text-sm font-bold ${oiTotals.putOI - oiTotals.callOI > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                        {oiTotals.putOI - oiTotals.callOI > 0 ? '+' : ''}{formatLakhs(oiTotals.putOI - oiTotals.callOI)}
-                                                    </span>
-                                                </div>
-                                                <p className="text-[10px] text-gray-600 mt-1">
-                                                    {oiTotals.putOI > oiTotals.callOI
-                                                        ? 'Put writers dominant — Bullish undertone'
-                                                        : 'Call writers dominant — Bearish undertone'
-                                                    }
-                                                </p>
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <div className="text-center text-gray-500 text-xs py-8">No data</div>
-                                    )}
+                                                            <div className="text-[10px] space-y-1 border-l border-gray-700/50 pl-4">
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-gray-500">Max Pain</span>
+                                                                    <span className="text-gray-300 font-semibold">{maxPain}</span>
+                                                                </div>
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-gray-500">Supp 1</span>
+                                                                    <span className="text-emerald-400 font-semibold">{support1}</span>
+                                                                </div>
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-gray-500">Res 1</span>
+                                                                    <span className="text-red-400 font-semibold">{resistance1}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )
+                                        })()
+                                    }
                                 </div>
-
-                                {/* Market Sentiment Card */}
-                                <div className={`rounded-xl border p-5 ${pcr >= 1
-                                    ? 'bg-emerald-500/10 border-emerald-500/30'
-                                    : pcr >= 0.7
-                                        ? 'bg-yellow-500/10 border-yellow-500/30'
-                                        : 'bg-red-500/10 border-red-500/30'
-                                    }`}>
-                                    <div className="text-center">
-                                        <div className="text-2xl mb-2">
-                                            {pcr >= 1 ? '🟢' : pcr >= 0.7 ? '🟡' : '🔴'}
-                                        </div>
-                                        <h4 className={`text-sm font-bold ${pcr >= 1 ? 'text-emerald-400' : pcr >= 0.7 ? 'text-yellow-400' : 'text-red-400'
-                                            }`}>
-                                            {pcr >= 1 ? 'Bullish Sentiment' : pcr >= 0.7 ? 'Neutral Sentiment' : 'Bearish Sentiment'}
-                                        </h4>
-                                        <p className="text-[10px] text-gray-500 mt-1">
-                                            Based on PCR {pcr.toFixed(2)} & OI distribution
-                                        </p>
-                                    </div>
-                                </div>
-
                             </div>
                         </div>
 
                         {/* ROW 2: OI Addition — Full Width */}
-                        <div className="bg-[#161b22] rounded-xl border border-gray-700/50 p-5">
+                        < div className="bg-[#161b22] rounded-xl border border-gray-700/50 p-5" >
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                                     <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span>
@@ -1074,153 +1142,155 @@ export default function IndexAnalysisPage() {
                                 </select>
                             </div>
 
-                            {oiTrendData.length > 0 ? (() => {
-                                const totalPutAdd = oiTrendData.reduce((sum, d) => sum + d.putOI, 0)
-                                const totalCallAdd = oiTrendData.reduce((sum, d) => sum + d.callOI, 0)
-                                const summaryBarData = [
-                                    { name: 'Put', value: totalPutAdd, fill: '#10b981' },
-                                    { name: 'Call', value: totalCallAdd, fill: '#ef4444' },
-                                ]
-                                return (
-                                    <>
-                                        <div className="flex gap-2">
-                                            {/* Line chart — per-interval deltas */}
-                                            <div style={{ width: '80%' }} className="min-w-0">
-                                                <ResponsiveContainer width="100%" height={180}>
-                                                    <LineChart data={oiTrendData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                                                        <CartesianGrid strokeDasharray="3 3" stroke="#21262d" />
-                                                        <XAxis
-                                                            dataKey="label"
-                                                            tick={{ fontSize: 8, fill: '#6b7280' }}
-                                                            axisLine={{ stroke: '#30363d' }}
-                                                        />
-                                                        <YAxis
-                                                            tick={{ fontSize: 8, fill: '#6b7280' }}
-                                                            tickFormatter={(v) => `${(v / 100000).toFixed(0)}L`}
-                                                            axisLine={{ stroke: '#30363d' }}
-                                                            width={35}
-                                                            domain={[(dataMin: number) => Math.floor(dataMin * 0.95), (dataMax: number) => Math.ceil(dataMax * 1.05)]}
-                                                        />
-                                                        <Tooltip
-                                                            wrapperStyle={{ zIndex: 1000 }}
-                                                            content={({ active, payload, label }: any) => {
-                                                                if (!active || !payload || payload.length === 0) return null
-                                                                return (
-                                                                    <div style={{
-                                                                        backgroundColor: '#1c2128',
-                                                                        border: '1px solid #30363d',
-                                                                        borderRadius: '8px',
-                                                                        padding: '10px 14px',
-                                                                        fontSize: '12px',
-                                                                        color: '#e6edf3',
-                                                                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                                                                        minWidth: '150px',
-                                                                    }}>
-                                                                        <p style={{ margin: 0, fontWeight: 'bold', marginBottom: '6px' }}>🕐 {label}</p>
-                                                                        {payload.map((item: any, i: number) => {
-                                                                            const val = item.value
-                                                                            const arrow = val > 0 ? '▲' : val < 0 ? '▼' : '—'
-                                                                            return (
-                                                                                <p key={i} style={{ margin: '3px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: item.color, display: 'inline-block' }}></span>
-                                                                                    <span style={{ color: '#9ca3af' }}>{item.dataKey === 'putOI' ? 'Put OI' : 'Call OI'}:</span>
-                                                                                    <span style={{ fontWeight: 'bold', color: val > 0 ? '#10b981' : val < 0 ? '#ef4444' : '#6b7280' }}>{arrow} {val > 0 ? '+' : ''}{formatLakhs(val)}</span>
-                                                                                </p>
-                                                                            )
-                                                                        })}
-                                                                    </div>
-                                                                )
-                                                            }}
-                                                        />
-                                                        <Line type="monotone" dataKey="putOI" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} name="Put OI" />
-                                                        <Line type="monotone" dataKey="callOI" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} name="Call OI" />
-                                                    </LineChart>
-                                                </ResponsiveContainer>
+                            {
+                                oiTrendData.length > 0 ? (() => {
+                                    const totalPutAdd = oiTrendData.reduce((sum, d) => sum + d.putOI, 0)
+                                    const totalCallAdd = oiTrendData.reduce((sum, d) => sum + d.callOI, 0)
+                                    const summaryBarData = [
+                                        { name: 'Put', value: totalPutAdd, fill: '#10b981' },
+                                        { name: 'Call', value: totalCallAdd, fill: '#ef4444' },
+                                    ]
+                                    return (
+                                        <>
+                                            <div className="flex gap-2">
+                                                {/* Line chart — per-interval deltas */}
+                                                <div style={{ width: '80%' }} className="min-w-0">
+                                                    <ResponsiveContainer width="100%" height={180}>
+                                                        <LineChart data={oiTrendData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                                                            <CartesianGrid strokeDasharray="3 3" stroke="#21262d" />
+                                                            <XAxis
+                                                                dataKey="label"
+                                                                tick={{ fontSize: 8, fill: '#6b7280' }}
+                                                                axisLine={{ stroke: '#30363d' }}
+                                                            />
+                                                            <YAxis
+                                                                tick={{ fontSize: 8, fill: '#6b7280' }}
+                                                                tickFormatter={(v) => `${(v / 100000).toFixed(0)}L`}
+                                                                axisLine={{ stroke: '#30363d' }}
+                                                                width={35}
+                                                                domain={[(dataMin: number) => Math.floor(dataMin * 0.95), (dataMax: number) => Math.ceil(dataMax * 1.05)]}
+                                                            />
+                                                            <Tooltip
+                                                                wrapperStyle={{ zIndex: 1000 }}
+                                                                content={({ active, payload, label }: any) => {
+                                                                    if (!active || !payload || payload.length === 0) return null
+                                                                    return (
+                                                                        <div style={{
+                                                                            backgroundColor: '#1c2128',
+                                                                            border: '1px solid #30363d',
+                                                                            borderRadius: '8px',
+                                                                            padding: '10px 14px',
+                                                                            fontSize: '12px',
+                                                                            color: '#e6edf3',
+                                                                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                                                            minWidth: '150px',
+                                                                        }}>
+                                                                            <p style={{ margin: 0, fontWeight: 'bold', marginBottom: '6px' }}>🕐 {label}</p>
+                                                                            {payload.map((item: any, i: number) => {
+                                                                                const val = item.value
+                                                                                const arrow = val > 0 ? '▲' : val < 0 ? '▼' : '—'
+                                                                                return (
+                                                                                    <p key={i} style={{ margin: '3px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: item.color, display: 'inline-block' }}></span>
+                                                                                        <span style={{ color: '#9ca3af' }}>{item.dataKey === 'putOI' ? 'Put OI' : 'Call OI'}:</span>
+                                                                                        <span style={{ fontWeight: 'bold', color: val > 0 ? '#10b981' : val < 0 ? '#ef4444' : '#6b7280' }}>{arrow} {val > 0 ? '+' : ''}{formatLakhs(val)}</span>
+                                                                                    </p>
+                                                                                )
+                                                                            })}
+                                                                        </div>
+                                                                    )
+                                                                }}
+                                                            />
+                                                            <Line type="monotone" dataKey="putOI" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} name="Put OI" />
+                                                            <Line type="monotone" dataKey="callOI" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} name="Call OI" />
+                                                        </LineChart>
+                                                    </ResponsiveContainer>
+                                                </div>
+
+                                                {/* Summary bar — total additions */}
+                                                <div style={{ width: '20%' }} className="flex-shrink-0">
+                                                    <ResponsiveContainer width="100%" height={180}>
+                                                        <BarChart data={summaryBarData} margin={{ top: 5, right: 5, left: 0, bottom: 30 }}>
+                                                            <XAxis
+                                                                dataKey="name"
+                                                                axisLine={{ stroke: '#30363d' }}
+                                                                tick={({ x, y, payload }) => {
+                                                                    const item = summaryBarData.find(d => d.name === payload.value)
+                                                                    const val = item?.value || 0
+                                                                    const color = item?.fill || '#9ca3af'
+                                                                    return (
+                                                                        <g transform={`translate(${x},${y})`}>
+                                                                            <text x={0} y={15} textAnchor="middle" fill={color} fontSize={12} fontWeight="bold">
+                                                                                {val < 0 ? '-' : ''}{formatLakhs(val)}
+                                                                            </text>
+                                                                            <text x={0} y={30} textAnchor="middle" fill="#9ca3af" fontSize={11} fontWeight="bold">
+                                                                                {payload.value}
+                                                                            </text>
+                                                                        </g>
+                                                                    )
+                                                                }}
+                                                            />
+                                                            <YAxis hide />
+                                                            <Tooltip
+                                                                wrapperStyle={{ zIndex: 1000 }}
+                                                                content={({ active, payload }: any) => {
+                                                                    if (!active || !payload || payload.length === 0) return null
+                                                                    const d = payload[0]
+                                                                    const val = d?.value || 0
+                                                                    return (
+                                                                        <div style={{
+                                                                            backgroundColor: '#1c2128',
+                                                                            border: '1px solid #30363d',
+                                                                            borderRadius: '8px',
+                                                                            padding: '8px 12px',
+                                                                            fontSize: '11px',
+                                                                            color: '#e6edf3',
+                                                                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                                                        }}>
+                                                                            <p style={{ margin: 0, color: d?.payload?.fill, fontWeight: 'bold' }}>
+                                                                                {d?.payload?.name} OI: {val > 0 ? '+' : ''}{formatLakhs(val)}
+                                                                                {val >= 0 ? ' ▲' : ' ▼'}
+                                                                            </p>
+                                                                        </div>
+                                                                    )
+                                                                }}
+                                                            />
+                                                            <Bar dataKey="value" barSize={28} radius={[4, 4, 0, 0]}>
+                                                                {summaryBarData.map((entry, index) => (
+                                                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                                                ))}
+                                                            </Bar>
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
+                                                </div>
                                             </div>
 
-                                            {/* Summary bar — total additions */}
-                                            <div style={{ width: '20%' }} className="flex-shrink-0">
-                                                <ResponsiveContainer width="100%" height={180}>
-                                                    <BarChart data={summaryBarData} margin={{ top: 5, right: 5, left: 0, bottom: 30 }}>
-                                                        <XAxis
-                                                            dataKey="name"
-                                                            axisLine={{ stroke: '#30363d' }}
-                                                            tick={({ x, y, payload }) => {
-                                                                const item = summaryBarData.find(d => d.name === payload.value)
-                                                                const val = item?.value || 0
-                                                                const color = item?.fill || '#9ca3af'
-                                                                return (
-                                                                    <g transform={`translate(${x},${y})`}>
-                                                                        <text x={0} y={15} textAnchor="middle" fill={color} fontSize={12} fontWeight="bold">
-                                                                            {val < 0 ? '-' : ''}{formatLakhs(val)}
-                                                                        </text>
-                                                                        <text x={0} y={30} textAnchor="middle" fill="#9ca3af" fontSize={11} fontWeight="bold">
-                                                                            {payload.value}
-                                                                        </text>
-                                                                    </g>
-                                                                )
-                                                            }}
-                                                        />
-                                                        <YAxis hide />
-                                                        <Tooltip
-                                                            wrapperStyle={{ zIndex: 1000 }}
-                                                            content={({ active, payload }: any) => {
-                                                                if (!active || !payload || payload.length === 0) return null
-                                                                const d = payload[0]
-                                                                const val = d?.value || 0
-                                                                return (
-                                                                    <div style={{
-                                                                        backgroundColor: '#1c2128',
-                                                                        border: '1px solid #30363d',
-                                                                        borderRadius: '8px',
-                                                                        padding: '8px 12px',
-                                                                        fontSize: '11px',
-                                                                        color: '#e6edf3',
-                                                                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                                                                    }}>
-                                                                        <p style={{ margin: 0, color: d?.payload?.fill, fontWeight: 'bold' }}>
-                                                                            {d?.payload?.name} OI: {val > 0 ? '+' : ''}{formatLakhs(val)}
-                                                                            {val >= 0 ? ' ▲' : ' ▼'}
-                                                                        </p>
-                                                                    </div>
-                                                                )
-                                                            }}
-                                                        />
-                                                        <Bar dataKey="value" barSize={28} radius={[4, 4, 0, 0]}>
-                                                            {summaryBarData.map((entry, index) => (
-                                                                <Cell key={`cell-${index}`} fill={entry.fill} />
-                                                            ))}
-                                                        </Bar>
-                                                    </BarChart>
-                                                </ResponsiveContainer>
+                                            <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="flex items-center gap-1">
+                                                        <span className="w-3 h-0.5 bg-emerald-500 inline-block rounded"></span>
+                                                        Put OI
+                                                    </span>
+                                                    <span className="flex items-center gap-1">
+                                                        <span className="w-3 h-0.5 bg-red-500 inline-block rounded"></span>
+                                                        Call OI
+                                                    </span>
+                                                </div>
+                                                <span>{oiTrendData.length} snapshots</span>
                                             </div>
-                                        </div>
-
-                                        <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
-                                            <div className="flex items-center gap-3">
-                                                <span className="flex items-center gap-1">
-                                                    <span className="w-3 h-0.5 bg-emerald-500 inline-block rounded"></span>
-                                                    Put OI
-                                                </span>
-                                                <span className="flex items-center gap-1">
-                                                    <span className="w-3 h-0.5 bg-red-500 inline-block rounded"></span>
-                                                    Call OI
-                                                </span>
-                                            </div>
-                                            <span>{oiTrendData.length} snapshots</span>
-                                        </div>
-                                    </>
+                                        </>
+                                    )
+                                })() : (
+                                    <div className="text-center text-gray-500 text-xs py-8">No trend data available</div>
                                 )
-                            })() : (
-                                <div className="text-center text-gray-500 text-xs py-8">No trend data available</div>
-                            )}
-                        </div>
-                    </div>
+                            }
+                        </div >
+                    </div >
                 )}
-            </div>
+            </div >
 
 
             <Footer />
-        </div>
+        </div >
     )
 }

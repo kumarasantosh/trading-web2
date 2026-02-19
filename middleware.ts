@@ -15,6 +15,7 @@ const isPublicRoute = createRouteMatcher([
     '/sign-in(.*)', // Sign-in pages (automatically public)
     '/sign-up(.*)', // Sign-up pages (automatically public)
     '/api(.*)', // All API routes (for cron jobs, webhooks, etc.)
+    '/index-analysis(.*)', // Index Analysis page
 ])
 
 export default clerkMiddleware(async (auth, req) => {
