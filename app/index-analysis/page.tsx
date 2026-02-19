@@ -899,7 +899,7 @@ export default function IndexAnalysisPage() {
                                                                     )
                                                                 }}
                                                             />
-                                                            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                                            <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={40}>
                                                                 {[
                                                                     { fill: '#10b981' },
                                                                     { fill: '#ef4444' },
@@ -1086,34 +1086,7 @@ export default function IndexAnalysisPage() {
                                                     </div>
 
                                                     {/* Merged Sentiment Section */}
-                                                    <div className="mt-4 pt-3 border-t border-gray-700/50">
-                                                        <div className="grid grid-cols-2 gap-4">
-                                                            <div className="flex flex-col justify-center">
-                                                                <div className="flex items-center gap-2 mb-1">
-                                                                    <span className="text-lg">{pcr >= 1 ? '🟢' : pcr >= 0.7 ? '🟡' : '🔴'}</span>
-                                                                    <span className={`text-sm font-bold ${pcr >= 1 ? 'text-emerald-400' : pcr >= 0.7 ? 'text-yellow-400' : 'text-red-400'}`}>
-                                                                        {pcr >= 1 ? 'Bullish' : pcr >= 0.7 ? 'Neutral' : 'Bearish'}
-                                                                    </span>
-                                                                </div>
-                                                                <p className="text-[10px] text-gray-500">PCR: <span className="text-gray-300 font-semibold">{pcr.toFixed(2)}</span></p>
-                                                            </div>
 
-                                                            <div className="text-[10px] space-y-1 border-l border-gray-700/50 pl-4">
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-gray-500">Max Pain</span>
-                                                                    <span className="text-gray-300 font-semibold">{maxPain}</span>
-                                                                </div>
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-gray-500">Supp 1</span>
-                                                                    <span className="text-emerald-400 font-semibold">{support1}</span>
-                                                                </div>
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-gray-500">Res 1</span>
-                                                                    <span className="text-red-400 font-semibold">{resistance1}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
                                                 </>
                                             )
                                         })()
@@ -1139,6 +1112,7 @@ export default function IndexAnalysisPage() {
                                     <option value={60}>1 Hr</option>
                                     <option value={120}>2 Hr</option>
                                     <option value={240}>4 Hr</option>
+                                    <option value={480}>8 Hr</option>
                                 </select>
                             </div>
 

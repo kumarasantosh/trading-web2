@@ -33,11 +33,11 @@ export async function GET(request: NextRequest) {
                 allCookies = setCookieHeader.split(',').map(c => c.trim().split(';')[0]).join('; ');
             }
         }
-        
+
         // Step 2: Visit the actual option chain page to establish session
         const optionChainPageUrl = `https://www.nseindia.com/get-quote/optionchain/${symbol}/${symbol}-50`;
         let pageCookieHeaders: string[] = [];
-        
+
         try {
             const pageResponse = await fetch(optionChainPageUrl, {
                 headers: {
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
                     'Cookie': allCookies,
                 },
             });
-            
+
             pageCookieHeaders = pageResponse.headers.getSetCookie?.() || [];
             if (pageCookieHeaders.length > 0) {
                 const pageCookies = pageCookieHeaders.map(cookie => cookie.split(';')[0]).join('; ');
@@ -57,13 +57,13 @@ export async function GET(request: NextRequest) {
         } catch (pageError) {
             console.warn('Failed to visit option chain page, continuing anyway:', pageError);
         }
-        
+
         // Small delay to ensure session is established
         await new Promise(resolve => setTimeout(resolve, 1500));
-        
+
         // Fetch expiry dates from dropdown API
         const dropdownUrl = `https://www.nseindia.com/api/NextApi/apiClient/GetQuoteApi?functionName=getOptionChainDropdown&symbol=${symbol}`;
-        
+
         const response = await fetch(dropdownUrl, {
             headers: {
                 'Accept': '*/*',
@@ -91,11 +91,11 @@ export async function GET(request: NextRequest) {
         }
 
         const data = await response.json();
-        
+
         // Extract expiry dates from the response
         // The response structure may vary, so we need to handle different formats
         let expiries: string[] = [];
-        
+
         if (data && Array.isArray(data)) {
             expiries = data;
         } else if (data?.expiryDates && Array.isArray(data.expiryDates)) {
@@ -105,14 +105,14 @@ export async function GET(request: NextRequest) {
         } else if (data?.records?.expiryDates && Array.isArray(data.records.expiryDates)) {
             expiries = data.records.expiryDates;
         }
-        
+
         // Convert dates from DD-MMM-YYYY to DD-MM-YYYY format
         const monthMap: { [key: string]: string } = {
             'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
             'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
             'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
         };
-        
+
         const convertedExpiries = expiries.map(expiry => {
             // Check if date is in DD-MMM-YYYY format (e.g., "06-Jan-2026")
             const mmmFormatMatch = expiry.match(/^(\d{2})-([A-Za-z]{3})-(\d{4})$/);
@@ -126,11 +126,8 @@ export async function GET(request: NextRequest) {
             // If already in DD-MM-YYYY format, return as is
             return expiry;
         });
-        
-        // Get first 4 expiry dates
-        const firstFourExpiries = convertedExpiries.slice(0, 4);
-        
-        return NextResponse.json({ expiries: firstFourExpiries });
+
+        return NextResponse.json({ expiries: convertedExpiries });
 
     } catch (error: any) {
         console.error('Expiry Dates API Error:', error);
