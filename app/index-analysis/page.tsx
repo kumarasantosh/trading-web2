@@ -35,8 +35,8 @@ export default function IndexAnalysisPage() {
     const isReplayModeRef = useRef(isReplayMode)
     isReplayModeRef.current = isReplayMode
     const [atmViewMode, setAtmViewMode] = useState<'volume' | 'oiChange'>('oiChange')
-    // Add state for OI Compass View Mode
-    const [oiCompassMode, setOiCompassMode] = useState<'change' | 'total'>('change')
+    // OI Compass View Mode state removed as we are showing both
+
     const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
     const indices = ['NIFTY', 'BANKNIFTY', 'FINNIFTY']
@@ -445,8 +445,10 @@ export default function IndexAnalysisPage() {
     // Prepare chart data: positive change = right (buildup), negative = left (unwinding)
     // Sort strikes descending so highest appears at top
     // For Total OI, we just map callOI and putOI.
+    // Prepare chart data: positive change = right (buildup), negative = left (unwinding)
+    // Sort strikes ascending for X-axis (Low to High)
     const compassData = [...data]
-        .sort((a, b) => b.strikePrice - a.strikePrice)
+        .sort((a, b) => a.strikePrice - b.strikePrice)
         .map(d => ({
             strikePrice: d.strikePrice,
             callOIChange: d.callOIChange,
@@ -471,6 +473,29 @@ export default function IndexAnalysisPage() {
     // Custom label for donut
     const renderDonutLabel = ({ name, percent }: any) => {
         return `${(percent * 100).toFixed(0)}%`
+    }
+
+    // Custom tick for vertical X-axis labels
+    const CustomXAxisTick = (props: any) => {
+        const { x, y, payload } = props
+        const isATM = payload.value === atmStrike
+        return (
+            <g transform={`translate(${x},${y})`}>
+                <text
+                    x={0}
+                    y={0}
+                    dy={3}
+                    dx={-10}
+                    textAnchor="end"
+                    fill={isATM ? "#f59e0b" : "#e6edf3"} // Highlight ATM (Amber), others White
+                    transform="rotate(-90)"
+                    fontSize={isATM ? 11 : 10}
+                    fontWeight="bold"
+                >
+                    {payload.value}
+                </text>
+            </g>
+        )
     }
 
     return (
@@ -587,195 +612,148 @@ export default function IndexAnalysisPage() {
                         {/* ROW 1: 3 columns — 60% / 20% / 20% */}
                         <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-6">
                             {/* OI Compass — Main Chart (60%) */}
-                            <div className="bg-[#161b22] rounded-xl border border-gray-700/50 p-5">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-4">
-                                        <h2 className="text-base font-bold text-white flex items-center gap-2">
-                                            <span className="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>
-                                            OI Compass
-                                            <span className="text-xs text-gray-500 font-normal ml-1">
-                                                ({oiCompassMode === 'change' ? 'Change in OI' : 'Total OI'})
-                                            </span>
-                                        </h2>
-                                        {/* Compass Mode Toggle */}
-                                        <div className="flex bg-[#21262d] rounded-lg p-0.5 ml-2">
-                                            <button
-                                                onClick={() => setOiCompassMode('change')}
-                                                className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all ${oiCompassMode === 'change'
-                                                    ? 'bg-blue-500/20 text-blue-400 shadow-sm'
-                                                    : 'text-gray-400 hover:text-gray-200'
-                                                    }`}
-                                            >
-                                                Change in OI
-                                            </button>
-                                            <button
-                                                onClick={() => setOiCompassMode('total')}
-                                                className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all ${oiCompassMode === 'total'
-                                                    ? 'bg-blue-500/20 text-blue-400 shadow-sm'
-                                                    : 'text-gray-400 hover:text-gray-200'
-                                                    }`}
-                                            >
-                                                Total OI
-                                            </button>
-                                        </div>
-                                    </div>
-
+                            <div className="bg-[#161b22] rounded-xl border border-gray-700/50 p-5 flex flex-col gap-4">
+                                <div className="flex items-center justify-between">
+                                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>
+                                        OI Analysis
+                                    </h2>
                                     <div className="flex items-center gap-4 text-xs">
                                         <span className="flex items-center gap-1.5">
                                             <span className="w-3 h-1.5 rounded bg-red-500 inline-block"></span>
-                                            <span className="text-gray-400">{oiCompassMode === 'change' ? 'Call OI Chg' : 'Call OI'}</span>
+                                            <span className="text-gray-400">Call OI</span>
                                         </span>
                                         <span className="flex items-center gap-1.5">
                                             <span className="w-3 h-1.5 rounded bg-emerald-500 inline-block"></span>
-                                            <span className="text-gray-400">{oiCompassMode === 'change' ? 'Put OI Chg' : 'Put OI'}</span>
+                                            <span className="text-gray-400">Put OI</span>
                                         </span>
                                         <span className="flex items-center gap-1.5">
                                             <span className="w-5 h-3 rounded bg-amber-500/20 border border-amber-500/40 inline-block"></span>
                                             <span className="text-gray-400">ATM</span>
                                         </span>
-                                        {oiCompassMode === 'change' && (
-                                            "")}
                                     </div>
                                 </div>
 
-                                <ResponsiveContainer width="100%" height={550}>
-                                    <BarChart
-                                        data={compassData}
-                                        layout="vertical"
-                                        margin={{ top: 10, right: 30, left: 60, bottom: 10 }}
-                                        stackOffset="sign" // Important for handling negative values in 'change' mode correctly if needed, though here we use separate bars usually
-                                    >
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#21262d" horizontal={false} />
-                                        <XAxis
-                                            type="number"
-                                            tick={{ fontSize: 10, fill: '#6b7280' }}
-                                            tickFormatter={(value) => {
-                                                const lakhs = Math.abs(value) / 100000
-                                                return `${value < 0 ? '-' : ''}${lakhs.toFixed(0)}L`
-                                            }}
-                                            axisLine={{ stroke: '#30363d' }}
-                                        />
-                                        <YAxis
-                                            type="category"
-                                            dataKey="strikePrice"
-                                            tick={({ x, y, payload }: any) => {
-                                                const isATM = payload.value === atmStrike
-                                                return (
-                                                    <text
-                                                        x={x}
-                                                        y={y}
-                                                        textAnchor="end"
-                                                        dominantBaseline="middle"
-                                                        fill={isATM ? '#f59e0b' : '#8b949e'}
-                                                        fontSize={isATM ? 12 : 10}
-                                                        fontWeight={isATM ? 'bold' : 'normal'}
-                                                    >
-                                                        {isATM ? `▶ ${payload.value}` : payload.value}
-                                                    </text>
-                                                )
-                                            }}
-                                            width={65}
-                                            axisLine={{ stroke: '#30363d' }}
-                                            interval={0}
-                                        />
-                                        <Tooltip
-                                            cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                                            wrapperStyle={{ zIndex: 1000 }}
-                                            content={({ active, payload, label }: any) => {
-                                                if (!active || !payload || payload.length === 0) return null
-                                                const isATM = Number(label) === atmStrike
-                                                return (
-                                                    <div style={{
-                                                        backgroundColor: '#1c2128',
-                                                        border: '1px solid #30363d',
-                                                        borderRadius: '8px',
-                                                        padding: '10px 14px',
-                                                        fontSize: '12px',
-                                                        color: '#e6edf3',
-                                                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                                                        minWidth: '180px',
-                                                    }}>
-                                                        <p style={{ fontWeight: 'bold', marginBottom: '6px', color: isATM ? '#f59e0b' : '#e6edf3' }}>
-                                                            Strike: {label}{isATM ? ' ⭐ ATM' : ''}
-                                                        </p>
-                                                        {payload.map((item: any, i: number) => {
-                                                            const val = item.value
-                                                            const lakhs = Math.abs(val) / 100000
-                                                            // Direction only relevant for change mode usually, but valid for all
-                                                            const direction = oiCompassMode === 'change'
-                                                                ? (val > 0 ? '📈 Buildup' : val < 0 ? '📉 Unwinding' : '—')
-                                                                : ''
-                                                            const color = (item.dataKey === 'callOIChange' || item.dataKey === 'callOI') ? '#ef4444' : '#10b981'
-                                                            const name = oiCompassMode === 'change'
-                                                                ? (item.dataKey === 'callOIChange' ? 'Call OI Chg' : 'Put OI Chg')
-                                                                : (item.dataKey === 'callOI' ? 'Total Call OI' : 'Total Put OI')
-
-                                                            return (
-                                                                <p key={i} style={{ margin: '3px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: color, display: 'inline-block', flexShrink: 0 }}></span>
-                                                                    <span style={{ color: '#9ca3af' }}>{name}:</span>
-                                                                    <span style={{ fontWeight: 'bold', color }}>{val < 0 ? '-' : ''}{lakhs.toFixed(2)}L</span>
-                                                                    {direction && <span style={{ color: '#6b7280', fontSize: '10px' }}>{direction}</span>}
+                                {/* Top Chart: Total Open Interest */}
+                                <div className="relative">
+                                    <h3 className="text-xs font-semibold text-gray-400 mb-2 absolute top-0 left-0 z-10">Open Interest</h3>
+                                    <ResponsiveContainer width="100%" height={280}>
+                                        <BarChart
+                                            data={compassData}
+                                            margin={{ top: 20, right: 10, left: 0, bottom: 0 }}
+                                            barGap={2}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#21262d" vertical={false} />
+                                            <XAxis
+                                                dataKey="strikePrice"
+                                                tick={false}
+                                                axisLine={{ stroke: '#30363d' }}
+                                                height={10}
+                                            />
+                                            <YAxis
+                                                tick={{ fontSize: 10, fill: '#6b7280' }}
+                                                tickFormatter={(value) => {
+                                                    const lakhs = Math.abs(value) / 100000
+                                                    return `${lakhs.toFixed(0)}L`
+                                                }}
+                                                axisLine={{ stroke: '#30363d' }}
+                                                width={40}
+                                            />
+                                            <Tooltip
+                                                cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                                                content={({ active, payload, label }: any) => {
+                                                    if (!active || !payload || payload.length === 0) return null
+                                                    const isATM = Number(label) === atmStrike
+                                                    return (
+                                                        <div className="bg-[#1c2128] border border-[#30363d] rounded-lg p-3 shadow-xl z-50">
+                                                            <p className={`font-bold mb-1 ${isATM ? 'text-amber-400' : 'text-gray-200'}`}>
+                                                                Strike: {label}{isATM ? ' (ATM)' : ''}
+                                                            </p>
+                                                            {payload.map((entry: any, i: number) => (
+                                                                <p key={i} className="text-xs flex items-center gap-2 mb-1">
+                                                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></span>
+                                                                    <span className="text-gray-400">{entry.name}:</span>
+                                                                    <span className="font-mono" style={{ color: entry.color }}>
+                                                                        {(Math.abs(entry.value) / 100000).toFixed(2)}L
+                                                                    </span>
                                                                 </p>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                )
-                                            }}
-                                        />
-                                        <ReferenceLine
-                                            x={0}
-                                            stroke="#484f58"
-                                            strokeWidth={1}
-                                        />
-                                        <ReferenceLine
-                                            y={atmStrike.toString()}
-                                            stroke="#f59e0b"
-                                            strokeDasharray="5 5"
-                                            strokeWidth={2}
-                                            label={{ value: 'ATM', fill: '#f59e0b', fontSize: 10, position: 'right' }}
-                                        />
-                                        <Bar
-                                            dataKey={oiCompassMode === 'change' ? "callOIChange" : "callOI"}
-                                            barSize={7}
-                                            radius={[2, 2, 2, 2]}
-                                            fill="#ef4444"
+                                                            ))}
+                                                        </div>
+                                                    )
+                                                }}
+                                            />
+                                            <ReferenceLine x={atmStrike} stroke="#f59e0b" strokeDasharray="3 3" />
+                                            <Bar dataKey="callOI" name="Call OI" fill="#ef4444" radius={[2, 2, 0, 0]} barSize={8} />
+                                            <Bar dataKey="putOI" name="Put OI" fill="#10b981" radius={[2, 2, 0, 0]} barSize={8} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+
+                                {/* Bottom Chart: Change in Open Interest */}
+                                <div className="relative">
+                                    <h3 className="text-xs font-semibold text-gray-400 mb-2 absolute top-0 left-0 z-10">Change in OI</h3>
+                                    <ResponsiveContainer width="100%" height={280}>
+                                        <BarChart
+                                            data={compassData}
+                                            margin={{ top: 20, right: 10, left: 0, bottom: 0 }}
+                                            barGap={2}
                                         >
-                                            {compassData.map((entry, index) => (
-                                                <Cell
-                                                    key={`call-${index}`}
-                                                    fill={
-                                                        oiCompassMode === 'change'
-                                                            ? (entry.callOIChange >= 0 ? '#ef4444' : '#ef444480')
-                                                            : '#ef4444'
-                                                    }
-                                                    stroke={entry.isATM ? '#f59e0b' : 'none'}
-                                                    strokeWidth={entry.isATM ? 1 : 0}
-                                                />
-                                            ))}
-                                        </Bar>
-                                        <Bar
-                                            dataKey={oiCompassMode === 'change' ? "putOIChange" : "putOI"}
-                                            barSize={7}
-                                            radius={[2, 2, 2, 2]}
-                                            fill="#10b981"
-                                        >
-                                            {compassData.map((entry, index) => (
-                                                <Cell
-                                                    key={`put-${index}`}
-                                                    fill={
-                                                        oiCompassMode === 'change'
-                                                            ? (entry.putOIChange >= 0 ? '#10b981' : '#10b98180')
-                                                            : '#10b981'
-                                                    }
-                                                    stroke={entry.isATM ? '#f59e0b' : 'none'}
-                                                    strokeWidth={entry.isATM ? 1 : 0}
-                                                />
-                                            ))}
-                                        </Bar>
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#21262d" vertical={false} />
+                                            <XAxis
+                                                dataKey="strikePrice"
+                                                tick={<CustomXAxisTick />}
+                                                interval={0} // Force show all if possible
+                                                axisLine={{ stroke: '#30363d' }}
+                                                height={60}
+                                            />
+                                            <YAxis
+                                                tick={{ fontSize: 10, fill: '#6b7280' }}
+                                                tickFormatter={(value) => {
+                                                    const lakhs = Math.abs(value) / 100000
+                                                    return `${lakhs.toFixed(0)}L`
+                                                }}
+                                                axisLine={{ stroke: '#30363d' }}
+                                                width={40}
+                                            />
+                                            <Tooltip
+                                                cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                                                content={({ active, payload, label }: any) => {
+                                                    if (!active || !payload || payload.length === 0) return null
+                                                    const isATM = Number(label) === atmStrike
+                                                    return (
+                                                        <div className="bg-[#1c2128] border border-[#30363d] rounded-lg p-3 shadow-xl z-50">
+                                                            <p className={`font-bold mb-1 ${isATM ? 'text-amber-400' : 'text-gray-200'}`}>
+                                                                Strike: {label}{isATM ? ' (ATM)' : ''}
+                                                            </p>
+                                                            {payload.map((entry: any, i: number) => (
+                                                                <p key={i} className="text-xs flex items-center gap-2 mb-1">
+                                                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></span>
+                                                                    <span className="text-gray-400">{entry.name}:</span>
+                                                                    <span className="font-mono" style={{ color: entry.color }}>
+                                                                        {(Math.abs(entry.value) / 100000).toFixed(2)}L
+                                                                    </span>
+                                                                </p>
+                                                            ))}
+                                                        </div>
+                                                    )
+                                                }}
+                                            />
+                                            <ReferenceLine x={atmStrike} stroke="#f59e0b" strokeDasharray="3 3" label={{ value: 'ATM', position: 'top', fill: '#f59e0b', fontSize: 10 }} />
+                                            <ReferenceLine y={0} stroke="#484f58" />
+                                            <Bar dataKey="callOIChange" name="Call OI Chg" fill="#ef4444" radius={[2, 2, 0, 0]} barSize={8}>
+                                                {compassData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.callOIChange >= 0 ? '#ef4444' : '#ef444480'} />
+                                                ))}
+                                            </Bar>
+                                            <Bar dataKey="putOIChange" name="Put OI Chg" fill="#10b981" radius={[2, 2, 0, 0]} barSize={8}>
+                                                {compassData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.putOIChange >= 0 ? '#10b981' : '#10b98180'} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
 
 
                             {/* Column 2 (40%): Merged PVC Widget + ATM + Sentiment */}
