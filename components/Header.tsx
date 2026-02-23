@@ -75,6 +75,15 @@ export default function Header({ forceDarkText = false }: HeaderProps) {
                   Option Data
                 </a>
                 <a
+                  href="/index-dashboard"
+                  className={`transition-colors font-medium ${useDarkText
+                    ? 'text-gray-700 hover:text-black'
+                    : 'text-white/80 hover:text-white'
+                    }`}
+                >
+                  Index Dashboard
+                </a>
+                <a
                   href="/breakout-stocks"
                   className={`transition-colors font-medium ${useDarkText
                     ? 'text-gray-700 hover:text-black'
@@ -165,6 +174,13 @@ export default function Header({ forceDarkText = false }: HeaderProps) {
                 className="block w-full text-left text-black hover:text-gray-600 transition-colors font-medium py-2"
               >
                 Option Data
+              </a>
+              <a
+                href="/index-dashboard"
+                onClick={() => document.getElementById('mobile-nav')?.classList.add('hidden')}
+                className="block w-full text-left text-black hover:text-gray-600 transition-colors font-medium py-2"
+              >
+                Index Dashboard
               </a>
               <a
                 href="/breakout-stocks"
