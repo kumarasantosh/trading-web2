@@ -5,6 +5,43 @@ import { fetchOptionChainData } from '@/services/optionChain';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
+const MONTH_MAP: Record<string, string> = {
+    JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
+    JUL: '07', AUG: '08', SEP: '09', OCT: '10', NOV: '11', DEC: '12'
+};
+
+function normalizeExpiryDateForStorage(expiryDate?: string | null): string {
+    if (!expiryDate) return '';
+
+    const normalized = expiryDate.trim().replace(/\+/g, ' ');
+
+    // DD-MM-YYYY
+    const ddMmYyyy = normalized.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    if (ddMmYyyy) {
+        const [, day, month, year] = ddMmYyyy;
+        return `${year}-${month}-${day}`;
+    }
+
+    // DD-MMM-YYYY
+    const ddMmmYyyy = normalized.match(/^(\d{2})-([A-Za-z]{3})-(\d{4})$/);
+    if (ddMmmYyyy) {
+        const [, day, monthText, year] = ddMmmYyyy;
+        const month = MONTH_MAP[monthText.toUpperCase()];
+        if (month) return `${year}-${month}-${day}`;
+    }
+
+    // DD MMM YYYY (BSE)
+    const ddMmmYyyySpace = normalized.match(/^(\d{2})\s+([A-Za-z]{3})\s+(\d{4})$/);
+    if (ddMmmYyyySpace) {
+        const [, day, monthText, year] = ddMmmYyyySpace;
+        const month = MONTH_MAP[monthText.toUpperCase()];
+        if (month) return `${year}-${month}-${day}`;
+    }
+
+    // already normalized or unknown format
+    return normalized;
+}
+
 /**
  * Cron job API route that captures option chain data every 3 minutes
  * Runs during market hours (9:15 AM - 3:30 PM IST, Mon-Fri)
@@ -60,7 +97,7 @@ export async function GET(request: NextRequest) {
 
         console.log(`[OPTION-CHAIN-CRON] Capturing option chain at ${capturedAtISO}`);
 
-        const indices = ['NIFTY', 'BANKNIFTY', 'FINNIFTY'];
+        const indices = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'SENSEX'];
         const results: any[] = [];
         const errors: string[] = [];
 
@@ -121,25 +158,7 @@ export async function GET(request: NextRequest) {
 
                 // --- NEW: Save detailed snapshot to option_chain_snapshots ---
 
-                // Convert expiry date format (DD-MMM-YYYY -> YYYY-MM-DD)
-                const monthMap: Record<string, string> = {
-                    'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
-                    'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
-                };
-
-                let expiryDateForStorage = data.expiryDate || '';
-                if (expiryDateForStorage) {
-                    const parts = expiryDateForStorage.split('-');
-                    if (parts.length === 3) {
-                        const day = parts[0];
-                        const month = parts[1].toUpperCase();
-                        const year = parts[2];
-                        const monthNum = monthMap[month];
-                        if (monthNum) {
-                            expiryDateForStorage = `${year}-${monthNum}-${day}`;
-                        }
-                    }
-                }
+                const expiryDateForStorage = normalizeExpiryDateForStorage(data.expiryDate);
 
                 // Upsert into option_chain_snapshots
                 const { error: snapshotError } = await supabaseAdmin

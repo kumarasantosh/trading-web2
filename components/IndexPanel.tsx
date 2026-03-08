@@ -105,8 +105,22 @@ export default function IndexPanel({ symbol }: IndexPanelProps) {
         )
     }
 
-    const accentClass = symbol === 'NIFTY' ? 'bg-blue-500' : symbol === 'BANKNIFTY' ? 'bg-purple-500' : 'bg-cyan-500'
-    const borderAccent = symbol === 'NIFTY' ? 'border-blue-500/30' : symbol === 'BANKNIFTY' ? 'border-purple-500/30' : 'border-cyan-500/30'
+    const accentClass =
+        symbol === 'NIFTY'
+            ? 'bg-blue-500'
+            : symbol === 'BANKNIFTY'
+                ? 'bg-purple-500'
+                : symbol === 'SENSEX'
+                    ? 'bg-amber-500'
+                    : 'bg-cyan-500'
+    const borderAccent =
+        symbol === 'NIFTY'
+            ? 'border-blue-500/30'
+            : symbol === 'BANKNIFTY'
+                ? 'border-purple-500/30'
+                : symbol === 'SENSEX'
+                    ? 'border-amber-500/30'
+                    : 'border-cyan-500/30'
 
     const trendColor = trend === 'BULLISH' ? 'text-emerald-400' : trend === 'BEARISH' ? 'text-red-400' : 'text-yellow-400'
     const trendBg = trend === 'BULLISH' ? 'bg-emerald-500/10 border-emerald-500/30' : trend === 'BEARISH' ? 'bg-red-500/10 border-red-500/30' : 'bg-yellow-500/10 border-yellow-500/30'

@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabase, supabaseAdmin } from '@/lib/supabase'
+
+function getJwtRole(jwt?: string): string | null {
+    if (!jwt) return null
+    const parts = jwt.split('.')
+    if (parts.length < 2) return null
+    try {
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'))
+        return payload?.role || null
+    } catch {
+        return null
+    }
+}
 
 /**
  * API route to fetch saved market indices data
@@ -97,6 +109,15 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
     try {
+        const serviceRole = getJwtRole(process.env.SUPABASE_SERVICE_ROLE_KEY)
+        if (serviceRole !== 'service_role') {
+            console.error('[MARKET-INDICES] Invalid SUPABASE_SERVICE_ROLE_KEY role:', serviceRole)
+            return NextResponse.json(
+                { error: 'Server misconfiguration: SUPABASE_SERVICE_ROLE_KEY must have service_role' },
+                { status: 500 }
+            )
+        }
+
         const body = await request.json()
         const { indices } = body
 
@@ -121,7 +142,7 @@ export async function POST(request: NextRequest) {
         }))
 
         // Insert into Supabase (upsert to handle duplicates)
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('market_indices_snapshots')
             .upsert(snapshots, {
                 onConflict: 'index_name,captured_at',
@@ -150,4 +171,3 @@ export async function POST(request: NextRequest) {
 }
 
 export const dynamic = 'force-dynamic'
-

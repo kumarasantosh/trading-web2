@@ -51,6 +51,18 @@ function createSupabaseClient(url: string | undefined, key: string | undefined, 
     } : undefined)
 }
 
+function getJwtRole(jwt?: string): string | null {
+    if (!jwt) return null
+    const parts = jwt.split('.')
+    if (parts.length < 2) return null
+    try {
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'))
+        return payload?.role || null
+    } catch {
+        return null
+    }
+}
+
 // Supabase client for client-side usage (uses anon key)
 export const supabase = createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -64,6 +76,12 @@ console.log('[SUPABASE-LIB] Initializing supabaseAdmin...')
 console.log('[SUPABASE-LIB] URL exists:', !!process.env.NEXT_PUBLIC_SUPABASE_URL)
 console.log('[SUPABASE-LIB] Key exists:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
 console.log('[SUPABASE-LIB] Key length:', process.env.SUPABASE_SERVICE_ROLE_KEY?.length || 0)
+console.log('[SUPABASE-LIB] Service key role:', getJwtRole(process.env.SUPABASE_SERVICE_ROLE_KEY))
+console.log('[SUPABASE-LIB] Anon key role:', getJwtRole(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY))
+console.log(
+    '[SUPABASE-LIB] Service key equals anon key:',
+    process.env.SUPABASE_SERVICE_ROLE_KEY === process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+)
 
 export const supabaseAdmin = createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,

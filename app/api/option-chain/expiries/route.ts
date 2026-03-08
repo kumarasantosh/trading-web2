@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchSensexExpiries } from '@/services/optionChain';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +10,12 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
     try {
         const searchParams = request.nextUrl.searchParams;
-        const symbol = searchParams.get('symbol') || 'NIFTY';
+        const symbol = (searchParams.get('symbol') || 'NIFTY').toUpperCase();
+
+        if (symbol === 'SENSEX') {
+            const expiries = await fetchSensexExpiries();
+            return NextResponse.json({ expiries });
+        }
 
         // NSE requires proper session establishment
         // Step 1: Visit homepage to get initial cookies
@@ -137,4 +143,3 @@ export async function GET(request: NextRequest) {
         );
     }
 }
-

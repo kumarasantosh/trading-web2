@@ -93,6 +93,7 @@ export function useIndexData(symbol: string): IndexData {
         openingRangeHigh: 0, openingRangeLow: 0,
     })
     const intervalRef = useRef<NodeJS.Timeout | null>(null)
+    const prevOiByStrikeRef = useRef<Record<number, { callOI: number; putOI: number }> | null>(null)
 
     // Format number with L suffix (Lakhs)
     const formatLakhs = useCallback((value: number): string => {
@@ -201,7 +202,14 @@ export function useIndexData(symbol: string): IndexData {
     // Fetch market levels (yday high/low, opening range) from NSE indices API
     const fetchMarketLevels = useCallback(async () => {
         try {
-            const nseIndex = symbol === 'NIFTY' ? 'NIFTY 50' : symbol === 'BANKNIFTY' ? 'NIFTY BANK' : 'NIFTY FIN SERVICE'
+            const nseIndex =
+                symbol === 'NIFTY'
+                    ? 'NIFTY 50'
+                    : symbol === 'BANKNIFTY'
+                        ? 'NIFTY BANK'
+                        : symbol === 'SENSEX'
+                            ? 'SENSEX'
+                            : 'NIFTY FIN SERVICE'
 
             // Fetch from NSE indices API
             const res = await fetch('/api/nse/indices', { cache: 'no-store' })
@@ -346,6 +354,7 @@ export function useIndexData(symbol: string): IndexData {
             let totalCallOI = 0
             let totalPutOIChange = 0
             let totalCallOIChange = 0
+            const nextOiByStrike: Record<number, { callOI: number; putOI: number }> = {}
 
             dataArray.forEach((item: any) => {
                 if (!item) return
@@ -355,15 +364,32 @@ export function useIndexData(symbol: string): IndexData {
 
                 const callOI = ceData.openInterest || 0
                 const putOI = peData.openInterest || 0
-                const callOIChange = ceData.changeinOpenInterest || 0
-                const putOIChange = peData.changeinOpenInterest || 0
+                let callOIChange = ceData.changeinOpenInterest || 0
+                let putOIChange = peData.changeinOpenInterest || 0
                 const callVolume = ceData.totalTradedVolume || 0
                 const putVolume = peData.totalTradedVolume || 0
+
+                // BSE SENSEX currently returns OI change fields as empty/0 for many rows.
+                // Fallback to delta from previous snapshot so "Change in OI" still updates.
+                if (symbol === 'SENSEX' && callOIChange === 0 && putOIChange === 0 && strikePrice > 0) {
+                    const prev = prevOiByStrikeRef.current?.[Number(strikePrice)]
+                    if (prev) {
+                        callOIChange = Number(callOI) - prev.callOI
+                        putOIChange = Number(putOI) - prev.putOI
+                    }
+                }
 
                 totalCallOI += callOI
                 totalPutOI += putOI
                 totalCallOIChange += callOIChange
                 totalPutOIChange += putOIChange
+
+                if (strikePrice > 0) {
+                    nextOiByStrike[Number(strikePrice)] = {
+                        callOI: Number(callOI),
+                        putOI: Number(putOI),
+                    }
+                }
 
                 if (strikePrice > 0) {
                     processedData.push({
@@ -377,6 +403,8 @@ export function useIndexData(symbol: string): IndexData {
                     })
                 }
             })
+
+            prevOiByStrikeRef.current = nextOiByStrike
 
             const calculatedPCR = totalCallOI > 0 ? totalPutOI / totalCallOI : 0
             setPcr(calculatedPCR)
@@ -401,6 +429,32 @@ export function useIndexData(symbol: string): IndexData {
         }
     }, [expiryDate, availableExpiries.length, symbol])
 
+    // Fallback: fetch latest saved option-chain snapshot from DB
+    const fetchLatestSavedSnapshot = useCallback(async () => {
+        const now = new Date()
+        const start = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString()
+        const end = now.toISOString()
+
+        const fetchSnapshots = async (withExpiry: boolean) => {
+            const expiryPart = withExpiry && expiryDate ? `&expiryDate=${encodeURIComponent(expiryDate)}` : ''
+            const url = `/api/option-chain/save?symbol=${symbol}${expiryPart}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
+            const response = await fetch(url)
+            if (!response.ok) return []
+            const result = await response.json()
+            return Array.isArray(result.snapshots) ? result.snapshots : []
+        }
+
+        let snapshots = await fetchSnapshots(true)
+        if (snapshots.length === 0 && expiryDate) {
+            snapshots = await fetchSnapshots(false)
+        }
+        if (snapshots.length === 0) return null
+
+        return snapshots.reduce((latest: any, current: any) =>
+            new Date(current.captured_at).getTime() > new Date(latest.captured_at).getTime() ? current : latest
+        )
+    }, [symbol, expiryDate])
+
     // Fetch option chain data
     const fetchOptionChainData = useCallback(async () => {
         try {
@@ -415,16 +469,33 @@ export function useIndexData(symbol: string): IndexData {
             }
 
             const result = await response.json()
+            if (!result?.success) {
+                throw new Error(result?.error || 'Option-chain live API returned unsuccessful response')
+            }
             processOptionChainData(result, expiryDate)
             setDataCaptureTime(new Date())
             hasDataRef.current = true
         } catch (error) {
             console.error(`[${symbol}] Error fetching option chain:`, error)
-            if (!hasDataRef.current) setData([])
+            try {
+                const snapshot = await fetchLatestSavedSnapshot()
+                if (snapshot) {
+                    processOptionChainData(snapshot.option_chain_data, expiryDate || snapshot.expiry_date)
+                    setNiftySpot(snapshot.nifty_spot || 0)
+                    setDataCaptureTime(new Date(snapshot.captured_at))
+                    hasDataRef.current = true
+                    console.log(`[${symbol}] Loaded fallback snapshot at ${snapshot.captured_at}`)
+                } else if (!hasDataRef.current) {
+                    setData([])
+                }
+            } catch (fallbackError) {
+                console.error(`[${symbol}] Error loading fallback snapshot:`, fallbackError)
+                if (!hasDataRef.current) setData([])
+            }
         } finally {
             setLoading(false)
         }
-    }, [symbol, expiryDate, processOptionChainData])
+    }, [symbol, expiryDate, processOptionChainData, fetchLatestSavedSnapshot])
 
     // Fetch OI trendline data
     const fetchOiTrendline = useCallback(async () => {
@@ -514,8 +585,13 @@ export function useIndexData(symbol: string): IndexData {
         setLoading(true)
         setData([])
         hasDataRef.current = false
+        prevOiByStrikeRef.current = null
         setMarketLevels({ ydayHigh: 0, ydayLow: 0, ydayClose: 0, todayOpen: 0, openingRangeHigh: 0, openingRangeLow: 0 })
     }, [symbol])
+
+    useEffect(() => {
+        prevOiByStrikeRef.current = null
+    }, [symbol, expiryDate])
 
     // Fetch market levels on mount
     useEffect(() => {
