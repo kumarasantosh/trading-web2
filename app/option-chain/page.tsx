@@ -57,6 +57,7 @@ export default function OptionChainPage() {
     const pcrHistoryRef = useRef<PcrData[]>([])
     const [oiTotals, setOiTotals] = useState<{ callOI: number, putOI: number }>({ callOI: 0, putOI: 0 })
     const [maxPain, setMaxPain] = useState<number>(0)
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
 
     const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -64,6 +65,26 @@ export default function OptionChainPage() {
     // Update ref IMMEDIATELY (synchronously) when prop changes, not in useEffect
     const isReplayModeRef = useRef(isReplayMode)
     isReplayModeRef.current = isReplayMode // Sync update on every render
+
+    const isWeekendIST = useCallback(() => {
+        const istNow = new Date(Date.now() + IST_OFFSET_MS)
+        const day = istNow.getUTCDay()
+        return day === 0 || day === 6
+    }, [IST_OFFSET_MS])
+
+    const getLastTradingDateIST = useCallback(() => {
+        const istNow = new Date(Date.now() + IST_OFFSET_MS)
+        const day = istNow.getUTCDay()
+        const friday = new Date(istNow)
+        if (day === 0) friday.setUTCDate(friday.getUTCDate() - 2)
+        if (day === 6) friday.setUTCDate(friday.getUTCDate() - 1)
+        return friday.toISOString().split('T')[0]
+    }, [IST_OFFSET_MS])
+
+    const getWeekendReplayReferenceTime = useCallback((time: Date) => {
+        const [year, month, day] = getLastTradingDateIST().split('-').map(Number)
+        return new Date(year, month - 1, day, time.getHours(), time.getMinutes(), 0, 0)
+    }, [getLastTradingDateIST])
 
     // Check if we need to reset trendline (new trading day after 9:15 AM IST)
     const shouldResetTrendLine = useCallback((timestamp: Date): boolean => {
@@ -575,27 +596,50 @@ export default function OptionChainPage() {
             setData([]) // Clear data immediately
             setDataCaptureTime(null)
 
-            // Calculate time range around the selected time (±3 minutes for 3-minute capture interval)
-            // Similar to sectors - only return data if it's close to the target
-            const start = new Date(time)
-            start.setMinutes(start.getMinutes() - 2) // Reduced to ±2 minutes for 3-minute interval
-            const end = new Date(time)
-            end.setMinutes(end.getMinutes() + 2)
+            // On weekends, bind replay to Friday (same slider time).
+            const effectiveTime = isWeekendIST() ? getWeekendReplayReferenceTime(time) : time
+
+            // Calculate time range around the selected time.
+            // Kept wider than strict 3-min intervals so replay works with slight capture drift.
+            const start = new Date(effectiveTime)
+            start.setMinutes(start.getMinutes() - 5)
+            const end = new Date(effectiveTime)
+            end.setMinutes(end.getMinutes() + 5)
 
             const startISO = start.toISOString()
             const endISO = end.toISOString()
-            const targetTimestamp = time.getTime()
-            const MAX_TIME_DIFF_MS = 1.5 * 60 * 1000 // 1.5 minutes (half of 3-minute interval)
+            const targetTimestamp = effectiveTime.getTime()
+            const MAX_TIME_DIFF_MS = 5 * 60 * 1000
 
-            console.log('[OptionChain] Fetching historical data for time:', time.toISOString())
+            console.log('[OptionChain] Fetching historical data for time:', effectiveTime.toISOString())
             console.log('[OptionChain] Query range:', startISO, 'to', endISO)
 
-            const response = await fetch(
-                `/api/option-chain/save?symbol=${symbol}&expiryDate=${expiryDate}&start=${startISO}&end=${endISO}`
-            )
+            const fetchSnapshots = async (withExpiry: boolean) => {
+                const expiryPart = withExpiry && expiryDate ? `&expiryDate=${encodeURIComponent(expiryDate)}` : ''
+                const response = await fetch(
+                    `/api/option-chain/save?symbol=${symbol}${expiryPart}&start=${startISO}&end=${endISO}`
+                )
 
-            if (!response.ok) {
-                console.log('[OptionChain] API response not OK:', response.status)
+                if (!response.ok) {
+                    return { ok: false, snapshots: [] as Snapshot[], status: response.status }
+                }
+
+                const result = await response.json()
+                return {
+                    ok: true,
+                    snapshots: Array.isArray(result.snapshots) ? result.snapshots as Snapshot[] : [],
+                    status: response.status,
+                }
+            }
+
+            let queryResult = await fetchSnapshots(true)
+            if (queryResult.ok && queryResult.snapshots.length === 0 && expiryDate) {
+                console.log('[OptionChain] No snapshots for selected expiry, retrying without expiry filter')
+                queryResult = await fetchSnapshots(false)
+            }
+
+            if (!queryResult.ok) {
+                console.log('[OptionChain] API response not OK:', queryResult.status)
                 setNoDataForTime(true)
                 setData([])
                 setDataCaptureTime(null)
@@ -607,10 +651,9 @@ export default function OptionChainPage() {
                 return
             }
 
-            const result = await response.json()
-            if (result.snapshots && result.snapshots.length > 0) {
+            if (queryResult.snapshots.length > 0) {
                 // Find the closest snapshot to the selected time
-                const closest = result.snapshots.reduce((prev: Snapshot, curr: Snapshot) => {
+                const closest = queryResult.snapshots.reduce((prev: Snapshot, curr: Snapshot) => {
                     const prevDiff = Math.abs(new Date(prev.captured_at).getTime() - targetTimestamp)
                     const currDiff = Math.abs(new Date(curr.captured_at).getTime() - targetTimestamp)
                     return currDiff < prevDiff ? curr : prev
@@ -663,7 +706,7 @@ export default function OptionChainPage() {
         } finally {
             setLoading(false)
         }
-    }, [symbol, expiryDate, processOptionChainData, isReplayMode])
+    }, [symbol, expiryDate, processOptionChainData, isReplayMode, isWeekendIST, getWeekendReplayReferenceTime])
 
     // Handle time change from timeline slider
     const handleTimeChange = useCallback((time: Date) => {

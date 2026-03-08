@@ -681,9 +681,70 @@ export async function fetchStockData(symbols: string[]): Promise<{ symbol: strin
 }
 
 /**
- * Fetches data for sectoral indices
+ * Check if it's weekend (Saturday or Sunday) in IST
  */
-export async function fetchSectorData(): Promise<{ name: string; previousClose: number; changePercent: number; open: number; last: number; variation: number; oneWeekAgoVal: number; oneMonthAgoVal: number; oneYearAgoVal: number }[]> {
+function isWeekend(): boolean {
+  const now = new Date()
+  const istOffset = 5.5 * 60 * 60 * 1000
+  const istTime = new Date(now.getTime() + istOffset)
+  const dayOfWeek = istTime.getUTCDay()
+  return dayOfWeek === 0 || dayOfWeek === 6
+}
+
+/**
+ * Get last trading day (Friday) date as YYYY-MM-DD when it's weekend
+ */
+function getLastTradingDate(): string {
+  const now = new Date()
+  const istOffset = 5.5 * 60 * 60 * 1000
+  const istTime = new Date(now.getTime() + istOffset)
+  const dayOfWeek = istTime.getUTCDay()
+  const friday = new Date(istTime)
+  if (dayOfWeek === 0) {
+    friday.setDate(friday.getDate() - 2)
+  } else if (dayOfWeek === 6) {
+    friday.setDate(friday.getDate() - 1)
+  }
+  return friday.toISOString().split('T')[0]
+}
+
+/**
+ * Fetches data for sectoral indices
+ * On weekends, uses saved database snapshot (Friday's data)
+ */
+export async function fetchSectorData(): Promise<{ name: string; previousClose: number; changePercent: number; open: number; last: number; variation: number; oneWeekAgoVal: number; oneMonthAgoVal: number; oneYearAgoVal: number; capturedAt?: string }[]> {
+  // On weekends, use saved sector snapshots (Friday's data)
+  if (isWeekend()) {
+    try {
+      const lastTradingDate = getLastTradingDate()
+      const response = await fetch(`/api/snapshots?type=sector&date=${lastTradingDate}`, {
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store'
+      })
+      if (response.ok) {
+        const result = await response.json()
+        if (result.snapshots && result.snapshots.length > 0) {
+          const data = result.snapshots.map((snap: any) => ({
+            name: snap.sector_name,
+            previousClose: snap.previous_close ?? 0,
+            changePercent: snap.change_percent ?? 0,
+            open: snap.open_price ?? 0,
+            last: snap.last_price ?? 0,
+            variation: snap.variation ?? 0,
+            oneWeekAgoVal: snap.one_week_ago_val ?? 0,
+            oneMonthAgoVal: snap.one_month_ago_val ?? 0,
+            oneYearAgoVal: snap.one_year_ago_val ?? 0,
+            capturedAt: snap.captured_at
+          }))
+          console.log(`[SectorPerformance] Using Friday snapshot from ${lastTradingDate} (${data.length} sectors)`)
+          return data
+        }
+      }
+    } catch (err) {
+      console.error('[SectorPerformance] Failed to fetch weekend snapshot, falling back to NSE:', err)
+    }
+  }
+
   const sectors = [
     { name: 'Bank Nifty', nseIndex: 'NIFTY BANK' },
     { name: 'IT', nseIndex: 'NIFTY IT' },
@@ -817,5 +878,4 @@ export async function fetchSectorData(): Promise<{ name: string; previousClose: 
     return []
   }
 }
-
 

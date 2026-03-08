@@ -14,19 +14,11 @@ export default function IndexDashboardPage() {
 
             {/* Header Bar */}
             <div className="bg-[#161b22] border-b border-gray-700/50">
-                <div className="px-4 lg:px-6 py-3 flex items-center justify-between">
+                <div className="px-4 lg:px-6 py-3">
                     <h1 className="text-lg font-bold tracking-wider text-white uppercase flex items-center gap-3">
                         <span className="bg-gradient-to-r from-blue-500 to-purple-500 w-1 h-6 rounded-full inline-block"></span>
                         Index Dashboard
                     </h1>
-                    <div className="flex items-center gap-2">
-                        <a
-                            href="/index-analysis"
-                            className="text-xs text-gray-400 hover:text-blue-400 transition-colors border border-gray-700 rounded-md px-3 py-1.5 hover:border-blue-500/50"
-                        >
-                            ← Single View
-                        </a>
-                    </div>
                 </div>
             </div>
 

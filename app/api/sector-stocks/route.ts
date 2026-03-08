@@ -38,14 +38,28 @@ export async function GET(request: Request) {
             return NextResponse.json({ stocks: [], source: 'no_mapping' })
         }
 
-        // Try daily_high_low table first (today's data)
-        const today = new Date().toISOString().split('T')[0]
+        // Try daily_high_low table first; on Sat/Sun use last trading day (Friday)
+        const now = new Date()
+        const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000))
+        const dayOfWeek = istTime.getUTCDay()
+        let effectiveDate: string
+        if (dayOfWeek === 0) {
+            const friday = new Date(istTime)
+            friday.setDate(friday.getDate() - 2)
+            effectiveDate = friday.toISOString().split('T')[0]
+        } else if (dayOfWeek === 6) {
+            const friday = new Date(istTime)
+            friday.setDate(friday.getDate() - 1)
+            effectiveDate = friday.toISOString().split('T')[0]
+        } else {
+            effectiveDate = istTime.toISOString().split('T')[0]
+        }
 
         const { data: dailyData, error: dailyError } = await supabase
             .from('daily_high_low')
             .select('symbol, today_open, today_close, today_high, today_low')
             .in('symbol', sectorStocks)
-            .eq('captured_date', today)
+            .eq('captured_date', effectiveDate)
             .limit(sectorStocks.length)
 
         if (!dailyError && dailyData && dailyData.length > 0) {

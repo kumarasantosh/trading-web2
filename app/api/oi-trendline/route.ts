@@ -15,9 +15,27 @@ export async function GET(request: NextRequest) {
         const searchParams = request.nextUrl.searchParams;
         const symbol = searchParams.get('symbol') || 'NIFTY';
         const expiryDate = searchParams.get('expiryDate');
-        const date = searchParams.get('date'); // Date in YYYY-MM-DD format
+        const dateParam = searchParams.get('date'); // Date in YYYY-MM-DD format
 
-        // If no date is provided, default to today
+        // Effective date: on Sat/Sun use last trading day (Friday)
+        const now = new Date();
+        const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+        const dayOfWeek = istTime.getUTCDay();
+        let effectiveDate: string;
+        if (dayOfWeek === 0) {
+            const friday = new Date(istTime);
+            friday.setDate(friday.getDate() - 2);
+            effectiveDate = friday.toISOString().split('T')[0];
+        } else if (dayOfWeek === 6) {
+            const friday = new Date(istTime);
+            friday.setDate(friday.getDate() - 1);
+            effectiveDate = friday.toISOString().split('T')[0];
+        } else {
+            effectiveDate = istTime.toISOString().split('T')[0];
+        }
+
+        const date = dateParam || effectiveDate;
+
         let query = supabaseAdmin
             .from('oi_trendline')
             .select('*')
@@ -29,18 +47,11 @@ export async function GET(request: NextRequest) {
             const startTime = `${date}T03:45:00.000Z`;
             query = query.gte('captured_at', startTime);
 
-            // If it's today, don't limit the end time to show live data
-            const today = new Date().toISOString().split('T')[0];
-            if (date !== today) {
+            // If it's the effective "today" (current trading day), don't limit end time for live data
+            if (date !== effectiveDate) {
                 const endTime = `${date}T10:00:00.000Z`;
                 query = query.lte('captured_at', endTime);
             }
-        } else {
-            // No date provided, default to today's market data (since 9:15 AM IST)
-            const now = new Date();
-            const todayStr = now.toISOString().split('T')[0];
-            const startTime = `${todayStr}T03:45:00.000Z`;
-            query = query.gte('captured_at', startTime);
         }
 
         if (expiryDate) {

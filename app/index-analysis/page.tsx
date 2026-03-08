@@ -32,6 +32,7 @@ export default function IndexAnalysisPage() {
     const [noDataForTime, setNoDataForTime] = useState(false)
     const [oiTrendData, setOiTrendData] = useState<{ time: string, putOI: number, callOI: number, pcr: number, label: string }[]>([])
     const [oiTrendWindow, setOiTrendWindow] = useState<number>(15) // minutes
+    const [oiTrendMode, setOiTrendMode] = useState<'oi' | 'volume'>('oi')
     const isReplayModeRef = useRef(isReplayMode)
     isReplayModeRef.current = isReplayMode
     const [atmViewMode, setAtmViewMode] = useState<'volume' | 'oiChange'>('oiChange')
@@ -390,38 +391,82 @@ export default function IndexAnalysisPage() {
     const fetchOiTrendline = useCallback(async () => {
         try {
             const todayStr = new Date().toISOString().split('T')[0]
-            const res = await fetch(`/api/oi-trendline?symbol=${symbol}&date=${todayStr}`)
-            if (!res.ok) return
-            const json = await res.json()
-            if (json.success && Array.isArray(json.data) && json.data.length > 1) {
-                const computeDeltas = (entries: any[]) => {
-                    return entries.slice(1).map((d: any, i: number) => ({
-                        time: d.time,
-                        putOI: d.putOI - entries[i].putOI,
-                        callOI: d.callOI - entries[i].callOI,
-                        pcr: d.pcr,
-                        label: new Date(d.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }),
-                    }))
-                }
-
-                const now = new Date()
-                const cutoff = new Date(now.getTime() - oiTrendWindow * 60 * 1000)
-                const recentRaw = json.data.filter((d: any) => new Date(d.time) >= cutoff)
-
-                if (recentRaw.length > 1) {
-                    setOiTrendData(computeDeltas(recentRaw))
-                } else {
-                    const snapshotCount = Math.ceil(oiTrendWindow / 3) + 1
-                    const lastRaw = json.data.slice(-snapshotCount)
-                    if (lastRaw.length > 1) {
-                        setOiTrendData(computeDeltas(lastRaw))
+            // If mode is 'oi' use lightweight trend table; if 'volume' try to compute volumes from saved option chain snapshots
+            if (oiTrendMode === 'oi') {
+                const res = await fetch(`/api/oi-trendline?symbol=${symbol}&date=${todayStr}`)
+                if (!res.ok) return
+                const json = await res.json()
+                if (json.success && Array.isArray(json.data) && json.data.length > 1) {
+                    const computeDeltas = (entries: any[]) => {
+                        return entries.slice(1).map((d: any, i: number) => ({
+                            time: d.time,
+                            putOI: d.putOI - entries[i].putOI,
+                            callOI: d.callOI - entries[i].callOI,
+                            pcr: d.pcr,
+                            label: new Date(d.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }),
+                        }))
                     }
+
+                    const now = new Date()
+                    const cutoff = new Date(now.getTime() - oiTrendWindow * 60 * 1000)
+                    const recentRaw = json.data.filter((d: any) => new Date(d.time) >= cutoff)
+
+                    if (recentRaw.length > 1) {
+                        setOiTrendData(computeDeltas(recentRaw))
+                    } else {
+                        const snapshotCount = Math.ceil(oiTrendWindow / 3) + 1
+                        const lastRaw = json.data.slice(-snapshotCount)
+                        if (lastRaw.length > 1) {
+                            setOiTrendData(computeDeltas(lastRaw))
+                        }
+                    }
+                }
+            } else {
+                // volume mode: fetch option_chain snapshots for the window and compute total traded volume deltas
+                const now = new Date()
+                const endISO = now.toISOString()
+                const start = new Date(now.getTime() - oiTrendWindow * 60 * 1000 - 60 * 1000) // add 1min buffer
+                const startISO = start.toISOString()
+                try {
+                    const res2 = await fetch(`/api/option-chain/save?symbol=${symbol}${expiryDate ? `&expiryDate=${encodeURIComponent(expiryDate)}` : ''}&start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`)
+                    if (!res2.ok) {
+                        // fallback to oi trendline if snapshots unavailable
+                        return
+                    }
+                    const json2 = await res2.json()
+                    if (json2.success && Array.isArray(json2.snapshots) && json2.snapshots.length > 1) {
+                        // compute total put/call traded volume for each snapshot
+                        const totals = json2.snapshots.map((s: any) => {
+                            const data = s.option_chain_data
+                            let totalPutVol = 0
+                            let totalCallVol = 0
+                            const arr = data?.records?.data || data?.data || (data?.optionChain ? Object.values(data.optionChain) : [])
+                            if (Array.isArray(arr)) {
+                                arr.forEach((item: any) => {
+                                    totalCallVol += Number(item.CE?.totalTradedVolume || 0)
+                                    totalPutVol += Number(item.PE?.totalTradedVolume || 0)
+                                })
+                            }
+                            return { time: s.captured_at, totalPutVol, totalCallVol, pcr: s.pcr || null }
+                        })
+
+                        const deltas = totals.slice(1).map((d: any, i: number) => ({
+                            time: d.time,
+                            putOI: d.totalPutVol - totals[i].totalPutVol,
+                            callOI: d.totalCallVol - totals[i].totalCallVol,
+                            pcr: d.pcr || 0,
+                            label: new Date(d.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }),
+                        }))
+                        setOiTrendData(deltas)
+                    }
+                } catch (e) {
+                    console.error('Error fetching option chain snapshots for volume trend:', e)
                 }
             }
         } catch (e) {
             console.error('Error fetching OI trendline:', e)
         }
-    }, [symbol, oiTrendWindow])
+    }, [symbol, oiTrendWindow, oiTrendMode, expiryDate])
 
     useEffect(() => {
         fetchOiTrendline()
@@ -1078,20 +1123,43 @@ export default function IndexAnalysisPage() {
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                                     <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span>
-                                    OI Addition
+                                    {oiTrendMode === 'oi' ? 'OI Addition' : 'OI Volume Trend'}
                                 </h3>
-                                <select
-                                    value={oiTrendWindow}
-                                    onChange={(e) => setOiTrendWindow(Number(e.target.value))}
-                                    className="bg-[#0d1117] border border-gray-700 rounded-md text-xs text-gray-300 px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer"
-                                >
-                                    <option value={15}>15 Min</option>
-                                    <option value={30}>30 Min</option>
-                                    <option value={60}>1 Hr</option>
-                                    <option value={120}>2 Hr</option>
-                                    <option value={240}>4 Hr</option>
-                                    <option value={480}>8 Hr</option>
-                                </select>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex bg-[#21262d] rounded-lg p-0.5">
+                                        <button
+                                            onClick={() => setOiTrendMode('oi')}
+                                            className={`px-3 py-1 text-[12px] font-medium rounded-md transition-all ${oiTrendMode === 'oi'
+                                                ? 'bg-blue-500/20 text-blue-400 shadow-sm'
+                                                : 'text-gray-400 hover:text-gray-200'
+                                                }`}
+                                        >
+                                            Additions
+                                        </button>
+                                        <button
+                                            onClick={() => setOiTrendMode('volume')}
+                                            className={`px-3 py-1 text-[12px] font-medium rounded-md transition-all ${oiTrendMode === 'volume'
+                                                ? 'bg-blue-500/20 text-blue-400 shadow-sm'
+                                                : 'text-gray-400 hover:text-gray-200'
+                                                }`}
+                                        >
+                                            Volume
+                                        </button>
+                                    </div>
+
+                                    <select
+                                        value={oiTrendWindow}
+                                        onChange={(e) => setOiTrendWindow(Number(e.target.value))}
+                                        className="bg-[#0d1117] border border-gray-700 rounded-md text-xs text-gray-300 px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                                    >
+                                        <option value={15}>15 Min</option>
+                                        <option value={30}>30 Min</option>
+                                        <option value={60}>1 Hr</option>
+                                        <option value={120}>2 Hr</option>
+                                        <option value={240}>4 Hr</option>
+                                        <option value={480}>8 Hr</option>
+                                    </select>
+                                </div>
                             </div>
 
                             {
@@ -1141,10 +1209,11 @@ export default function IndexAnalysisPage() {
                                                                             {payload.map((item: any, i: number) => {
                                                                                 const val = item.value
                                                                                 const arrow = val > 0 ? '▲' : val < 0 ? '▼' : '—'
+                                                                                const keyLabel = oiTrendMode === 'volume' ? 'Vol' : 'OI'
                                                                                 return (
                                                                                     <p key={i} style={{ margin: '3px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                                                         <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: item.color, display: 'inline-block' }}></span>
-                                                                                        <span style={{ color: '#9ca3af' }}>{item.dataKey === 'putOI' ? 'Put OI' : 'Call OI'}:</span>
+                                                                                        <span style={{ color: '#9ca3af' }}>{item.dataKey === 'putOI' ? `Put ${keyLabel}` : `Call ${keyLabel}`}:</span>
                                                                                         <span style={{ fontWeight: 'bold', color: val > 0 ? '#10b981' : val < 0 ? '#ef4444' : '#6b7280' }}>{arrow} {val > 0 ? '+' : ''}{formatLakhs(val)}</span>
                                                                                     </p>
                                                                                 )
@@ -1221,11 +1290,11 @@ export default function IndexAnalysisPage() {
                                                 <div className="flex items-center gap-3">
                                                     <span className="flex items-center gap-1">
                                                         <span className="w-3 h-0.5 bg-emerald-500 inline-block rounded"></span>
-                                                        Put OI
+                                                        {oiTrendMode === 'volume' ? 'Put Vol' : 'Put OI'}
                                                     </span>
                                                     <span className="flex items-center gap-1">
                                                         <span className="w-3 h-0.5 bg-red-500 inline-block rounded"></span>
-                                                        Call OI
+                                                        {oiTrendMode === 'volume' ? 'Call Vol' : 'Call OI'}
                                                     </span>
                                                 </div>
                                                 <span>{oiTrendData.length} snapshots</span>

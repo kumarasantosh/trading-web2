@@ -13,13 +13,32 @@ export async function GET(request: NextRequest) {
         // Get today's date in IST
         const now = new Date()
         const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000))
-        const todayDate = dateParam || istTime.toISOString().split('T')[0] // YYYY-MM-DD format
+        const dayOfWeek = istTime.getUTCDay() // 0 = Sunday, 6 = Saturday
+
+        // On Saturday/Sunday, use last trading day (Friday) - no data exists for weekend dates
+        let effectiveDate = dateParam
+        if (!effectiveDate) {
+            const todayStr = istTime.toISOString().split('T')[0]
+            if (dayOfWeek === 0) {
+                // Sunday: use Friday (2 days back)
+                const friday = new Date(istTime)
+                friday.setDate(friday.getDate() - 2)
+                effectiveDate = friday.toISOString().split('T')[0]
+            } else if (dayOfWeek === 6) {
+                // Saturday: use Friday (1 day back)
+                const friday = new Date(istTime)
+                friday.setDate(friday.getDate() - 1)
+                effectiveDate = friday.toISOString().split('T')[0]
+            } else {
+                effectiveDate = todayStr
+            }
+        }
 
         // Fetch saved market indices for the specified date
         const { data, error } = await supabase
             .from('market_indices_snapshots')
             .select('*')
-            .eq('captured_at', todayDate)
+            .eq('captured_at', effectiveDate)
 
         if (error) {
             console.error('Supabase query error:', error)
@@ -58,7 +77,7 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            date: todayDate,
+            date: effectiveDate,
             indices: indices,
             count: indices.length
         })

@@ -69,7 +69,7 @@ export default function StockTable({
 
   useEffect(() => {
     let isMounted = true
-    const BATCH_SIZE = 5 // Load first 5 stocks immediately, then rest in background
+    const BATCH_SIZE = 3 // Load first 3 stocks immediately, then rest in background
 
     // Fetch from database with timeout (fast, cached data)
     const fetchFromDatabase = async (symbols: string[]): Promise<Stock[]> => {
@@ -343,7 +343,7 @@ export default function StockTable({
       if (symbolsToFetch.length === 0) return
 
       // Process in batches to avoid rate limiting
-      const BATCH_SIZE = 5
+      const BATCH_SIZE = 3
       for (let i = 0; i < symbolsToFetch.length; i += BATCH_SIZE) {
         const batch = symbolsToFetch.slice(i, i + BATCH_SIZE)
         const promises = batch.map(symbol => fetchYahooStockData(symbol))
@@ -365,7 +365,7 @@ export default function StockTable({
 
         // Small delay between batches
         if (i + BATCH_SIZE < symbolsToFetch.length) {
-          await new Promise(resolve => setTimeout(resolve, 500))
+          await new Promise(resolve => setTimeout(resolve, 1500))
         }
       }
     }

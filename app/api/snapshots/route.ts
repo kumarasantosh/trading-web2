@@ -1,9 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
+function normalizeToTradingDate(date: string): string {
+    const parsed = new Date(`${date}T00:00:00.000Z`)
+    if (Number.isNaN(parsed.getTime())) return date
+    const day = parsed.getUTCDay()
+    if (day === 0) {
+        parsed.setUTCDate(parsed.getUTCDate() - 2)
+    } else if (day === 6) {
+        parsed.setUTCDate(parsed.getUTCDate() - 1)
+    }
+    return parsed.toISOString().split('T')[0]
+}
+
+async function fetchLatestSectorSnapshotsForDate(date: string) {
+    const dayStart = `${date}T03:45:00.000Z` // 9:15 AM IST
+    const dayEnd = `${date}T10:15:00.000Z`   // 3:45 PM IST
+
+    const { data, error } = await supabase
+        .from('sector_snapshots')
+        .select('*')
+        .gte('captured_at', dayStart)
+        .lte('captured_at', dayEnd)
+        .order('captured_at', { ascending: false })
+
+    if (error) {
+        throw error
+    }
+
+    if (!data || data.length === 0) {
+        return []
+    }
+
+    // Per sector, keep the latest (first since we ordered desc)
+    const sectorMap = new Map<string, any>()
+    data.forEach((snap: any) => {
+        if (!sectorMap.has(snap.sector_name)) {
+            sectorMap.set(snap.sector_name, snap)
+        }
+    })
+
+    return Array.from(sectorMap.values())
+}
+
 /**
  * API route to fetch historical snapshots
  * GET /api/snapshots?type=sector&start=...&end=...
+ * GET /api/snapshots?type=sector&date=YYYY-MM-DD  (weekend: returns latest snapshot per sector for that date)
  */
 export async function GET(request: NextRequest) {
     try {
@@ -11,11 +54,31 @@ export async function GET(request: NextRequest) {
         const type = searchParams.get('type') // 'sector' or 'stock'
         const start = searchParams.get('start') // ISO timestamp
         const end = searchParams.get('end') // ISO timestamp
+        const date = searchParams.get('date') // YYYY-MM-DD - for sector: latest snapshot per sector on that date
         const sectorFilter = searchParams.get('sector') // Optional sector filter
 
-        if (!type || !start || !end) {
+        if (!type) {
             return NextResponse.json(
-                { error: 'Missing required parameters: type, start, end' },
+                { error: 'Missing required parameter: type' },
+                { status: 400 }
+            )
+        }
+
+        // Sector by date (for weekend - get Friday's latest snapshot)
+        if (type === 'sector' && date) {
+            const effectiveDate = normalizeToTradingDate(date)
+            try {
+                const snapshots = await fetchLatestSectorSnapshotsForDate(effectiveDate)
+                return NextResponse.json({ snapshots, date: effectiveDate, requested_date: date })
+            } catch (error: any) {
+                console.error('[Snapshots API] Sector by date error:', error)
+                return NextResponse.json({ error: error.message }, { status: 500 })
+            }
+        }
+
+        if (!start || !end) {
+            return NextResponse.json(
+                { error: 'Missing required parameters: start, end (or date for type=sector)' },
                 { status: 400 }
             )
         }
@@ -28,9 +91,8 @@ export async function GET(request: NextRequest) {
             const targetTime = new Date((startTime + endTime) / 2).toISOString()
             const targetTimestamp = new Date(targetTime).getTime()
             
-            // Maximum allowed time difference (2.5 minutes = 150000ms)
-            // This ensures we only return data if it was captured within ±2.5 min of selected time
-            const MAX_TIME_DIFF_MS = 2.5 * 60 * 1000
+            // Maximum allowed time difference (15 min) - cron captures every 5 min
+            const MAX_TIME_DIFF_MS = 15 * 60 * 1000
             
             // Query snapshots in the range, ordered by time
             const query = supabase
@@ -75,7 +137,7 @@ export async function GET(request: NextRequest) {
 
             // If no snapshots are within the allowed time range, return empty
             if (sectorMap.size === 0) {
-                console.log(`[Snapshots API] Data found but none within ±2.5min of target ${targetTime}`)
+                console.log(`[Snapshots API] Data found but none within ±15min of target ${targetTime}`)
                 return NextResponse.json({ snapshots: [] })
             }
 

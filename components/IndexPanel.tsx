@@ -111,6 +111,14 @@ export default function IndexPanel({ symbol }: IndexPanelProps) {
     const trendColor = trend === 'BULLISH' ? 'text-emerald-400' : trend === 'BEARISH' ? 'text-red-400' : 'text-yellow-400'
     const trendBg = trend === 'BULLISH' ? 'bg-emerald-500/10 border-emerald-500/30' : trend === 'BEARISH' ? 'bg-red-500/10 border-red-500/30' : 'bg-yellow-500/10 border-yellow-500/30'
     const trendEmoji = trend === 'BULLISH' ? '🟢' : trend === 'BEARISH' ? '🔴' : '🟡'
+    const trendLabel =
+        trend === 'BULLISH'
+            ? 'HIGHLY BULLISH'
+            : trend === 'BEARISH'
+                ? 'HIGHLY BEARISH'
+                : trendReason.includes('Sellers Day')
+                    ? 'NEUTRAL SELLERS DAY'
+                    : 'NEUTRAL'
 
     return (
         <div className={`bg-[#0d1117] rounded-2xl border ${borderAccent} overflow-hidden`}>
@@ -176,7 +184,7 @@ export default function IndexPanel({ symbol }: IndexPanelProps) {
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
                     {/* Trend Badge */}
                     <span className={`font-extrabold ${trendColor} text-xs`}>
-                        {trendEmoji} {trend}
+                        {trendEmoji} {trendLabel}
                     </span>
                     <span className="text-gray-400 italic text-[9px]">{trendReason}</span>
                     <span className="text-gray-600">|</span>

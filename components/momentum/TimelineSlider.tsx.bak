@@ -24,33 +24,21 @@ export default function TimelineSlider({
     // Calculate intervals based on intervalMinutes
     const intervals = Math.floor(375 / intervalMinutes) // e.g., 375/5 = 75 for 5min, 375/3 = 125 for 3min
 
-    // Get current time interval. On weekend, full range for replay.
+    // Get current time interval
     const getCurrentInterval = () => {
-        const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
-        if (ist.getUTCDay() === 0 || ist.getUTCDay() === 6) return intervals
         const now = new Date()
         const minutes = (now.getHours() - 9) * 60 + now.getMinutes() - 15
         return Math.max(0, Math.min(Math.floor(minutes / intervalMinutes), intervals))
     }
 
-    // Convert slider value to time. On weekend use Friday date for replay.
+    // Convert slider value to time
     const sliderToTime = (value: number) => {
         const minutes = value * intervalMinutes + 9 * 60 + 15
         const hours = Math.floor(minutes / 60)
         const mins = minutes % 60
 
-        const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
-        const day = ist.getUTCDay()
-        const isWeekend = day === 0 || day === 6
-        let time: Date
-        if (isWeekend) {
-            const ref = new Date(ist)
-            ref.setDate(ref.getDate() - (day === 0 ? 2 : 1))
-            time = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate(), hours, mins, 0, 0)
-        } else {
-            time = new Date()
-            time.setHours(hours, mins, 0, 0)
-        }
+        const time = new Date()
+        time.setHours(hours, mins, 0, 0)
         return time
     }
 
@@ -135,7 +123,6 @@ export default function TimelineSlider({
     }
 
     const currentMaxInterval = getCurrentInterval()
-    const effectiveMax = Math.max(currentMaxInterval, 1)
 
     return (
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl border border-gray-200/50 shadow-xl p-4 sm:p-6 mb-4 sm:mb-6">
@@ -169,14 +156,14 @@ export default function TimelineSlider({
                 <input
                     type="range"
                     min="0"
-                    max={effectiveMax}
+                    max={currentMaxInterval}
                     value={sliderValue}
                     onChange={handleSliderChange}
                     onMouseUp={handleMouseUp}
                     onTouchEnd={handleMouseUp}
                     className="w-full h-3 bg-gradient-to-r from-blue-200 via-blue-400 to-blue-600 rounded-lg appearance-none cursor-pointer slider"
                     style={{
-                        background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${effectiveMax > 0 ? (sliderValue / effectiveMax) * 100 : 0}%, #dbeafe ${effectiveMax > 0 ? (sliderValue / effectiveMax) * 100 : 0}%, #dbeafe 100%)`
+                        background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${currentMaxInterval > 0 ? (sliderValue / currentMaxInterval) * 100 : 0}%, #dbeafe ${currentMaxInterval > 0 ? (sliderValue / currentMaxInterval) * 100 : 0}%, #dbeafe 100%)`
                     }}
                 />
 
@@ -184,12 +171,12 @@ export default function TimelineSlider({
                 <div className="flex justify-between mt-2 text-[10px] sm:text-xs text-gray-400">
                     {(() => {
                         const markers = [0]
-                        const step = Math.max(1, Math.ceil(effectiveMax / 5))
+                        const step = Math.ceil(currentMaxInterval / 5)
                         for (let i = 1; i < 5; i++) {
                             const marker = i * step
-                            if (marker <= effectiveMax) markers.push(marker)
+                            if (marker <= currentMaxInterval) markers.push(marker)
                         }
-                        if (effectiveMax > 0) markers.push(effectiveMax)
+                        if (currentMaxInterval > 0) markers.push(currentMaxInterval)
                         return markers.map((marker, idx) => (
                             <span key={idx} className="hidden sm:inline">{formatTime(sliderToTime(marker))}</span>
                         ))

@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 
+const REFRESH_INTERVAL_MS = 180000 // 3 minutes
+
 export interface OptionChainData {
     strikePrice: number
     callOI: number
@@ -172,22 +174,28 @@ export function useIndexData(symbol: string): IndexData {
         if (niftySpot === 0) return { trend: 'NEUTRAL', trendReason: 'Waiting for data' }
         const { ydayHigh, ydayLow, openingRangeHigh, openingRangeLow } = marketLevels
 
-        if (ydayHigh > 0 && niftySpot > ydayHigh) {
-            return { trend: 'BULLISH', trendReason: 'Trading above Yesterday High' }
+        const hasAllLevels = ydayHigh > 0 && ydayLow > 0 && openingRangeHigh > 0 && openingRangeLow > 0
+        if (!hasAllLevels) {
+            return { trend: 'NEUTRAL', trendReason: 'Waiting for complete market levels' }
         }
-        if (ydayLow > 0 && niftySpot < ydayLow) {
-            return { trend: 'BEARISH', trendReason: 'Trading below Yesterday Low' }
+
+        // Highly bullish only when price is above BOTH yesterday high and opening range high.
+        if (niftySpot > ydayHigh && niftySpot > openingRangeHigh) {
+            return { trend: 'BULLISH', trendReason: 'Trading above Yesterday High and Opening Range (Highly Bullish)' }
         }
-        if (openingRangeHigh > 0 && niftySpot > openingRangeHigh) {
-            return { trend: 'BULLISH', trendReason: 'Trading above Opening Range' }
+
+        // Highly bearish only when price is below BOTH opening range low and yesterday low.
+        if (niftySpot < openingRangeLow && niftySpot < ydayLow) {
+            return { trend: 'BEARISH', trendReason: 'Trading below Opening Range and Yesterday Low (Highly Bearish)' }
         }
-        if (openingRangeLow > 0 && niftySpot < openingRangeLow) {
-            return { trend: 'BEARISH', trendReason: 'Trading below Opening Range' }
+
+        const lowerBoundary = Math.min(openingRangeLow, ydayLow)
+        const upperBoundary = Math.max(openingRangeHigh, ydayHigh)
+        if (niftySpot >= lowerBoundary && niftySpot <= upperBoundary) {
+            return { trend: 'NEUTRAL', trendReason: 'Trading between Opening and Yesterday range (Neutral Sellers Day)' }
         }
-        if (openingRangeHigh > 0 && openingRangeLow > 0) {
-            return { trend: 'NEUTRAL', trendReason: 'Trading within range' }
-        }
-        return { trend: 'NEUTRAL', trendReason: 'Waiting for data' }
+
+        return { trend: 'NEUTRAL', trendReason: 'Range transition' }
     }, [niftySpot, marketLevels])
 
     // Fetch market levels (yday high/low, opening range) from NSE indices API
@@ -512,6 +520,8 @@ export function useIndexData(symbol: string): IndexData {
     // Fetch market levels on mount
     useEffect(() => {
         fetchMarketLevels()
+        const levelsInterval = setInterval(fetchMarketLevels, REFRESH_INTERVAL_MS)
+        return () => clearInterval(levelsInterval)
     }, [fetchMarketLevels])
 
     // Fetch data on mount and auto-refresh
@@ -520,14 +530,14 @@ export function useIndexData(symbol: string): IndexData {
         fetchOptionChainData()
         intervalRef.current = setInterval(() => {
             fetchOptionChainData()
-        }, 300000)
+        }, REFRESH_INTERVAL_MS)
         return () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null } }
     }, [fetchOptionChainData])
 
     // Fetch OI trendline
     useEffect(() => {
         fetchOiTrendline()
-        const trendInterval = setInterval(fetchOiTrendline, 180000)
+        const trendInterval = setInterval(fetchOiTrendline, REFRESH_INTERVAL_MS)
         return () => clearInterval(trendInterval)
     }, [fetchOiTrendline])
 

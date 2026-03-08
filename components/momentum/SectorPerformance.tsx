@@ -18,6 +18,19 @@ interface SectorData {
   previousLow: number
 }
 
+interface SectorApiData {
+  name: string
+  previousClose: number
+  changePercent: number
+  open: number
+  last: number
+  variation: number
+  oneWeekAgoVal: number
+  oneMonthAgoVal: number
+  oneYearAgoVal: number
+  capturedAt?: string
+}
+
 interface SectorPerformanceProps {
   onSectorClick: (sectorName: string) => void
   selectedSector: string | null
@@ -41,6 +54,27 @@ export default function SectorPerformance({
   const [isLoadingData, setIsLoadingData] = useState(false)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [dataCaptureTime, setDataCaptureTime] = useState<Date | null>(null)
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
+
+  const isWeekendIST = () => {
+    const istNow = new Date(Date.now() + IST_OFFSET_MS)
+    const day = istNow.getUTCDay()
+    return day === 0 || day === 6
+  }
+
+  const getLastTradingDateIST = () => {
+    const istNow = new Date(Date.now() + IST_OFFSET_MS)
+    const day = istNow.getUTCDay()
+    const friday = new Date(istNow)
+    if (day === 0) friday.setUTCDate(friday.getUTCDate() - 2)
+    if (day === 6) friday.setUTCDate(friday.getUTCDate() - 1)
+    return friday.toISOString().split('T')[0]
+  }
+
+  const getWeekendReplayReferenceTime = (time: Date) => {
+    const [year, month, day] = getLastTradingDateIST().split('-').map(Number)
+    return new Date(year, month - 1, day, time.getHours(), time.getMinutes(), 0, 0)
+  }
 
   // Track replay mode state to prevent live data from showing in replay mode
   // Update ref IMMEDIATELY (synchronously) when prop changes, not in useEffect
@@ -62,7 +96,7 @@ export default function SectorPerformance({
       setIsLoadingData(true)
       setNoDataForTime(false)
       const { fetchSectorData } = await import('@/services/momentumApi')
-      const data = await fetchSectorData()
+      const data: SectorApiData[] = await fetchSectorData()
 
       // CRITICAL: Double-check we're still not in replay mode after async fetch
       // This prevents live data from showing when user switched to historical view
@@ -73,11 +107,32 @@ export default function SectorPerformance({
       }
 
       // Setting live sector data
+      const captureTimes = data.map((item) => item.capturedAt).filter((value): value is string => Boolean(value))
+      if (captureTimes.length > 0) {
+        const timeCounts = new Map<string, number>()
+        captureTimes.forEach((captureTime) => {
+          timeCounts.set(captureTime, (timeCounts.get(captureTime) || 0) + 1)
+        })
+        const mostCommonTime = Array.from(timeCounts.entries())
+          .sort((a, b) => b[1] - a[1])[0]?.[0]
+        setDataCaptureTime(mostCommonTime ? new Date(mostCommonTime) : null)
+      } else {
+        setDataCaptureTime(null)
+      }
+
       // Transform to SectorData format with required properties
-      const transformedData: SectorData[] = data.map((item: any) => ({
-        ...item,
-        previousHigh: item.previousHigh || item.last || 0,
-        previousLow: item.previousLow || item.last || 0,
+      const transformedData: SectorData[] = data.map((item) => ({
+        name: item.name,
+        previousClose: item.previousClose,
+        changePercent: item.changePercent,
+        open: item.open,
+        last: item.last,
+        variation: item.variation,
+        oneWeekAgoVal: item.oneWeekAgoVal,
+        oneMonthAgoVal: item.oneMonthAgoVal,
+        oneYearAgoVal: item.oneYearAgoVal,
+        previousHigh: item.last || 0,
+        previousLow: item.last || 0,
       }))
       const sortedData = transformedData.sort((a, b) => b.changePercent - a.changePercent)
       setSectorData(sortedData)
@@ -85,6 +140,7 @@ export default function SectorPerformance({
       console.error('Failed to fetch sector data', error)
       // On error, clear data to prevent showing stale data
       setSectorData([])
+      setDataCaptureTime(null)
     } finally {
       setIsLoadingData(false)
     }
@@ -97,19 +153,20 @@ export default function SectorPerformance({
       setNoDataForTime(false)
       setSectorData([]) // Clear data immediately
 
-      // Calculate time range around the selected time (±3 minutes)
-      // API will only return data if it's within ±2.5 minutes of the target
-      const start = new Date(time)
-      start.setMinutes(start.getMinutes() - 3)
-      const end = new Date(time)
-      end.setMinutes(end.getMinutes() + 3)
+      // On weekends, keep replay bound to Friday while honoring slider time.
+      const effectiveTime = isWeekendIST() ? getWeekendReplayReferenceTime(time) : time
 
-      console.log('[SectorPerformance] Fetching historical data for time:', time.toISOString())
+      // Calculate time range around the selected time (±15 minutes)
+      // Wider range ensures we find snapshots (cron captures every 5 min)
+      const start = new Date(effectiveTime)
+      start.setMinutes(start.getMinutes() - 15)
+      const end = new Date(effectiveTime)
+      end.setMinutes(end.getMinutes() + 15)
+      console.log('[SectorPerformance] Fetching historical data for time:', effectiveTime.toISOString())
       console.log('[SectorPerformance] Query range:', start.toISOString(), 'to', end.toISOString())
+      const url = `/api/snapshots?type=sector&start=${start.toISOString()}&end=${end.toISOString()}`
 
-      const response = await fetch(
-        `/api/snapshots?type=sector&start=${start.toISOString()}&end=${end.toISOString()}`
-      )
+      const response = await fetch(url)
 
       if (!response.ok) {
         console.error('[SectorPerformance] API response not OK:', response.status)
@@ -167,7 +224,11 @@ export default function SectorPerformance({
           if (mostCommonTime) {
             setDataCaptureTime(new Date(mostCommonTime))
             console.log('[SectorPerformance] Data capture time:', mostCommonTime)
+          } else {
+            setDataCaptureTime(null)
           }
+        } else {
+          setDataCaptureTime(null)
         }
       }
 
@@ -177,6 +238,7 @@ export default function SectorPerformance({
       console.error('Error fetching historical data:', error)
       setNoDataForTime(true)
       setSectorData([])
+      setDataCaptureTime(null)
     } finally {
       setIsLoadingData(false)
     }
@@ -324,6 +386,19 @@ export default function SectorPerformance({
             <div className="hidden sm:block w-12 h-1 bg-green-500 rounded-full"></div>
           </div>
         </div>
+        {dataCaptureTime && (
+          <div className="mb-3 text-xs font-medium text-gray-600">
+            DB Data Date: {dataCaptureTime.toLocaleString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true
+            })} IST
+          </div>
+        )}
 
         {/* Range Selector
         <div className="flex items-center space-x-3">

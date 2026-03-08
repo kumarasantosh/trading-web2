@@ -6,7 +6,7 @@
         },
         {
             "path": "/api/cron/cleanup-intraday",
-            "schedule": "30 3 * * 1-5"
+            "schedule": "39 3 * * 1-5"
         },
         {
             "path": "/api/cron/populate-daily-high-low",
