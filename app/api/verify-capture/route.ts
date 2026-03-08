@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
             .limit(200)
 
         if (allError) {
+            //
             return NextResponse.json({ 
                 error: allError.message,
                 results 
