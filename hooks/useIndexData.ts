@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 
 const REFRESH_INTERVAL_MS = 180000 // 3 minutes
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
 
 export interface OptionChainData {
     strikePrice: number
@@ -69,8 +70,10 @@ export interface IndexData {
     setAtmViewMode: (mode: 'volume' | 'oiChange') => void
     formatLakhs: (value: number) => string
     marketLevels: MarketLevels
-    trend: TrendDirection
-    trendReason: string
+    openingRangeTrend: TrendDirection
+    openingRangeTrendReason: string
+    ydayRangeTrend: TrendDirection
+    ydayRangeTrendReason: string
 }
 
 export function useIndexData(symbol: string): IndexData {
@@ -170,38 +173,68 @@ export function useIndexData(symbol: string): IndexData {
         { name: 'Total Cl O', value: oiTotals.callOI, color: '#ef4444' },
     ], [oiTotals])
 
-    // Compute trend from spot and market levels
-    const { trend, trendReason } = useMemo((): { trend: TrendDirection; trendReason: string } => {
-        if (niftySpot === 0) return { trend: 'NEUTRAL', trendReason: 'Waiting for data' }
+    // Compute OR and YDAY trends independently from spot and market levels.
+    const {
+        openingRangeTrend,
+        openingRangeTrendReason,
+        ydayRangeTrend,
+        ydayRangeTrendReason,
+    } = useMemo((): {
+        openingRangeTrend: TrendDirection
+        openingRangeTrendReason: string
+        ydayRangeTrend: TrendDirection
+        ydayRangeTrendReason: string
+    } => {
+        if (niftySpot === 0) {
+            return {
+                openingRangeTrend: 'NEUTRAL',
+                openingRangeTrendReason: 'Inside Opening Range \u2192 Neutral',
+                ydayRangeTrend: 'NEUTRAL',
+                ydayRangeTrendReason: "Inside Yesterday's Range \u2192 Neutral",
+            }
+        }
+
         const { ydayHigh, ydayLow, openingRangeHigh, openingRangeLow } = marketLevels
 
-        const hasAllLevels = ydayHigh > 0 && ydayLow > 0 && openingRangeHigh > 0 && openingRangeLow > 0
-        if (!hasAllLevels) {
-            return { trend: 'NEUTRAL', trendReason: 'Waiting for complete market levels' }
+        let nextOpeningRangeTrend: TrendDirection = 'NEUTRAL'
+        let nextOpeningRangeReason = 'Inside Opening Range \u2192 Neutral'
+        if (openingRangeHigh > 0 && openingRangeLow > 0 && Math.abs(openingRangeHigh - openingRangeLow) >= 0.01) {
+            if (niftySpot > openingRangeHigh) {
+                nextOpeningRangeTrend = 'BULLISH'
+                nextOpeningRangeReason = 'Trading above Opening Range \u2192 Bullish'
+            } else if (niftySpot < openingRangeLow) {
+                nextOpeningRangeTrend = 'BEARISH'
+                nextOpeningRangeReason = 'Trading below Opening Range \u2192 Bearish'
+            }
         }
 
-        // Highly bullish only when price is above BOTH yesterday high and opening range high.
-        if (niftySpot > ydayHigh && niftySpot > openingRangeHigh) {
-            return { trend: 'BULLISH', trendReason: 'Trading above Yesterday High and Opening Range (Highly Bullish)' }
+        let nextYdayRangeTrend: TrendDirection = 'NEUTRAL'
+        let nextYdayRangeReason = "Inside Yesterday's Range \u2192 Neutral"
+        if (ydayHigh > 0 && ydayLow > 0 && Math.abs(ydayHigh - ydayLow) >= 0.01) {
+            if (niftySpot > ydayHigh) {
+                nextYdayRangeTrend = 'BULLISH'
+                nextYdayRangeReason = 'Trading above Yesterday High \u2192 Bullish'
+            } else if (niftySpot < ydayLow) {
+                nextYdayRangeTrend = 'BEARISH'
+                nextYdayRangeReason = 'Trading below Yesterday Low \u2192 Bearish'
+            }
         }
 
-        // Highly bearish only when price is below BOTH opening range low and yesterday low.
-        if (niftySpot < openingRangeLow && niftySpot < ydayLow) {
-            return { trend: 'BEARISH', trendReason: 'Trading below Opening Range and Yesterday Low (Highly Bearish)' }
+        return {
+            openingRangeTrend: nextOpeningRangeTrend,
+            openingRangeTrendReason: nextOpeningRangeReason,
+            ydayRangeTrend: nextYdayRangeTrend,
+            ydayRangeTrendReason: nextYdayRangeReason,
         }
-
-        const lowerBoundary = Math.min(openingRangeLow, ydayLow)
-        const upperBoundary = Math.max(openingRangeHigh, ydayHigh)
-        if (niftySpot >= lowerBoundary && niftySpot <= upperBoundary) {
-            return { trend: 'NEUTRAL', trendReason: 'Trading between Opening and Yesterday range (Neutral Sellers Day)' }
-        }
-
-        return { trend: 'NEUTRAL', trendReason: 'Range transition' }
     }, [niftySpot, marketLevels])
 
     // Fetch market levels (yday high/low, opening range) from NSE indices API
     const fetchMarketLevels = useCallback(async () => {
         try {
+            const now = new Date()
+            const istNow = new Date(now.getTime() + IST_OFFSET_MS)
+            const todayIstStr = istNow.toISOString().split('T')[0]
+
             const nseIndex =
                 symbol === 'NIFTY'
                     ? 'NIFTY 50'
@@ -222,25 +255,17 @@ export function useIndexData(symbol: string): IndexData {
             if (indexData) {
                 const todayOpen = indexData.open || 0
                 const ydayClose = indexData.previousClose || 0
-                // NSE returns yearHigh/yearLow but for yday we use previousClose-based values
-                // We can also derive from the high/low of the current session for opening range
-                const currentHigh = indexData.high || 0
-                const currentLow = indexData.low || 0
 
                 setMarketLevels(prev => ({
                     ...prev,
                     todayOpen,
                     ydayClose,
-                    // If we don't have yday high/low from a separate source, estimate from previousClose
-                    ydayHigh: prev.ydayHigh || ydayClose, // Will be overridden by snapshots if available
-                    ydayLow: prev.ydayLow || ydayClose,
                 }))
             }
 
             // Fetch opening range from earliest option chain snapshots (first 15 min: 9:15-9:30 IST)
-            const todayStr = new Date().toISOString().split('T')[0]
-            const orStart = `${todayStr}T03:45:00.000Z` // 9:15 IST = 03:45 UTC
-            const orEnd = `${todayStr}T04:00:00.000Z`   // 9:30 IST = 04:00 UTC
+            const orStart = `${todayIstStr}T03:45:00.000Z` // 9:15 IST = 03:45 UTC
+            const orEnd = `${todayIstStr}T04:00:00.000Z`   // 9:30 IST = 04:00 UTC
 
             const orRes = await fetch(`/api/option-chain/save?symbol=${symbol}&start=${orStart}&end=${orEnd}`)
             if (orRes.ok) {
@@ -261,31 +286,30 @@ export function useIndexData(symbol: string): IndexData {
                 }
             }
 
-            // Fetch yesterday's snapshots to get yday high/low
-            const yesterday = new Date()
-            yesterday.setDate(yesterday.getDate() - 1)
-            // Skip weekends
-            if (yesterday.getDay() === 0) yesterday.setDate(yesterday.getDate() - 2)
-            if (yesterday.getDay() === 6) yesterday.setDate(yesterday.getDate() - 1)
-            const ydayStr = yesterday.toISOString().split('T')[0]
-            const ydayStart = `${ydayStr}T03:45:00.000Z`
-            const ydayEnd = `${ydayStr}T10:00:00.000Z`
+            // Always use Yahoo Finance for previous day high/low on index dashboard.
+            try {
+                const yahooSymbol =
+                    symbol === 'NIFTY'
+                        ? '^NSEI'
+                        : symbol === 'BANKNIFTY'
+                            ? '^NSEBANK'
+                            : symbol === 'SENSEX'
+                                ? '^BSESN'
+                                : '^CNXFIN'
+                const { fetchYahooStockData } = await import('@/services/yahooFinance')
+                const yahooData = await fetchYahooStockData(yahooSymbol)
+                const yahooHigh = Number(yahooData?.high || 0)
+                const yahooLow = Number(yahooData?.low || 0)
 
-            const ydayRes = await fetch(`/api/option-chain/save?symbol=${symbol}&start=${ydayStart}&end=${ydayEnd}`)
-            if (ydayRes.ok) {
-                const ydayData = await ydayRes.json()
-                if (ydayData.success && Array.isArray(ydayData.snapshots) && ydayData.snapshots.length > 0) {
-                    const ydaySpots = ydayData.snapshots
-                        .map((s: any) => s.nifty_spot || 0)
-                        .filter((v: number) => v > 0)
-                    if (ydaySpots.length > 0) {
-                        setMarketLevels(prev => ({
-                            ...prev,
-                            ydayHigh: Math.max(...ydaySpots),
-                            ydayLow: Math.min(...ydaySpots),
-                        }))
-                    }
+                if (yahooHigh > 0 && yahooLow > 0) {
+                    setMarketLevels(prev => ({
+                        ...prev,
+                        ydayHigh: yahooHigh,
+                        ydayLow: yahooLow,
+                    }))
                 }
+            } catch (yahooError) {
+                console.error(`[${symbol}] Yahoo fallback failed:`, yahooError)
             }
         } catch (e) {
             console.error(`[${symbol}] Error fetching market levels:`, e)
@@ -651,7 +675,9 @@ export function useIndexData(symbol: string): IndexData {
         setAtmViewMode,
         formatLakhs,
         marketLevels,
-        trend,
-        trendReason,
+        openingRangeTrend,
+        openingRangeTrendReason,
+        ydayRangeTrend,
+        ydayRangeTrendReason,
     }
 }

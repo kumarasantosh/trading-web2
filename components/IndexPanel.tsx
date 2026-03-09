@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, PieChart, Pie, Cell, LineChart, Line } from 'recharts'
-import { useIndexData } from '@/hooks/useIndexData'
+import { useIndexData, type TrendDirection } from '@/hooks/useIndexData'
 
 interface IndexPanelProps {
     symbol: string
@@ -76,8 +76,10 @@ export default function IndexPanel({ symbol }: IndexPanelProps) {
         setAtmViewMode,
         formatLakhs,
         marketLevels,
-        trend,
-        trendReason,
+        openingRangeTrend,
+        openingRangeTrendReason,
+        ydayRangeTrend,
+        ydayRangeTrendReason,
     } = useIndexData(symbol)
 
     // Custom label for donut
@@ -122,17 +124,12 @@ export default function IndexPanel({ symbol }: IndexPanelProps) {
                     ? 'border-amber-500/30'
                     : 'border-cyan-500/30'
 
-    const trendColor = trend === 'BULLISH' ? 'text-emerald-400' : trend === 'BEARISH' ? 'text-red-400' : 'text-yellow-400'
-    const trendBg = trend === 'BULLISH' ? 'bg-emerald-500/10 border-emerald-500/30' : trend === 'BEARISH' ? 'bg-red-500/10 border-red-500/30' : 'bg-yellow-500/10 border-yellow-500/30'
-    const trendEmoji = trend === 'BULLISH' ? '🟢' : trend === 'BEARISH' ? '🔴' : '🟡'
-    const trendLabel =
-        trend === 'BULLISH'
-            ? 'HIGHLY BULLISH'
-            : trend === 'BEARISH'
-                ? 'HIGHLY BEARISH'
-                : trendReason.includes('Sellers Day')
-                    ? 'NEUTRAL SELLERS DAY'
-                    : 'NEUTRAL'
+    const getTrendChipClass = (trendValue: TrendDirection) =>
+        trendValue === 'BULLISH'
+            ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30'
+            : trendValue === 'BEARISH'
+                ? 'text-red-300 bg-red-500/10 border-red-500/30'
+                : 'text-gray-200 bg-yellow-500/10 border-yellow-500/30'
 
     return (
         <div className={`bg-[#0d1117] rounded-2xl border ${borderAccent} overflow-hidden`}>
@@ -194,27 +191,39 @@ export default function IndexPanel({ symbol }: IndexPanelProps) {
             </div>
 
             {/* Trend Indicator + Market Levels Bar */}
-            <div className={`border-b border-gray-800/50 px-4 py-2 ${trendBg}`}>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
-                    {/* Trend Badge */}
-                    <span className={`font-extrabold ${trendColor} text-xs`}>
-                        {trendEmoji} {trendLabel}
-                    </span>
-                    <span className="text-gray-400 italic text-[9px]">{trendReason}</span>
-                    <span className="text-gray-600">|</span>
-                    {/* Market Levels */}
-                    <span className="text-gray-400">
-                        YH: <span className="text-orange-300 font-bold">{marketLevels.ydayHigh > 0 ? marketLevels.ydayHigh.toFixed(2) : '—'}</span>
-                    </span>
-                    <span className="text-gray-400">
-                        YL: <span className="text-orange-300 font-bold">{marketLevels.ydayLow > 0 ? marketLevels.ydayLow.toFixed(2) : '—'}</span>
-                    </span>
-                    <span className="text-gray-400">
-                        OR↑: <span className="text-sky-300 font-bold">{marketLevels.openingRangeHigh > 0 ? marketLevels.openingRangeHigh.toFixed(2) : '—'}</span>
-                    </span>
-                    <span className="text-gray-400">
-                        OR↓: <span className="text-sky-300 font-bold">{marketLevels.openingRangeLow > 0 ? marketLevels.openingRangeLow.toFixed(2) : '—'}</span>
-                    </span>
+            <div className="border-b border-gray-800/50 px-4 py-2 bg-[#161b22]/60">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px]">
+                    <div className="rounded border border-sky-500/20 bg-sky-500/5 px-2 py-1.5">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="text-gray-400">
+                                OR↑: <span className="text-sky-300 font-bold">{marketLevels.openingRangeHigh > 0 ? marketLevels.openingRangeHigh.toFixed(2) : '—'}</span>
+                            </span>
+                            <span className="text-gray-400">
+                                OR↓: <span className="text-sky-300 font-bold">{marketLevels.openingRangeLow > 0 ? marketLevels.openingRangeLow.toFixed(2) : '—'}</span>
+                            </span>
+                        </div>
+                        <div className="mt-1">
+                            <span className={`inline-flex items-center rounded border px-2 py-0.5 font-bold text-[9px] ${getTrendChipClass(openingRangeTrend)}`}>
+                                OR Trend: {openingRangeTrendReason}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="rounded border border-orange-500/20 bg-orange-500/5 px-2 py-1.5">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="text-gray-400">
+                                YH: <span className="text-orange-300 font-bold">{marketLevels.ydayHigh > 0 ? marketLevels.ydayHigh.toFixed(2) : '—'}</span>
+                            </span>
+                            <span className="text-gray-400">
+                                YL: <span className="text-orange-300 font-bold">{marketLevels.ydayLow > 0 ? marketLevels.ydayLow.toFixed(2) : '—'}</span>
+                            </span>
+                        </div>
+                        <div className="mt-1">
+                            <span className={`inline-flex items-center rounded border px-2 py-0.5 font-bold text-[9px] ${getTrendChipClass(ydayRangeTrend)}`}>
+                                YDAY Trend: {ydayRangeTrendReason}
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
