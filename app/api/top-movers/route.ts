@@ -5,33 +5,30 @@ import { supabaseAdmin } from '@/lib/supabase'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-/**
- * Get the most recent Friday's date in IST
- * Used for weekend fallback
- */
-function getMostRecentFriday(): string {
-    const now = new Date()
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
 
-    // Convert to IST (UTC + 5:30)
-    const istOffset = 5.5 * 60 * 60 * 1000
-    const istTime = new Date(now.getTime() + istOffset)
+function toIstDateString(date: Date): string {
+    return new Date(date.getTime() + IST_OFFSET_MS).toISOString().split('T')[0]
+}
 
-    // Get day of week (0 = Sunday, 6 = Saturday)
-    const dayOfWeek = istTime.getUTCDay()
+function parseDateString(dateString: string): Date {
+    return new Date(`${dateString}T00:00:00.000Z`)
+}
 
-    // Calculate days to subtract to get to Friday (5)
-    let daysToSubtract = 0
-    if (dayOfWeek === 0) { // Sunday
-        daysToSubtract = 2
-    } else if (dayOfWeek === 6) { // Saturday
-        daysToSubtract = 1
-    } else if (dayOfWeek < 5) { // Monday-Thursday
-        daysToSubtract = dayOfWeek + 2 // Go back to last Friday
+function getMostRecentTradingDate(referenceDate: Date = new Date()): string {
+    const tradingDate = parseDateString(toIstDateString(referenceDate))
+
+    while (tradingDate.getUTCDay() === 0 || tradingDate.getUTCDay() === 6) {
+        tradingDate.setUTCDate(tradingDate.getUTCDate() - 1)
     }
-    // If it's Friday (5), daysToSubtract = 0 (use today)
 
-    const friday = new Date(istTime.getTime() - (daysToSubtract * 24 * 60 * 60 * 1000))
-    return friday.toISOString().split('T')[0] // YYYY-MM-DD format
+    return tradingDate.toISOString().split('T')[0]
+}
+
+function getHistoricalStartDate(referenceDate: string, daysBack: number = 10): string {
+    const startDate = parseDateString(referenceDate)
+    startDate.setUTCDate(startDate.getUTCDate() - daysBack)
+    return startDate.toISOString().split('T')[0]
 }
 
 /**
@@ -39,8 +36,7 @@ function getMostRecentFriday(): string {
  */
 function isWeekend(): boolean {
     const now = new Date()
-    const istOffset = 5.5 * 60 * 60 * 1000
-    const istTime = new Date(now.getTime() + istOffset)
+    const istTime = new Date(now.getTime() + IST_OFFSET_MS)
     const dayOfWeek = istTime.getUTCDay()
     return dayOfWeek === 0 || dayOfWeek === 6 // Sunday or Saturday
 }
@@ -54,7 +50,7 @@ function isWeekend(): boolean {
 export async function GET() {
     try {
         const weekend = isWeekend()
-        const targetDate = weekend ? getMostRecentFriday() : null
+        const targetDate = weekend ? getMostRecentTradingDate() : null
 
         console.log(`[TOP-MOVERS] Weekend: ${weekend}, Target Date: ${targetDate || 'today'}`)
 
@@ -93,6 +89,23 @@ export async function GET() {
             .sort((a, b) => Number(a.percent_change) - Number(b.percent_change))
             .slice(0, 10)
 
+        const latestSnapshotTimestamp = (allStocks || []).reduce<string | null>((latest, stock) => {
+            if (!stock.updated_at) return latest
+
+            if (!latest) {
+                return stock.updated_at
+            }
+
+            return new Date(stock.updated_at).getTime() > new Date(latest).getTime()
+                ? stock.updated_at
+                : latest
+        }, null)
+
+        const snapshotTradeDate = targetDate
+            || (latestSnapshotTimestamp ? toIstDateString(new Date(latestSnapshotTimestamp)) : getMostRecentTradingDate())
+
+        console.log(`[TOP-MOVERS] Snapshot Trade Date: ${snapshotTradeDate}`)
+
         // Collect all symbols to fetch previous day data
         const symbols = [
             ...gainersData.map(s => s.symbol),
@@ -105,13 +118,13 @@ export async function GET() {
         if (symbols.length > 0) {
             const { data: prevData, error: prevError } = await supabaseAdmin
                 .from('daily_high_low')
-                .select('symbol, today_high, today_low, today_open, today_close, sentiment')
+                .select('symbol, today_high, today_low, today_open, today_close, sentiment, captured_date')
                 .in('symbol', symbols)
+                .lt('captured_date', snapshotTradeDate)
                 .order('captured_date', { ascending: false })
 
             if (!prevError && prevData) {
-                // Create map for easy lookup, using the most recent entry for each symbol
-                // Since we ordered by captured_date desc, the first entry for each symbol is the latest
+                // Match sentiment to the displayed snapshot date, not simply the newest daily row.
                 prevData.forEach(item => {
                     if (!prevDayDataMap[item.symbol]) {
                         prevDayDataMap[item.symbol] = {
@@ -129,7 +142,9 @@ export async function GET() {
         // Merge previous day data into stocks (and fetch missing ones via Yahoo Finance)
         const mergeAndFetchMissing = async (stocks: any[]) => {
             // Import yahooFinance dynamically to avoid build issues if not used
-            const { default: yahooFinance } = await import('yahoo-finance2')
+            const { default: YahooFinance } = await import('yahoo-finance2')
+            const yahooFinance = new YahooFinance()
+            const referenceDate = snapshotTradeDate
 
             return await Promise.all(stocks.map(async (stock) => {
                 const dbData = prevDayDataMap[stock.symbol]
@@ -140,26 +155,31 @@ export async function GET() {
 
                 // If DB data missing, fetch from Yahoo Finance using user's preferred logic
                 try {
-                    // Logic to get previous trading day
                     const symbol = stock.symbol.endsWith('.NS') ? stock.symbol : `${stock.symbol}.NS`
-
-                    // Simple logic to get last 5 days to ensure we capture the previous trading day
-                    const today = new Date()
-                    const yesterday = new Date(today)
-                    yesterday.setDate(yesterday.getDate() - 1)
-
-                    const fiveDaysAgo = new Date(yesterday)
-                    fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5)
+                    const startDate = getHistoricalStartDate(referenceDate)
 
                     const result = await (yahooFinance as any).historical(symbol, {
-                        period1: fiveDaysAgo.toISOString().split('T')[0],
-                        period2: new Date().toISOString().split('T')[0], // Today (exclusive)
+                        period1: startDate,
+                        period2: referenceDate, // Exclusive: fetch the last completed candle before the snapshot day
                         interval: '1d'
                     }) as any[]
 
                     if (result && result.length > 0) {
-                        // Get the last available candle (which should be previous trading day)
-                        const lastCandle = result[result.length - 1]
+                        const lastCandle = [...result].reverse().find((candle: any) => {
+                            if (!candle) return false
+
+                            const candleDate = new Date(candle.date).toISOString().split('T')[0]
+                            return candleDate < referenceDate
+                                && candle.open != null
+                                && candle.high != null
+                                && candle.low != null
+                                && candle.close != null
+                        })
+
+                        if (!lastCandle) {
+                            throw new Error(`No historical candle found before ${referenceDate}`)
+                        }
+
                         const sentiment = (lastCandle.close >= lastCandle.open) ? 'Green' : 'Red';
 
                         return {
@@ -177,7 +197,7 @@ export async function GET() {
                     // Fallback to manual fetch if library fails
                     try {
                         const symbol = stock.symbol.endsWith('.NS') ? stock.symbol : `${stock.symbol}.NS`
-                        const response = await fetch(`https://query2.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=5d`, {
+                        const response = await fetch(`https://query2.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=10d`, {
                             headers: {
                                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                             }
@@ -191,19 +211,19 @@ export async function GET() {
                                 const timestamps = result.timestamp
 
                                 if (quotes && timestamps && timestamps.length > 0) {
-                                    // Get last valid index (sometimes last one is null if market open)
                                     let lastIdx = timestamps.length - 1
+                                    while (lastIdx >= 0) {
+                                        const candleDate = new Date(timestamps[lastIdx] * 1000).toISOString().split('T')[0]
+                                        const isValidCandle = quotes.open[lastIdx] != null
+                                            && quotes.high[lastIdx] != null
+                                            && quotes.low[lastIdx] != null
+                                            && quotes.close[lastIdx] != null
 
-                                    // Ensure we get a completed candle (simple check: valid close)
-                                    // If today is trading day and market is open, last candle might be today.
-                                    // We want YESTERDAY.
-                                    // Check date of last candle.
-                                    const lastDate = new Date(timestamps[lastIdx] * 1000)
-                                    const todayStr = new Date().toISOString().split('T')[0]
-                                    const lastDateStr = lastDate.toISOString().split('T')[0]
+                                        if (isValidCandle && candleDate < referenceDate) {
+                                            break
+                                        }
 
-                                    if (lastDateStr === todayStr) {
-                                        lastIdx-- // Go back one
+                                        lastIdx--
                                     }
 
                                     if (lastIdx >= 0) {
@@ -240,7 +260,7 @@ export async function GET() {
             gainers: gainers || [],
             losers: losers || [],
             updated_at: latestUpdate,
-            data_date: targetDate || new Date().toISOString().split('T')[0],
+            data_date: snapshotTradeDate,
             is_weekend: weekend,
             count: {
                 gainers: gainers?.length || 0,

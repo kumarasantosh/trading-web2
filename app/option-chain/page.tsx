@@ -41,6 +41,7 @@ export default function OptionChainPage() {
     const [symbol, setSymbol] = useState('NIFTY')
     const [expiryDate, setExpiryDate] = useState('')
     const [availableExpiries, setAvailableExpiries] = useState<string[]>([])
+    const [showAllExpiries, setShowAllExpiries] = useState(false)
     const [selectedTime, setSelectedTime] = useState<Date>(new Date())
     const [isReplayMode, setIsReplayMode] = useState(false)
     const [snapshots, setSnapshots] = useState<Snapshot[]>([])
@@ -573,6 +574,7 @@ export default function OptionChainPage() {
     useEffect(() => {
         setExpiryDate('')
         setAvailableExpiries([])
+        setShowAllExpiries(false)
         // Reset loading state when symbol changes
         setLoading(true)
         setHasAttemptedLoad(false)
@@ -711,15 +713,7 @@ export default function OptionChainPage() {
     // Handle time change from timeline slider
     const handleTimeChange = useCallback((time: Date) => {
         setSelectedTime(time)
-        // Only fetch historical data if replay mode is enabled
-        // Don't fetch if not in replay mode - this prevents "no data" messages in live mode
-        if (isReplayMode) {
-            console.log('[OptionChain] Time changed in replay mode, fetching historical data')
-            fetchHistoricalDataForTime(time)
-        } else {
-            console.log('[OptionChain] Time changed but not in replay mode, skipping historical fetch')
-        }
-    }, [fetchHistoricalDataForTime, isReplayMode])
+    }, [])
 
     // Handle replay mode change
     const handleReplayModeChange = useCallback((enabled: boolean) => {
@@ -740,6 +734,15 @@ export default function OptionChainPage() {
             fetchOptionChainData()
         }
     }, [fetchOptionChainData])
+
+    useEffect(() => {
+        if (!isReplayMode) {
+            return
+        }
+
+        console.log('[OptionChain] Replay selection changed, fetching historical data')
+        fetchHistoricalDataForTime(selectedTime)
+    }, [fetchHistoricalDataForTime, isReplayMode, selectedTime])
 
     // Reset noDataForTime when not in replay mode
     useEffect(() => {
@@ -812,20 +815,30 @@ export default function OptionChainPage() {
                             {/* Expiry Dates */}
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-2">Expirys</label>
-                                <div className="flex flex-wrap gap-2">
+                                <div className="flex flex-wrap gap-2 items-center">
                                     {availableExpiries.length > 0 ? (
-                                        availableExpiries.map((exp) => (
-                                            <button
-                                                key={exp}
-                                                onClick={() => setExpiryDate(exp)}
-                                                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 ${expiryDate === exp
-                                                    ? 'bg-black text-white shadow-md hover:bg-gray-900'
-                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
-                                                    }`}
-                                            >
-                                                {exp}
-                                            </button>
-                                        ))
+                                        <>
+                                            {(showAllExpiries ? availableExpiries : availableExpiries.slice(0, 4)).map((exp) => (
+                                                <button
+                                                    key={exp}
+                                                    onClick={() => setExpiryDate(exp)}
+                                                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 ${expiryDate === exp
+                                                        ? 'bg-black text-white shadow-md hover:bg-gray-900'
+                                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
+                                                        }`}
+                                                >
+                                                    {exp}
+                                                </button>
+                                            ))}
+                                            {availableExpiries.length > 4 && (
+                                                <button
+                                                    onClick={() => setShowAllExpiries(!showAllExpiries)}
+                                                    className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all duration-200"
+                                                >
+                                                    {showAllExpiries ? 'Less' : 'More'}
+                                                </button>
+                                            )}
+                                        </>
                                     ) : (
                                         <input
                                             type="text"

@@ -9,7 +9,11 @@ export interface YahooStockData {
     prevClose?: number;
 }
 
-export const fetchYahooStockData = async (symbol: string, exchange: 'NSE' | 'BSE' = 'NSE'): Promise<YahooStockData | null> => {
+export const fetchYahooStockData = async (
+    symbol: string,
+    exchange: 'NSE' | 'BSE' = 'NSE',
+    referenceDate?: string
+): Promise<YahooStockData | null> => {
     try {
         // Format symbol for Yahoo Finance
         // Don't add suffix for index symbols (starting with ^)
@@ -85,29 +89,40 @@ export const fetchYahooStockData = async (symbol: string, exchange: 'NSE' | 'BSE
             return null;
         }
 
-        // Check if the last valid trading day is today
-        const lastValidTimestamp = timestamps[lastValidIndex];
-        const lastValidDate = new Date(lastValidTimestamp * 1000);
-        const today = new Date();
-
-        // Set time to midnight for accurate date comparison
-        today.setHours(0, 0, 0, 0);
-        lastValidDate.setHours(0, 0, 0, 0);
-
-        const isToday = lastValidDate.getTime() === today.getTime();
-
-        // If the last valid day is today, we want the previous trading day
         let targetIndex = lastValidIndex;
-        if (isToday) {
-            targetIndex = lastValidIndex - 1;
-            // Find the previous valid trading day
-            while (targetIndex >= 0 && !isValidTradingDay(targetIndex)) {
+
+        if (referenceDate) {
+            while (targetIndex >= 0) {
+                const candleDate = new Date(timestamps[targetIndex] * 1000).toISOString().split('T')[0];
+                if (candleDate < referenceDate && isValidTradingDay(targetIndex)) {
+                    break;
+                }
                 targetIndex--;
+            }
+        } else {
+            // Check if the last valid trading day is today
+            const lastValidTimestamp = timestamps[lastValidIndex];
+            const lastValidDate = new Date(lastValidTimestamp * 1000);
+            const today = new Date();
+
+            // Set time to midnight for accurate date comparison
+            today.setHours(0, 0, 0, 0);
+            lastValidDate.setHours(0, 0, 0, 0);
+
+            const isToday = lastValidDate.getTime() === today.getTime();
+
+            // If the last valid day is today, we want the previous trading day
+            if (isToday) {
+                targetIndex = lastValidIndex - 1;
+                while (targetIndex >= 0 && !isValidTradingDay(targetIndex)) {
+                    targetIndex--;
+                }
             }
         }
 
         if (targetIndex < 0) {
-            console.warn(`No previous trading day data found for ${symbol}`);
+            const suffix = referenceDate ? ` before ${referenceDate}` : '';
+            console.warn(`No previous trading day data found for ${symbol}${suffix}`);
             return null;
         }
 

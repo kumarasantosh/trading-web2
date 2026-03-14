@@ -35,6 +35,7 @@ export default function TopLosersList({ onStockClick }: TopLosersListProps) {
     const [isLoading, setIsLoading] = useState(true)
     const [prevDayData, setPrevDayData] = useState<Record<string, PrevDayData>>({})
     const fetchedSymbolsRef = useRef<Set<string>>(new Set())
+    const snapshotDateRef = useRef<string | undefined>(undefined)
 
     const getAllMappedStocks = (): Set<string> => {
         const allStocks = new Set<string>()
@@ -61,6 +62,8 @@ export default function TopLosersList({ onStockClick }: TopLosersListProps) {
                 const data = await response.json()
 
                 if (data.success) {
+                    snapshotDateRef.current = data.data_date || undefined
+
                     // Map initial data from DB (includes LTP from DB and previous day data)
                     const dbLosers = (data.losers || []).map((stock: any) => ({
                         symbol: stock.symbol,
@@ -138,7 +141,7 @@ export default function TopLosersList({ onStockClick }: TopLosersListProps) {
 
             if (symbolsToFetch.length > 0) {
                 symbolsToFetch.forEach((s: string) => fetchedSymbolsRef.current.add(s))
-                const yahooPromises = symbolsToFetch.map((symbol: string) => fetchYahooStockData(symbol))
+                const yahooPromises = symbolsToFetch.map((symbol: string) => fetchYahooStockData(symbol, 'NSE', snapshotDateRef.current))
                 const yahooResults = await Promise.all(yahooPromises)
 
                 setPrevDayData(prev => {
@@ -303,4 +306,3 @@ export default function TopLosersList({ onStockClick }: TopLosersListProps) {
         </div>
     )
 }
-
